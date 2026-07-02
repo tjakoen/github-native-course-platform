@@ -24,10 +24,10 @@
 //
 // Auth/env: GH_TOKEN or gh login (repo create + contents write), GRADE_OWNER
 // (org), WORKSPACE_PREFIX (e.g. student-6xxx-0000-), WORKSPACE_TEMPLATE
-// (owner/repo of the workspace template; default your-account/student-subjectcode-classcode-name).
+// (owner/repo of the workspace template; falls back to workspaceTemplate in course.config.json).
 
 import { execSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { loadGradebook, consolidate, normNum, normGh, repoStem } from "./lib/gradebook.mjs";
 
 const section = process.argv[2];
@@ -46,7 +46,12 @@ const trySh = (cmd, opts = {}) => { try { return sh(cmd, opts); } catch { return
 const OWNER = process.env.GRADE_OWNER || sh("gh api user -q .login");
 const WORKSPACE_PREFIX = process.env.WORKSPACE_PREFIX || "";
 if (!WORKSPACE_PREFIX) { console.error("WORKSPACE_PREFIX not set - nowhere to provision"); process.exit(1); }
-const TEMPLATE = process.env.WORKSPACE_TEMPLATE || "your-account/student-subjectcode-classcode-name";
+const loadConfig = () => {
+  try { return JSON.parse(readFileSync(new URL("../course.config.json", import.meta.url), "utf8")); }
+  catch { return {}; }
+};
+const TEMPLATE = process.env.WORKSPACE_TEMPLATE || loadConfig().workspaceTemplate || "";
+if (!TEMPLATE) { console.error("No workspace template: set WORKSPACE_TEMPLATE or `workspaceTemplate` in course.config.json"); process.exit(1); }
 
 // ---- helpers -------------------------------------------------------------
 // The student's original-case handle in a repo name (student-6xxx-0000-JuanDelaCruz

@@ -4,7 +4,7 @@
 
 Built and run in production across several live university courses (front-end JS/React, Dart/Flutter, and HTML/CSS/JS), covering hundreds of student repositories per term.
 
-This repository is a **high-level overview** of the platform's design. The engine and course content live in private repositories (they hold student data); this README explains how the whole thing fits together.
+This repository contains the platform's **engine** (the Actions workflows and Node tooling) sanitized for public use, the full architecture write-up, and synthetic demo output. The live course content and gradebooks stay in private repositories because they hold student data.
 
 ---
 
@@ -115,6 +115,16 @@ Anything high-stakes runs in person, not on the pure-GitHub path. This is stated
 Free-tier friendly by design: unlimited private repos and the monthly Actions quota cover the core system, and course material renders in the native repo file view, so no hosting or Pages plan is required.
 
 ---
+
+## Using this yourself
+
+This repo is a GitHub **template** — click **Use this template** to create your own control center, then:
+
+1. Edit **`course.config.json`** with your org name(s) and workspace-template owner. Nothing class-specific is hardcoded in the tools; they read from this file (and workflow env overrides it).
+2. Add the Actions secrets: `ORG_PAT` (cross-repo git), `CANVAS_TOKEN` + `CANVAS_BASE_URL` (grade export), and `MODELS_PAT` if you want AI feedback.
+3. Lock each workflow to your section via its `SECTION` / `WORKSPACE_PREFIX` env.
+
+Students create their own workspace from the companion **[student template](https://github.com/tjakoen/student-subjectcode-classcode-name)** (public).
 
 ## Status
 

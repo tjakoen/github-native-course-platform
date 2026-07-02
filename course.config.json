@@ -1,0 +1,5 @@
+{
+  "//": "Per-deployment config. Fill in your own values. Nothing class-specific is hardcoded in the tools - they read from here (or from workflow env, which overrides).",
+  "orgs": ["COURSE-ORG-A", "COURSE-ORG-B", "COURSE-ORG-C"],
+  "workspaceTemplate": "your-account/student-subjectcode-classcode-name"
+}

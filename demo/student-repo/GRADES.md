@@ -3,6 +3,8 @@
 Your grades so far. These are display-only receipts, delivered into your
 workspace after grading. The commit link shows exactly which snapshot was graded.
 
+_(Synthetic sample: the commit links below are illustrative and do not resolve.)_
+
 | Assignment | Grade | Graded commit | Graded |
 | --- | --- | --- | --- |
 | m1a1 | 7/7 | [`e4f5a6b`](https://github.com/COURSE-ORG-WEB/m1a1-0000-ghopper/commit/e4f5a6b) | 2026-06-28 14:10 |

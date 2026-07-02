@@ -9,13 +9,27 @@
 //
 // Usage:
 //   node tools/org-audit.mjs [ORG ...]
-//   (defaults to the configured course orgs; uses your `gh` login for the API token)
+//   Orgs come from CLI args, else the `orgs` array in course.config.json.
+//   (uses your `gh` login for the API token)
 
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+
+const loadConfig = () => {
+  try {
+    return JSON.parse(readFileSync(new URL("../course.config.json", import.meta.url), "utf8"));
+  } catch {
+    return {};
+  }
+};
 
 const ORGS = process.argv.slice(2).length
   ? process.argv.slice(2)
-  : ["COURSE-ORG-A", "COURSE-ORG-B", "COURSE-ORG-C"];
+  : (loadConfig().orgs || []);
+if (!ORGS.length) {
+  console.error("No orgs to audit: pass them as args or set `orgs` in course.config.json");
+  process.exit(1);
+}
 const token = execSync("gh auth token", { encoding: "utf8" }).trim();
 
 const api = async (path) => {
