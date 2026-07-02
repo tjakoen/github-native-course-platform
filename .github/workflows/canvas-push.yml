@@ -1,0 +1,70 @@
+name: Canvas grade push (API)
+
+# Pushes gradebook/grades.csv straight into Canvas over the REST API: pulls the
+# roster + assignments live, maps our grades on, and writes them.
+#
+# SAFE BY DEFAULT. mode=check only reconciles the roster; mode=dry-run shows the
+# exact grade plan but writes nothing; mode=execute is the only mode that writes.
+#
+# Set these as repo/org secrets (Settings > Secrets and variables > Actions):
+#   CANVAS_BASE_URL   e.g. https://your-school.instructure.com
+#   CANVAS_TOKEN      a Canvas access token (grade-write) for the instructor
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check (roster only) | dry-run (plan, no write) | execute (write grades)"
+        type: choice
+        options: ["check", "dry-run", "execute"]
+        default: "dry-run"
+        required: true
+      course_id:
+        description: "Canvas course ID (optional; overrides the repo's CANVAS_COURSE_ID)"
+        required: false
+      comment:
+        description: "Also post the autograder result as a submission comment (true/false)"
+        default: "false"
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canvas-push
+  cancel-in-progress: false
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    env:
+      CANVAS_BASE_URL: ${{ secrets.CANVAS_BASE_URL }}
+      CANVAS_TOKEN: ${{ secrets.CANVAS_TOKEN }}
+      CANVAS_COURSE_ID: "COURSEID"   # FILL IN: this section's Canvas course id, e.g. 38163
+      GRADE_OWNER: ${{ github.repository_owner }}   # org, for the commit-reference URL in comments
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Push to Canvas
+        run: |
+          ARGS="--report=canvas-push-report.md"
+          [ -n "${{ github.event.inputs.course_id }}" ] && ARGS="$ARGS --course=${{ github.event.inputs.course_id }}"
+          [ "${{ github.event.inputs.mode }}" = "check" ] && ARGS="$ARGS --check"
+          [ "${{ github.event.inputs.mode }}" = "execute" ] && ARGS="$ARGS --execute"
+          [ "${{ github.event.inputs.comment }}" = "true" ] && ARGS="$ARGS --comment"
+          node tools/canvas-push.mjs $ARGS
+
+      - name: Show the report in the run summary
+        if: always()
+        run: '[ -f canvas-push-report.md ] && cat canvas-push-report.md >> "$GITHUB_STEP_SUMMARY" || true'
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canvas-push-report
+          path: canvas-push-report.md
+          if-no-files-found: warn

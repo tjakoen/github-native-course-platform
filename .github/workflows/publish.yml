@@ -1,0 +1,55 @@
+name: Publish grades
+
+# Delivers graded results into student workspace repos: a consolidated GRADES.md
+# + per-activity receipts + FEEDBACK.md (+ previews). SEPARATE from grading - the
+# grade sweep only writes the teacher-side gradebook. This is the ONLY workflow
+# that touches student repos, and it publishes an activity ONLY when that
+# activity has "publish": true in grader/assignments.json (default false). So you
+# grade freely, review the AI drafts in gradebook/notes/, flip "publish": true on
+# the ready activities, then run this.
+#
+# DRY RUN BY DEFAULT (publish=false): shows who/what would be delivered, pushes
+# nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Actually push to student repos (true), or dry-run preview (false)"
+        required: false
+        default: "false"
+      only:
+        description: "Only this assignment id (optional, e.g. m3a1)"
+        required: false
+      repo:
+        description: "Only this one source repo (optional, exact name)"
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-grades
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.ORG_PAT }}             # cross-repo: clone + push student workspaces
+      GRADE_OWNER: ${{ github.repository_owner }}
+      SECTION: "CLASSCODE"                          # LOCKED to one class
+      WORKSPACE_PREFIX: "student-SUBJECTCODE-CLASSCODE-"  # where grades are delivered
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Authenticate git for cross-repo pushes
+        run: gh auth setup-git
+      - name: Publish
+        run: |
+          ARGS="$SECTION"
+          [ "${{ github.event.inputs.publish }}" = "true" ] && ARGS="$ARGS --execute"
+          [ -n "${{ github.event.inputs.only }}" ] && ARGS="$ARGS --only=${{ github.event.inputs.only }}"
+          [ -n "${{ github.event.inputs.repo }}" ] && ARGS="$ARGS --repo=${{ github.event.inputs.repo }}"
+          node tools/publish-grades.mjs $ARGS

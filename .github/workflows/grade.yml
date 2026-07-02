@@ -1,0 +1,125 @@
+name: Grade sweep
+
+# Clones each student submission for a section, grades it against the canonical
+# tests in grader/ (off the student repo), and records the gradebook. This is
+# teacher-side only: delivering grades/feedback to student repos is the separate
+# publish.yml workflow. Dart + Node are both set up so vitest, dart, and quiz
+# assignments all work.
+#
+# WHEN YOU INSTANTIATE A CLASS FROM THIS TEMPLATE: set SECTION below to this
+# class's value (and WORKSPACE_PREFIX in publish.yml). Until then SECTION matches
+# no repos, so an accidental run grades nothing (and dry_run defaults to true).
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: compute + show grades, push NOTHING (true/false)"
+        required: false
+        default: "true"
+      only:
+        description: "Only this assignment id (optional, e.g. m1a2)"
+        required: false
+      repo:
+        description: "Only this one repo (optional, exact name)"
+        required: false
+      force:
+        description: "Re-grade everyone, ignoring already-graded (true/false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write   # to push the gradebook back to this repo
+  models: read      # use GitHub Models (gpt-4o-mini) for formative AI feedback
+
+# Serialize grade runs so two of them never race on the gradebook commit.
+concurrency:
+  group: grade-sweep
+  cancel-in-progress: false
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.ORG_PAT }}             # cross-repo: clone students + push receipts
+      MODELS_TOKEN: ${{ secrets.MODELS_PAT || secrets.GITHUB_TOKEN }}  # PAT (account Models access) preferred; else built-in token
+      GRADE_OWNER: ${{ github.repository_owner }}   # the course org / account to enumerate
+      SECTION: "CLASSCODE"                          # FILL IN: LOCKED to one class, e.g. "0000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      # Persist dependency caches across runs so each sweep doesn't re-download
+      # every student's deps. Within one run these are already shared across the
+      # student clones; this carries them to the next run too. Key rolls when the
+      # grader changes; restore-keys falls back to the most recent prior cache.
+      - name: Cache Dart pub packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('grader/**') }}
+          restore-keys: |
+            pub-${{ runner.os }}-
+
+      - name: Cache npm downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('grader/**') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
+
+      - name: Authenticate git for cross-repo pushes
+        run: gh auth setup-git
+
+      - name: Grade
+        run: |
+          ARGS="$SECTION"
+          [ "${{ github.event.inputs.dry_run }}" != "false" ] && ARGS="$ARGS --dry-run"
+          [ -n "${{ github.event.inputs.only }}" ] && ARGS="$ARGS --only=${{ github.event.inputs.only }}"
+          [ -n "${{ github.event.inputs.repo }}" ] && ARGS="$ARGS --repo=${{ github.event.inputs.repo }}"
+          [ "${{ github.event.inputs.force }}" = "true" ] && ARGS="$ARGS --force"
+          node tools/grade-sweep.mjs $ARGS
+
+      - name: Show gradebook in the run summary
+        if: always()
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" != "false" ]; then
+            echo "## Dry run - nothing was pushed" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          [ -f gradebook/GRADEBOOK.md ] && cat gradebook/GRADEBOOK.md >> "$GITHUB_STEP_SUMMARY"
+          # Surface any AI feedback drafted this run so it can be reviewed before
+          # deciding whether/how it reaches students or Canvas.
+          if ls gradebook/notes/*/*.md >/dev/null 2>&1; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "## AI feedback drafts (this run)" >> "$GITHUB_STEP_SUMMARY"
+            for f in gradebook/notes/*/*.md; do
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "<details><summary>$f</summary>" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "===NOTE $f==="                       # stdout marker so logs are scrapable too
+              cat "$f" | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+            done
+          fi
+
+      - name: Commit gradebook (real run only)
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        run: |
+          git config user.name "course-bot"
+          git config user.email "course-bot@users.noreply.github.com"
+          git add gradebook
+          git commit -m ":bar_chart: Gradebook: section $SECTION" || { echo "no changes"; exit 0; }
+          # rebase-before-push so a moved main (other commits) doesn't reject us
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push && { echo "pushed"; exit 0; }
+            echo "push retry $i"; sleep 3
+          done
+          echo "::error::could not push gradebook after retries"; exit 1

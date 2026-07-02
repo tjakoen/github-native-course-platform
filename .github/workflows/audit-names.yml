@@ -1,0 +1,60 @@
+name: Audit repo names
+
+# Guardrail: flags student/teacher repos in this org whose names don't match
+# the course convention `<role>-<subjectcode>-<classcode>-<rest>`, and warns
+# about workspace repos with a blank student.json. The expected subjectcode and
+# classcode are read from THIS repo's own name, so it works in any instance.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 1" # weekly, Monday 00:00 UTC
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      ORG: ${{ github.repository_owner }}
+      GH_TOKEN: ${{ secrets.ORG_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Derive expected subjectcode + classcode from this repo's name
+        id: expect
+        run: |
+          # repo name looks like teacher-<subjectcode>-<classcode>-<name>
+          name="${{ github.event.repository.name }}"
+          rest="${name#teacher-}"
+          subject="${rest%%-*}"
+          rest2="${rest#*-}"
+          classcode="${rest2%%-*}"
+          echo "subject=$subject" >> "$GITHUB_OUTPUT"
+          echo "classcode=$classcode" >> "$GITHUB_OUTPUT"
+          echo "Auditing for subjectcode=$subject classcode=$classcode"
+
+      - name: Audit repo names
+        run: |
+          gh repo list "$ORG" --limit 1000 --json name -q '.[].name' \
+            | node tools/audit-repo-names.mjs \
+                "${{ steps.expect.outputs.subject }}" \
+                "${{ steps.expect.outputs.classcode }}"
+
+      - name: Warn on blank student.json
+        if: always()
+        run: |
+          SUBJECT="${{ steps.expect.outputs.subject }}"
+          CLASSCODE="${{ steps.expect.outputs.classcode }}"
+          gh repo list "$ORG" --limit 1000 --json name -q '.[].name' \
+            | node tools/list-section-repos.mjs "$CLASSCODE" student- \
+            | while read -r repo; do
+              [ -z "$repo" ] && continue
+              json=$(gh api "repos/$ORG/$repo/contents/student.json" -q '.content' 2>/dev/null \
+                | base64 -d 2>/dev/null || true)
+              if [ -z "$json" ]; then
+                echo "::warning::$repo has no student.json"
+              elif echo "$json" | grep -qE '"(classCode|githubAccount)":[[:space:]]*""'; then
+                echo "::warning::$repo has a blank classCode/githubAccount in student.json"
+              fi
+            done

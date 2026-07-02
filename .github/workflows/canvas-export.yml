@@ -1,0 +1,61 @@
+name: Canvas grade export
+
+# Turns this section's gradebook/grades.csv into a Canvas-ready import CSV.
+#
+# You paste this section's Canvas gradebook export (File > Export in the Canvas
+# gradebook) into the canvas_csv input. The export carries both the student
+# identity columns AND the assignment headers with their Canvas IDs, which is
+# exactly what we map our scores onto. Nothing is committed: the import CSV and a
+# reconciliation report come back as downloadable run artifacts.
+#
+# The export box is a single-line field, so a very large paste is awkward; for a
+# big class it's easier to run the tool locally instead:
+#   node tools/canvas-export.mjs --canvas=<export.csv>
+on:
+  workflow_dispatch:
+    inputs:
+      canvas_csv:
+        description: "Paste the Canvas gradebook export CSV (whole file)"
+        required: true
+      section:
+        description: "Section / classCode (optional; inferred from grades.csv if blank)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Write the pasted Canvas export to a file
+        env:
+          CANVAS_CSV: ${{ github.event.inputs.canvas_csv }}
+        run: printf '%s' "$CANVAS_CSV" > canvas-export.csv
+
+      - name: Build the Canvas import CSV
+        run: |
+          ARGS="--canvas=canvas-export.csv --out=canvas-import.csv --report=canvas-import-report.md"
+          [ -n "${{ github.event.inputs.section }}" ] && ARGS="$ARGS --section=${{ github.event.inputs.section }}"
+          node tools/canvas-export.mjs $ARGS
+
+      - name: Show the report in the run summary
+        if: always()
+        run: |
+          [ -f canvas-import-report.md ] && cat canvas-import-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload import CSV + report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canvas-import
+          path: |
+            canvas-import.csv
+            canvas-import-report.md
+          if-no-files-found: warn

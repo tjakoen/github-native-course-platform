@@ -1,0 +1,9 @@
+repo,githubAccount,fullName,studentNumber,studentEmail,classCode,assignment,sha,passed,total,score,gradedAt,late
+m1a1-0000-ada-lovelace,ada-lovelace,Ada Lovelace,2026-00001,ada.lovelace@example.edu,0000,m1a1,a1b2c3d,7,7,1.0,2026-06-28 14:10,
+m1a1-0000-ghopper,ghopper,Grace Hopper,2026-00002,grace.hopper@example.edu,0000,m1a1,e4f5a6b,7,7,1.0,2026-06-28 14:10,
+m1a1-0000-aturing,aturing,Alan Turing,2026-00003,alan.turing@example.edu,0000,m1a1,c7d8e9f,6,7,0.857,2026-06-28 14:11,
+m1a1-0000-kjohnson,kjohnson,Katherine Johnson,2026-00004,katherine.johnson@example.edu,0000,m1a1,f0a1b2c,7,7,1.0,2026-06-28 14:11,late
+m2a1-0000-ada-lovelace,ada-lovelace,Ada Lovelace,2026-00001,ada.lovelace@example.edu,0000,m2a1,d3e4f5a,10,10,1.0,2026-06-30 09:01,
+m2a1-0000-ghopper,ghopper,Grace Hopper,2026-00002,grace.hopper@example.edu,0000,m2a1,b1c2d3e,9,10,0.9,2026-06-30 09:02,
+m2a1-0000-aturing,aturing,Alan Turing,2026-00003,alan.turing@example.edu,0000,m2a1,a6b7c8d,8,10,0.8,2026-06-30 09:05,
+q1-0000-ghopper,ghopper,Grace Hopper,2026-00002,grace.hopper@example.edu,0000,q1,c9d0e1f,5,5,1.0,2026-07-01 10:30,

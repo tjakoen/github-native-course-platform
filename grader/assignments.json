@@ -1,0 +1,4 @@
+[
+  { "id": "m1a1", "type": "vitest", "namePrefix": "m1a1-" },
+  { "id": "q1",   "type": "quiz",   "namePrefix": "q1-", "key": "grader/q1/key.json" }
+]

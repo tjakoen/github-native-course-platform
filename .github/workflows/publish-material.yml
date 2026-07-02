@@ -1,0 +1,90 @@
+name: Publish material
+
+# Control-panel workflow: publish a course-material unit (a branch) into every
+# student repo in a section. The unit's branch name == its folder under content/.
+on:
+  workflow_dispatch:
+    inputs:
+      unit:
+        description: "Unit folder under content/ to publish (e.g. m1-intro)"
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      ORG: ${{ github.repository_owner }}   # the course org - this repo lives in it
+      GH_TOKEN: ${{ secrets.ORG_PAT }}       # fine-grained PAT: Contents+PRs+Issues write
+      UNIT: ${{ github.event.inputs.unit }}
+      SECTION: "CLASSCODE"                    # FILL IN: LOCKED, e.g. "0000" - this repo publishes ONLY to its class
+    steps:
+      - name: Checkout teacher repo (default branch)
+        uses: actions/checkout@v4
+        with:
+          path: teacher
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Authenticate git for cross-repo pushes
+        run: gh auth setup-git   # makes `git push` to student repos use ORG_PAT
+
+      - name: Resolve target repos for the section
+        id: targets
+        run: |
+          repos=$(gh repo list "$ORG" --limit 1000 --json name -q '.[].name' \
+            | node teacher/tools/list-section-repos.mjs "$SECTION" student-)
+          echo "Targets for section $SECTION:"; echo "$repos"
+          {
+            echo "repos<<EOF"
+            echo "$repos"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish unit into each repo
+        run: |
+          SRC="teacher/content/$UNIT"
+          if [ ! -d "$SRC" ]; then
+            echo "::error::content/$UNIT not found on branch $UNIT"; exit 1
+          fi
+          echo "${{ steps.targets.outputs.repos }}" | while read -r repo; do
+            [ -z "$repo" ] && continue
+            echo "::group::$repo"
+            rm -rf work
+            gh repo clone "$ORG/$repo" work -- -q
+            base=$(gh repo view "$ORG/$repo" --json defaultBranchRef -q .defaultBranchRef.name)
+            node teacher/tools/sync-unit.mjs "$SRC" "work/content/$UNIT"
+            # Per-repo work is isolated: a failure here must never abort the
+            # whole sweep, so the subshell's exit is caught and the loop goes on.
+            (
+              set -e
+              cd work
+              git config user.name "course-bot"
+              git config user.email "course-bot@users.noreply.github.com"
+              if [ -z "$base" ]; then
+                # Empty student repo (no commits yet): publish straight to main
+                # so a stray publish/ branch can't become the default branch.
+                git checkout -B main
+                git add content
+                git diff --cached --quiet && { echo "no changes for $repo"; exit 0; }
+                git commit -m ":books: Publish $UNIT"
+                git push -u origin main
+              else
+                # -B (not -b) makes re-runs idempotent: create-or-reset the
+                # branch even if a leftover publish/ branch was checked out.
+                branch="publish/$UNIT"
+                git checkout -B "$branch"
+                git add content
+                git diff --cached --quiet && { echo "no changes for $repo"; exit 0; }
+                git commit -m ":books: Publish $UNIT"
+                git push -u origin "$branch" --force
+                gh pr create --title ":books: Publish $UNIT" \
+                  --body "Auto-published course material: \`$UNIT\`." \
+                  --head "$branch" --base "$base" || true
+                gh pr merge "$branch" --merge --delete-branch --admin \
+                  || gh pr merge "$branch" --merge --delete-branch || true
+              fi
+            ) || echo "::warning::publish failed for $repo (continuing)"
+            echo "::endgroup::"
+          done

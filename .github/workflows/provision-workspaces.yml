@@ -1,0 +1,50 @@
+name: Provision workspaces
+
+# Reconciles the roster (from the gradebook) against the live student workspace
+# repos and fixes the gaps we kept fixing by hand: creates a workspace for any
+# student who has activities but no workspace, and fills a blank/missing
+# student.json from the student's own submission data. It NEVER deletes or
+# renames (report-only for collisions). SEPARATE from grading + publishing.
+#
+# DRY RUN BY DEFAULT (execute=false): prints the plan, changes nothing.
+# After it creates workspaces, run "Publish material" then "Publish grades".
+on:
+  workflow_dispatch:
+    inputs:
+      execute:
+        description: "Actually create repos + write student.json (true), or dry-run (false)"
+        required: false
+        default: "false"
+      only:
+        description: "Only this student handle (optional)"
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provision-workspaces
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.ORG_PAT }}                 # cross-repo: create + write student workspaces
+      GRADE_OWNER: ${{ github.repository_owner }}
+      SECTION: "CLASSCODE"                                  # LOCKED to one class
+      WORKSPACE_PREFIX: "student-SUBJECTCODE-CLASSCODE-"           # workspace namespace for this section
+      WORKSPACE_TEMPLATE: "your-account/student-subjectcode-classcode-name"  # workspace template repo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Authenticate git for cross-repo pushes
+        run: gh auth setup-git
+      - name: Provision
+        run: |
+          ARGS="$SECTION"
+          [ "${{ github.event.inputs.execute }}" = "true" ] && ARGS="$ARGS --execute"
+          [ -n "${{ github.event.inputs.only }}" ] && ARGS="$ARGS --only=${{ github.event.inputs.only }}"
+          node tools/provision-workspaces.mjs $ARGS

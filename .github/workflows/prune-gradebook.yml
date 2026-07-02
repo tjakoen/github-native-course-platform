@@ -1,0 +1,52 @@
+name: Prune gradebook
+
+# Removes gradebook rows whose submission repo no longer exists (deleted or
+# renamed duplicates). grade-sweep writes every loaded row back, so a dead repo's
+# row otherwise persists forever and pollutes the gradebook + Canvas push. This is
+# teacher-side only: it edits gradebook/grades.csv + GRADEBOOK.md and commits them.
+#
+# DRY RUN BY DEFAULT (execute=false): lists the stale rows, changes nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      execute:
+        description: "Actually remove the rows + commit (true), or dry-run (false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prune-gradebook
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.ORG_PAT }}             # read: repo-existence checks across the org
+      GRADE_OWNER: ${{ github.repository_owner }}
+      SECTION: "CLASSCODE"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Prune
+        run: |
+          ARGS=""
+          [ "${{ github.event.inputs.execute }}" = "true" ] && ARGS="--execute"
+          node tools/prune-gradebook.mjs $ARGS
+
+      - name: Commit gradebook (real run only)
+        if: ${{ github.event.inputs.execute == 'true' }}
+        run: |
+          git config user.name "course-bot"
+          git config user.email "course-bot@users.noreply.github.com"
+          git add gradebook
+          git commit -m ":wastebasket: Gradebook: prune rows for deleted repos (section $SECTION)" || { echo "no changes"; exit 0; }
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push && { echo "pushed"; exit 0; }
+            echo "push retry $i"; sleep 3
+          done
