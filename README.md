@@ -4,7 +4,19 @@
 
 Built and run in production across several live university courses (front-end JS/React, Dart/Flutter, and HTML/CSS/JS), covering hundreds of student repositories per term.
 
-This repository contains the platform's **engine** (the Actions workflows and Node tooling) sanitized for public use, the full architecture write-up, and synthetic demo output. The live course content and gradebooks stay in private repositories because they hold student data.
+This repo is the **overview** of the platform. The two working pieces live in their own repositories, included here as submodules:
+
+| Folder | Repository | What it is |
+| --- | --- | --- |
+| `teacher-template/` | **[teacher-subjectcode-classcode-name](https://github.com/tjakoen/teacher-subjectcode-classcode-name)** | The instructor control center: Actions workflows + Node tooling + grader. Generic and config-driven — a real GitHub template. |
+| `student-template/` | **[student-subjectcode-classcode-name](https://github.com/tjakoen/student-subjectcode-classcode-name)** | The student workspace: where a student reads material, submits, and sees grades. |
+
+```bash
+# clone with both templates included
+git clone --recurse-submodules https://github.com/tjakoen/github-native-course-platform.git
+```
+
+Also here: the full [ARCHITECTURE.md](ARCHITECTURE.md) and a synthetic [`demo/`](demo/) of the output (fictional students, no real data). Live course content and gradebooks stay private because they hold student data.
 
 ---
 
@@ -118,14 +130,16 @@ Free-tier friendly by design: unlimited private repos and the monthly Actions qu
 
 ## Using this yourself
 
-This repo is a GitHub **template** — click **Use this template** to create your own control center, then:
+Both templates are real GitHub **templates** — click **Use this template** on either repo.
+
+**Instructor:** create your control center from the **[teacher template](https://github.com/tjakoen/teacher-subjectcode-classcode-name)**, then:
 
 1. Edit **`course.config.json`** with your org name(s) and workspace-template owner. Nothing class-specific is hardcoded in the tools; they read from this file (and workflow env overrides it).
 2. Add the Actions secrets: `ORG_PAT` (cross-repo git), `CANVAS_TOKEN` + `CANVAS_BASE_URL` (grade export), and `MODELS_PAT` if you want AI feedback.
 3. Lock each workflow to your section via its `SECTION` / `WORKSPACE_PREFIX` env.
 
-Students create their own workspace from the companion **[student template](https://github.com/tjakoen/student-subjectcode-classcode-name)** (public).
+**Students:** create a workspace from the **[student template](https://github.com/tjakoen/student-subjectcode-classcode-name)**.
 
 ## Status
 
-Live and in production across multiple courses and sections. This overview is a sanitized snapshot of the architecture — the running engine, course content, and gradebooks stay private because they contain student data.
+Live and in production across multiple courses and sections. This is a sanitized public snapshot — the running instances, course content, and gradebooks stay private because they contain student data.

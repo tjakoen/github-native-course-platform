@@ -1,0 +1,6 @@
+[submodule "teacher-template"]
+	path = teacher-template
+	url = https://github.com/tjakoen/teacher-subjectcode-classcode-name.git
+[submodule "student-template"]
+	path = student-template
+	url = https://github.com/tjakoen/student-subjectcode-classcode-name.git
