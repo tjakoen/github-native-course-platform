@@ -1,7 +1,7 @@
 # 🎓 GitHub-Native Course Platform
 
 [![Made with Claude](https://img.shields.io/badge/Made_with-Claude-D97757?logo=anthropic&logoColor=white)](https://tjakoen.github.io/notes/ten-times-zero)
-[![License](https://img.shields.io/github/license/tjakoen/github-native-course-platform?color=2ea44f)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
 ![Architecture: GitHub-native](https://img.shields.io/badge/architecture-GitHub--native-2ea44f)
 ![Hosted server: none](https://img.shields.io/badge/hosted_server-none-2ea44f)
 ![LMS: Canvas](https://img.shields.io/badge/LMS-Canvas-E13223)
