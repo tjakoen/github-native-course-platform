@@ -2,9 +2,9 @@
 
 What this project is, how it is organized, and the rules for changing it without
 breaking the design. This is the guidance an AI assistant (or a new contributor)
-should read first. Deeper design lives in [ARCHITECTURE.md](ARCHITECTURE.md),
-[AI-GRADING-FEEDBACK-PLAN.md](AI-GRADING-FEEDBACK-PLAN.md), and
-[UI-PLAN.md](UI-PLAN.md).
+should read first. The full documentation lives in [docs/](docs/); deeper design
+lives in [docs/architecture.md](docs/architecture.md) and the design notes
+([docs/design/](docs/design/)).
 
 ## What it is
 

@@ -1,5 +1,8 @@
 # Grading Dashboard - UI plan
 
+> Design note (planning), part of the [documentation](../README.md). Status:
+> planning only, not yet implemented.
+
 A teacher-facing web dashboard layered on top of the existing GitHub-native
 grading platform. It **reads** committed gradebook artifacts and GitHub run
 status, and performs only two **write** actions: dispatch a workflow, and edit a
@@ -7,8 +10,9 @@ flag in `assignments.json`. The grading engine is never bypassed and student
 repos are never touched directly (publishing still goes only through
 `publish.yml`).
 
-Design context lives in `ARCHITECTURE.md`, `AI-GRADING-FEEDBACK-PLAN.md`, and
-`CLAUDE.md`. This file is the source of truth for the UI.
+Design context lives in [architecture.md](../architecture.md), the
+[AI feedback plan](ai-grading-feedback-plan.md), and the repo `CLAUDE.md`. This
+file is the source of truth for the UI.
 
 ## Decisions (locked)
 

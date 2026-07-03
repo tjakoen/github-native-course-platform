@@ -1,5 +1,9 @@
 # GitHub-Native Course Platform - Architecture
 
+> The deep technical reference, part of the [documentation](README.md). For the
+> friendlier front door, read [Overview](overview.md) then
+> [Core concepts](concepts.md).
+
 A coursework, quiz, and grading system that runs **entirely on GitHub**. Canvas
 is never the workspace - it only receives a CSV at the very end. Day-to-day,
 students live in their own repo and the instructor drives everything from a

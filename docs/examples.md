@@ -8,8 +8,7 @@ engine adapts to JavaScript, Dart, and plain HTML/CSS/JS.
 
 If you are a teacher who wants to build your own course, start here: open the
 template, click **Use this template**, and read
-[teacher-template/ACTIVITY-AUTHORING.md](teacher-template/ACTIVITY-AUTHORING.md)
-for how to author more.
+[Authoring activities](authoring-activities.md) for how to author more.
 
 ## The three example activities
 
@@ -54,4 +53,4 @@ on. The activity is always:
 
 Only the language and the test runner change. That is the whole idea: one
 engine, per-class tests and config. To build your own, copy a template and
-follow [ACTIVITY-AUTHORING.md](teacher-template/ACTIVITY-AUTHORING.md).
+follow [Authoring activities](authoring-activities.md).

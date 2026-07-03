@@ -1,6 +1,9 @@
 # AI Feedback in Grading: Implementation Plan
 
-Status: planning only, not yet implemented.
+> Design note, part of the [documentation](../README.md). For the user-facing
+> summary of how AI feedback behaves, see
+> [Grading and feedback](../grading-and-feedback.md). This document is the
+> original implementation plan, kept as design background.
 
 ## Goal
 
