@@ -52,6 +52,18 @@ each repo's `course.config.json` differ.** So:
 - Everything that mutates repos defaults to a **dry run** and acts only on an
   explicit `execute` / `publish=true`.
 
+## Access model
+
+The **org owns every repo** so the engine can grade it and deliver results;
+within that, **each student is the admin of their own repos** and no one else's.
+Only teachers are org owners or hold admin on the infrastructure repos (teacher
+control center, `*-solution`, templates, demos). `tools/org-audit.mjs` audits
+this (rogue org owners, non-teacher access on infra repos, a student repo shared
+with a second account, a workspace no student can see, and a permissive org base
+permission). Its signals are collaborator-based, not name-based, because repo
+name handles and `student.json` rarely equal the real GitHub login. Fixes stay
+manual (demoting an org owner needs the `admin:org` scope).
+
 ## Conventions (hard rules)
 
 - **Gitmoji** commit subject prefixes.
