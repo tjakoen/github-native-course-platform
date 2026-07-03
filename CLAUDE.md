@@ -1,4 +1,4 @@
-# GitHub-Native Course Platform — project guide
+# GitHub-Native Course Platform - project guide
 
 What this project is, how it is organized, and the rules for changing it without
 breaking the design. This is the guidance an AI assistant (or a new contributor)
@@ -32,7 +32,7 @@ Grading and publishing are **separate on purpose**:
 
 - **Grade sweep** clones each submission at its snapshot commit, grades against
   the canonical tests in `grader/`, and writes the gradebook (`grades.csv`,
-  `GRADEBOOK.md`) plus AI feedback notes. **Teacher-side only — never writes to
+  `GRADEBOOK.md`) plus AI feedback notes. **Teacher-side only - never writes to
   student repos.**
 - **Publish** is the only step that writes to student repos, and only for
   activities explicitly flagged for release. Dry-run by default.
@@ -45,8 +45,7 @@ it can run as often as wanted and only does new work.
 **The engine is identical across all teacher repos; only the `grader/` tests and
 each repo's `course.config.json` differ.** So:
 
-- Shared tools (`tools/*.mjs`) stay **byte-identical** across teacher repos —
-  edit once, copy to all.
+- Shared tools (`tools/*.mjs`) stay **byte-identical** across teacher repos - edit once, copy to all.
 - Nothing class-specific is hardcoded: orgs, section, workspace prefix, template
   owner, and Canvas settings come from `course.config.json` or workflow env.
 - Everything that mutates repos defaults to a **dry run** and acts only on an

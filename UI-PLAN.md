@@ -1,4 +1,4 @@
-# Grading Dashboard — UI plan
+# Grading Dashboard - UI plan
 
 A teacher-facing web dashboard layered on top of the existing GitHub-native
 grading platform. It **reads** committed gradebook artifacts and GitHub run
