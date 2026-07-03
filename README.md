@@ -1,6 +1,6 @@
 # 🎓 GitHub-Native Course Platform
 
-[![Made with Claude](https://img.shields.io/badge/Made_with-Claude-D97757?logo=anthropic&logoColor=white)](https://tjakoen.github.io/notes/professional-vibe-coder)
+[![Made with Claude](https://img.shields.io/badge/Made_with-Claude-D97757?logo=anthropic&logoColor=white)](https://tjakoen.github.io/notes/ten-times-zero)
 [![License](https://img.shields.io/github/license/tjakoen/github-native-course-platform?color=2ea44f)](LICENSE)
 ![Architecture: GitHub-native](https://img.shields.io/badge/architecture-GitHub--native-2ea44f)
 ![Hosted server: none](https://img.shields.io/badge/hosted_server-none-2ea44f)
@@ -151,4 +151,4 @@ Both templates are real GitHub **templates** — click **Use this template** on 
 Live and in production across multiple courses and sections. This is a sanitized public snapshot — the running instances, course content, and gradebooks stay private because they contain student data.
 
 ---
-🤖 **Built by [tjakoen](https://github.com/tjakoen) with Claude — I don't prompt and pray, I prompt and prove.** Every commit here is co-authored with an AI, on purpose. [How I actually work with AI, receipts and all →](https://tjakoen.github.io/notes/professional-vibe-coder) · [How I use AI in teaching →](https://tjakoen.github.io/notes/how-i-use-ai-in-teaching)
+🤖 **Built by [tjakoen](https://github.com/tjakoen) with Claude — I don't prompt and pray, I prompt and prove.** Every commit here is co-authored with an AI, on purpose. [How I actually work with AI, receipts and all →](https://tjakoen.github.io/notes/ten-times-zero)
