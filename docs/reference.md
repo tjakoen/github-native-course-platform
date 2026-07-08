@@ -83,7 +83,7 @@ acting only on an explicit `execute` / `publish=true`.
 | `publish-material.yml` | Copies a unit's `content/` into every workspace in the section. |
 | `canvas-push.yml` | Pushes gradebook scores to Canvas (modes: `check`, `dry-run`, `execute`, `comment`). |
 | `canvas-export.yml` | Emits an offline Canvas-import CSV. |
-| `provision-workspaces.yml` | Creates a workspace for a student who has activities but none; backfills a blank `student.json`. Never deletes or renames. |
+| `provision-workspaces.yml` | Creates a workspace for a student who has activities but none, adding the student as an admin collaborator on it; backfills a blank `student.json`. Never deletes or renames. |
 | `prune-gradebook.yml` | Drops gradebook rows whose submission repo 404s (deleted/renamed). |
 | `audit-names.yml` | Flags misnamed repos and blank `student.json`. Weekly plus manual. |
 | `models-check.yml` | Preflight that verifies GitHub Models works before an AI-feedback grade run. |
