@@ -4,3 +4,6 @@
 [submodule "student-template"]
 	path = student-template
 	url = https://github.com/tjakoen/student-subjectcode-classcode-name.git
+[submodule "grader-ui"]
+	path = grader-ui
+	url = https://github.com/tjakoen/grader-ui
