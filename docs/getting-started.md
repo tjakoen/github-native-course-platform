@@ -155,9 +155,8 @@ Paperless attendance runs on the same repo. Two credentials, not to be confused:
   this into the scanner page once; it is what actually records attendance, so
   only you hold it.
 
-Then set **Settings -> Pages -> Source = GitHub Actions** so the scanner
-publishes (only `scanner.html` is served, never the gradebook). Full walkthrough:
-[Attendance](attendance.md).
+The `Deploy attendance scanner` workflow enables Pages itself and serves only
+`scanner.html` (never the gradebook). Full walkthrough: [Attendance](attendance.md).
 
 ## Later, when you have real students
 

@@ -72,12 +72,13 @@ separate batches (label them, e.g. `class-a`, `class-b`).
    value = any random string (e.g. `openssl rand -hex 32`). It signs and verifies
    within the one repo; it need not match across repos. Rotating it invalidates
    existing QRs (re-run generate with `force`).
-2. **Enable the scanner site.** In each teacher repo: Settings -> Pages ->
-   Source = **GitHub Actions**. The `Deploy attendance scanner` workflow then
-   publishes *only* `scanner.html` (as `index.html`) - the gradebook and its PII
-   are never in the Pages artifact, so the public site exposes nothing sensitive.
-   The scanner reaches the repo only through the token you paste at runtime.
-   Site URL after the first deploy: `https://<owner>.github.io/<repo>/`.
+2. **Enable the scanner site.** The `Deploy attendance scanner` workflow enables
+   Pages itself on its first run and publishes *only* `scanner.html` (as
+   `index.html`) - the gradebook and its PII are never in the Pages artifact, so
+   the public site exposes nothing sensitive. The scanner reaches the repo only
+   through the token you paste at runtime. Site URL after the first deploy:
+   `https://<owner>.github.io/<repo>/`. (If your org disables Pages by default,
+   turn it on once in Settings -> Pages, Source = GitHub Actions, then re-run.)
 3. **Make a scanner token.** A fine-grained PAT scoped to the one teacher repo,
    Contents: read + write. You paste it into the scanner once; it is kept only in
    that browser's localStorage.
