@@ -144,6 +144,21 @@ every activity submission repo they create later starts with a blank one. See th
 Your teacher repo is never a target: publishing matches the `student-` prefix
 only.
 
+## Optional: attendance QR scanning
+
+Paperless attendance runs on the same repo. Two credentials, not to be confused:
+
+- **`ATTENDANCE_HMAC_SECRET`** - a repo secret (any random string, e.g.
+  `openssl rand -hex 32`). GitHub Actions uses it automatically to sign and
+  verify QRs; you never type it anywhere else.
+- **A fine-grained PAT** (Contents: read + write on this teacher repo) - you paste
+  this into the scanner page once; it is what actually records attendance, so
+  only you hold it.
+
+Then set **Settings -> Pages -> Source = GitHub Actions** so the scanner
+publishes (only `scanner.html` is served, never the gradebook). Full walkthrough:
+[Attendance](attendance.md).
+
 ## Later, when you have real students
 
 - **Canvas roster:** export the section's gradebook CSV from Canvas and drop it in

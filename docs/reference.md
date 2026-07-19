@@ -47,6 +47,7 @@ Per-workflow env pins each teacher repo to one section via `SECTION` and
 | `ORG_PAT` | Cross-repo git (fine-grained PAT, org-scoped, Contents + Pull requests + Issues write). Required. |
 | `CANVAS_TOKEN`, `CANVAS_BASE_URL` | Canvas grade sync. |
 | `MODELS_PAT` | AI feedback via GitHub Models (needed on Education orgs, where the built-in Actions token 403s). |
+| `ATTENDANCE_HMAC_SECRET` | Signs and verifies attendance QRs (any random string, per teacher repo). See [Attendance](attendance.md). |
 
 ## `assignments.json` flags
 
@@ -87,6 +88,9 @@ acting only on an explicit `execute` / `publish=true`.
 | `prune-gradebook.yml` | Drops gradebook rows whose submission repo 404s (deleted/renamed). |
 | `audit-names.yml` | Flags misnamed repos and blank `student.json`. Weekly plus manual. |
 | `models-check.yml` | Preflight that verifies GitHub Models works before an AI-feedback grade run. |
+| `generate-attendance-qrs.yml` | Signs and commits a per-student attendance QR into any workspace missing one; refreshes the teacher-side roster. Dry-run by default. See [Attendance](attendance.md). |
+| `verify-attendance.yml` | On each scanned batch CSV, verifies signatures, flags forgeries, and rebuilds the attendance summaries. |
+| `deploy-scanner.yml` | Publishes only `attendance/scanner.html` to GitHub Pages (nothing else is served). |
 
 Repo **deletes and renames stay manual**: the tools flag them, a human performs
 them (they need the `delete_repo` scope).
@@ -104,6 +108,7 @@ The shared tools are **byte-identical across all teacher repos**; only
 | `org-audit.mjs` | Read-only cross-org hygiene plus an access audit. |
 | `canvas-push.mjs`, `canvas-export.mjs`, `canvas-pull-points.mjs` | Canvas sync and points reconcile. |
 | `list-section-repos.mjs`, `sync-unit.mjs` | Section listing and content sync helpers. |
+| `generate-attendance-qrs.mjs`, `verify-attendance.mjs` | Attendance: sign/commit per-student QRs and refresh the roster; verify scanned batches and build the summaries. See [Attendance](attendance.md). |
 
 ## Gradebook artifacts
 

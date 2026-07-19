@@ -46,6 +46,7 @@ to build one? Jump to [Getting started](getting-started.md).
 | [Running a course](running-a-course.md) | The chronological lifecycle and the confirmation checklist that proves it works. |
 | [Authoring activities](authoring-activities.md) | Add a graded activity across JS, Dart, and HTML/CSS/JS, from test-only to AI-enhanced. |
 | [Grading and feedback](grading-and-feedback.md) | The off-repo grading model, receipts, and held-for-review AI feedback. |
+| [Attendance (QR scan)](attendance.md) | Paperless attendance: signed per-student QRs, a Pages scanner, per-batch CSVs, and auto-built summaries. |
 | [Operating with an AI assistant](operating-with-ai.md) | The jobs catalogue and the guardrails that keep grades safe. |
 | [LMS and Canvas](lms-canvas.md) | The single external coupling, and how to swap in another LMS. |
 | [Student guide](student-guide.md) | The student experience: workspace zones, submitting, seeing grades. |

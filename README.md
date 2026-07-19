@@ -46,6 +46,7 @@ Also here: a synthetic [demo/](demo/) of the output (fictional students, no real
 - **Source-of-truth split.** The student repo owns submissions; the teacher repo owns grades. Nothing official is ever read back from a student repo, so there is nothing to tamper with.
 - **Grade off-repo.** Grades are computed in the teacher repo from canonical tests against a snapshot commit, never from code running inside the student's repo.
 - **Honest about integrity.** Take-home work cannot be proctored. The design deters the honest majority (per-student variants, deadline snapshots, viva spot-checks) rather than pretending to prevent the determined.
+- **Even attendance is native.** Each student carries a signed QR in their workspace; the instructor scans it with a phone (a Pages page), and scans commit as CSV batches that a workflow verifies and summarizes. See [Attendance](docs/attendance.md).
 
 See [Core concepts](docs/concepts.md) for how these turn into a concrete repository layout.
 
