@@ -52,8 +52,10 @@ an explicit `publish=true`. The flow is:
 3. Flip `"publish": true` on the activities that are ready.
 4. Run the publish workflow: dry run first, read the plan, then `publish=true`.
 
-The proposed grade reaches Canvas only when you enter or push it yourself. See
-[LMS and Canvas](lms-canvas.md).
+For a plain activity the proposed grade reaches Canvas only when you enter or push
+it yourself. For an **AI-graded** activity, flipping `"publish": true` also
+unblocks the Canvas push: its reviewed final score is sent with a rubric-breakdown
+comment (no scores-or-AI leak). See [LMS and Canvas](lms-canvas.md).
 
 ## AI-assisted feedback
 

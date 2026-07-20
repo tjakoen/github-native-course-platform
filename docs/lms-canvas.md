@@ -43,6 +43,22 @@ activity's `RUBRIC.md`, not in `assignments.json`.
 `"locked": true` on an activity means a grade Canvas already has is never
 overwritten. Use it once a grade is final so a later re-push cannot disturb it.
 
+## AI-graded activities
+
+An AI-graded activity is **held out of the push until you review it** and set
+`"publish": true`. Until then the push reports it as held and writes nothing for
+it. Once published, its reviewed final score (the `aiScore` column in
+`grades.csv`, filled when you approve the grade) is the grade that is sent -
+always with a submission comment carrying the rubric breakdown plus the
+student-facing feedback prose. That comment deliberately excludes the
+instructor-only header, the proposed-total restatement, and the AI-authored
+likelihood line, and never mentions AI, the same wall the published `FEEDBACK.md`
+keeps. A published AI activity whose `aiScore` is still blank (unreviewed or
+flagged) is skipped, so nothing ungraded leaks out. Setting `"publish": true`
+therefore delivers an AI-graded activity to **both** the student repo (via the
+publish workflow) and Canvas (grade + breakdown comment), so flip it only once the
+activity is fully reviewed.
+
 ## Swapping in another LMS
 
 Because grades live in GitHub and the LMS is only a final export target, supporting
