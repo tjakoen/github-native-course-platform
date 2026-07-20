@@ -25,12 +25,13 @@ authoring, and student use.
 
 ## The pieces
 
-This repo is the **overview**. The two working pieces live in their own repositories, included here as submodules:
+This repo is the **overview**. The three working pieces live in their own repositories, included here as submodules:
 
 | Folder | Repository | What it is |
 | --- | --- | --- |
 | teacher-template/ | **[teacher-subjectcode-classcode-name](https://github.com/tjakoen/teacher-subjectcode-classcode-name)** | The instructor control center: Actions workflows + Node tooling + grader. Generic and config-driven - a real GitHub template. |
 | student-template/ | **[student-subjectcode-classcode-name](https://github.com/tjakoen/student-subjectcode-classcode-name)** | The student workspace: where a student reads material, submits, and sees grades. |
+| grader-ui/ | **[grader-ui](https://github.com/tjakoen/grader-ui)** | The local grading-review surface: reads the teacher repos' gradebooks, builds a static review dashboard, and emits the prompts an AI runs to apply the decisions. It never writes to a repo itself - the human reviews, the AI writes. |
 
 ~~~bash
 # clone with both templates included
