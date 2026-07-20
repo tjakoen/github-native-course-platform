@@ -22,7 +22,13 @@ instructor can record attendance.
    is its own CSV.
 4. **Verify + summarize.** The `Verify attendance` workflow fires on each batch
    commit: it recomputes the signature on every scan, flags any forgery, writes a
-   per-batch summary, and rebuilds the roll-up `attendance/ATTENDANCE.md`.
+   per-batch summary, rebuilds the roll-up `attendance/ATTENDANCE.md`, and emits a
+   machine-readable `attendance/summary.json` (per-student verified dates - the
+   feed the next step reads).
+5. **Deliver receipts.** The `Publish attendance` workflow runs automatically
+   when `Verify attendance` finishes and writes each student their own
+   `attendance/MY-ATTENDANCE.md` in their workspace - their dates and count only,
+   never a classmate's. See *Students see their own attendance* below.
 
 ## What the QR contains
 
@@ -46,6 +52,29 @@ not have that, cannot see the teacher repo or its secrets, and their QR is only
 an ID: it records nothing until the instructor scans it into an authenticated
 session. Keep the token on your own device and you are the sole recorder.
 
+## Students see their own attendance
+
+Each student gets an `attendance/MY-ATTENDANCE.md` in their own workspace showing
+the sessions held, which they attended (Present / dash), and their count - so a
+student can check their own record without asking. It is delivered by the
+`Publish attendance` workflow, which is the **only** thing that writes attendance
+into a student repo. Like grade publishing, delivery is a distinct step from the
+teacher-side verification; here it is wired to run automatically after each
+`Verify attendance`, so a fresh scan reaches students on its own.
+
+Privacy is preserved by construction: a receipt contains only that student's own
+dates (the workflow matches each workspace to its `studentNumber` and copies out
+just that student's row from `summary.json`) - never the class list, never a
+signature. "Present: X of N sessions" reports only how many sessions were held,
+not who attended them. The receipt is derived from the recorded data (its
+freshness line uses the last session date, not the clock), so re-running on an
+unchanged record rewrites nothing - the auto-publish makes no needless commits.
+
+A manual `workflow_dispatch` on `Publish attendance` offers a dry-run
+(`execute=false`) to preview which workspaces would change before writing, and an
+`only=<handle>` to target one student. If a student reports a wrong record, fix
+the underlying batch CSV and re-run `Verify attendance`; the receipt follows.
+
 ## Files and layout (in the teacher repo)
 
 ```
@@ -53,6 +82,7 @@ attendance/
   scanner.html                         the Pages scanner app (no secret in it)
   roster.json                          studentNumber -> name (names only)
   ATTENDANCE.md                        auto-built roll-up (sessions + per-student tally)
+  summary.json                         auto-built machine feed (per-student verified dates)
   sessions/
     2026-07-20/
       1430-on-time.csv                 a batch (timestamp,studentNumber,signature)
@@ -119,6 +149,8 @@ that signal at a glance.
 - Grading and attendance never touch each other; attendance is its own folder and
   its own workflows.
 - The generate step never deletes or renames anything and is dry-run by default.
-- No student PII leaves the teacher repo: names live in `roster.json` and the
-  summaries inside the private repo; the scanner fetches them only with your
-  token; the Pages site publishes only the scanner.
+- No student PII leaves the teacher repo except each student's **own** record:
+  names live in `roster.json` and the summaries inside the private repo; the
+  scanner fetches them only with your token; the Pages site publishes only the
+  scanner. The one thing delivered outward, `MY-ATTENDANCE.md`, holds only the
+  recipient's own dates - a student never sees a classmate's attendance.

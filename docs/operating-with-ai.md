@@ -50,7 +50,7 @@ Ask for these in your own words; the assistant runs the workflow or tool.
 | Provision missing workspaces / backfill `student.json` | `provision-workspaces.yml` (dry run, then `execute`) | Creates a workspace for a student who has activities but none; fills a blank `student.json` from their own submissions; never deletes or renames. |
 | Clean stale gradebook rows | `prune-gradebook.yml` (dry run, then `execute`) | Drops rows whose submission repo was deleted or renamed (404). |
 | Hand out attendance QRs | `generate-attendance-qrs.yml` (dry run, then `execute`) | Signs a per-student QR into any workspace missing one; refreshes the roster. See [Attendance](attendance.md). |
-| Take attendance | The scanner (a Pages page), then `verify-attendance.yml` runs itself | Scan students in, commit a batch; the verify workflow flags forgeries and builds the summaries. |
+| Take attendance | The scanner (a Pages page), then `verify-attendance.yml` runs itself | Scan students in, commit a batch; the verify workflow flags forgeries and builds the summaries. `publish-attendance.yml` then auto-delivers each student their own receipt. |
 
 See [Reference](reference.md) for the full workflow list, and
 [Attendance](attendance.md) for the QR-scan feature end to end.

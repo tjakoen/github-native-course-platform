@@ -79,6 +79,11 @@ publishes them:
 These are a read-only record. Editing them changes nothing official; the authority
 is your instructor's gradebook.
 
+If your class uses QR attendance, you will also see `attendance/MY-ATTENDANCE.md`
+in your workspace: your own attendance record (which sessions you attended and
+your count), updated after each class. It shows only your own record. If a
+session looks wrong, tell your instructor - they correct it at the source.
+
 ## Working in a Codespace
 
 You can open your workspace (and every activity repo) as a cloud dev environment,
