@@ -65,6 +65,21 @@ Because everything is scoped to one teacher repo, one repo == one class - no
 "which class is this" ambiguity. Multiple classes on the same day are just
 separate batches (label them, e.g. `class-a`, `class-b`).
 
+## Look and feel
+
+The scanner wears the **GRAIN design system** (its Sourdough theme - the same
+editorial, monochrome look as the platform's other surfaces). GRAIN is
+**consumed as a package** (`@tjakoen/grain` on GitHub Packages), never copied
+into the repo: the `Deploy attendance scanner` workflow installs it and runs
+`attendance/build-theme.mjs`, which assembles the design tokens, base styling,
+self-hosted fonts, and only the components the page uses into a single
+`assets/grain.css` published next to the scanner. That file is a build product
+(git-ignored), so a GRAIN update is just a version bump in
+`attendance/package.json` and a re-deploy - nothing to hand-edit and no forked
+CSS to drift. The one local touch is a fast green/red pass/fail cue on each scan
+(a sanctioned token override on top of the package), since a door scanner needs
+that signal at a glance.
+
 ## One-time setup
 
 1. **Add the signing secret.** In each teacher repo: Settings -> Secrets and
@@ -73,10 +88,11 @@ separate batches (label them, e.g. `class-a`, `class-b`).
    within the one repo; it need not match across repos. Rotating it invalidates
    existing QRs (re-run generate with `force`).
 2. **Enable the scanner site.** The `Deploy attendance scanner` workflow enables
-   Pages itself on its first run and publishes *only* `scanner.html` (as
-   `index.html`) - the gradebook and its PII are never in the Pages artifact, so
-   the public site exposes nothing sensitive. The scanner reaches the repo only
-   through the token you paste at runtime. Site URL after the first deploy:
+   Pages itself on its first run, assembles the scanner's look (see *Look and
+   feel* below), and publishes *only* `scanner.html` (as `index.html`) plus that
+   built stylesheet - the gradebook and its PII are never in the Pages artifact,
+   so the public site exposes nothing sensitive. The scanner reaches the repo
+   only through the token you paste at runtime. Site URL after the first deploy:
    `https://<owner>.github.io/<repo>/`. (If your org disables Pages by default,
    turn it on once in Settings -> Pages, Source = GitHub Actions, then re-run.)
 3. **Make a scanner token.** A fine-grained PAT scoped to the one teacher repo,
