@@ -3,7 +3,12 @@
 > Design note, part of the [documentation](../README.md). For the user-facing
 > summary of how AI feedback behaves, see
 > [Grading and feedback](../grading-and-feedback.md). This document is the
-> original implementation plan, kept as design background.
+> original implementation plan, kept as design background. **Superseded (2026-07):
+> feedback no longer calls GitHub Models or needs `MODELS_PAT`. The sweep now
+> writes a per-submission input file and the grader-ui "Generate feedback" prompt
+> drafts each note in a Claude Code session on the instructor's subscription. The
+> prompt design, guardrails, and held-for-review split below still hold; only the
+> provider changed.**
 
 ## Goal
 

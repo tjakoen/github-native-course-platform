@@ -165,8 +165,7 @@ only with an explicit `execute`/`publish=true`.
 | **Provision workspaces** | `provision-workspaces.yml` | Reconciles the roster (from the gradebook) against live workspaces: creates a workspace for any student who has activities but none (adding the student as an admin collaborator on it), and fills a blank/missing `student.json` from the student's own submissions. Reports studentNumber collisions; never deletes or renames. Dry-run unless `execute=true`. |
 | **Prune gradebook** | `prune-gradebook.yml` | Removes gradebook rows whose submission repo no longer exists (deleted/renamed duplicates), which the grade sweep would otherwise keep forever. Only prunes on a definitive 404. Dry-run unless `execute=true`. |
 
-*(Every teacher repo also carries `models-check.yml`, a `workflow_dispatch`
-preflight that verifies GitHub Models works before an AI-feedback grade run.)* Repo **deletes/renames stay manual** - the tools flag them
+Repo **deletes/renames stay manual** - the tools flag them
 but never perform them (they need `delete_repo` scope and a human decision).
 
 **Publishing model:** each unit/quiz lives on its **own branch** in the

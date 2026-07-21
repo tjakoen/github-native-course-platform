@@ -14,8 +14,8 @@ convenience layer over the same tools, not a separate system.
 1. Install an AI coding assistant that can run shell commands and `gh`.
 2. `gh auth login` as an account with access to the course org.
 3. Set the secrets on the teacher repo as you need them: `ORG_PAT` (cross-repo
-   git), `CANVAS_TOKEN` and `CANVAS_BASE_URL` (grade sync), `MODELS_PAT` (AI
-   feedback). See [Getting started](getting-started.md).
+   git), `CANVAS_TOKEN` and `CANVAS_BASE_URL` (grade sync). AI feedback needs no
+   secret. See [Getting started](getting-started.md).
 
 ## The mental model
 

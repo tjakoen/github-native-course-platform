@@ -106,11 +106,13 @@ Selected by the `feedback` flag:
 - **Styling guard.** If a web preview rendered as unstyled default HTML (usually a
   student's CSS not wired up), the AI gives code-only feedback and the teacher note
   carries a flag; it never invents design praise from a blank page.
-- **Provider.** The reference setup uses GitHub Models (`gpt-4o-mini`), which is
-  free inside GitHub Actions via the runner's built-in token. The provider is
-  isolated in one function, so switching to another model is a contained change.
-  For the full design, see [Design notes: AI feedback
-  plan](design/ai-grading-feedback-plan.md).
+- **How it runs.** No metered model and no API key. During grading the sweep
+  writes a self-contained input file per submission (rubric, class context,
+  student source, screenshots, output format); the grader-ui "Generate feedback"
+  prompt then has a Claude Code session, on the instructor's own subscription,
+  draft each note. Everything downstream (the held-for-review split, the Canvas
+  comment wall) is unchanged. For the original GitHub Models design, see [Design
+  notes: AI feedback plan](design/ai-grading-feedback-plan.md).
 
 ## Related
 

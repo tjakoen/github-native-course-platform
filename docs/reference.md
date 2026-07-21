@@ -46,8 +46,9 @@ Per-workflow env pins each teacher repo to one section via `SECTION` and
 | --- | --- |
 | `ORG_PAT` | Cross-repo git (fine-grained PAT, org-scoped, Contents + Pull requests + Issues write). Required. |
 | `CANVAS_TOKEN`, `CANVAS_BASE_URL` | Canvas grade sync. |
-| `MODELS_PAT` | AI feedback via GitHub Models (needed on Education orgs, where the built-in Actions token 403s). |
 | `ATTENDANCE_HMAC_SECRET` | Signs and verifies attendance QRs (any random string, per teacher repo). See [Attendance](attendance.md). |
+
+_(AI feedback needs no secret: notes are drafted in a Claude Code session via the grader-ui prompt, not a hosted model.)_
 
 ## `assignments.json` flags
 
@@ -87,7 +88,6 @@ acting only on an explicit `execute` / `publish=true`.
 | `provision-workspaces.yml` | Creates a workspace for a student who has activities but none, adding the student as an admin collaborator on it; backfills a blank `student.json`. Never deletes or renames. |
 | `prune-gradebook.yml` | Drops gradebook rows whose submission repo 404s (deleted/renamed). |
 | `audit-names.yml` | Flags misnamed repos and blank `student.json`. Weekly plus manual. |
-| `models-check.yml` | Preflight that verifies GitHub Models works before an AI-feedback grade run. |
 | `generate-attendance-qrs.yml` | Signs and commits a per-student attendance QR into any workspace missing one; refreshes the teacher-side roster. Dry-run by default. See [Attendance](attendance.md). |
 | `verify-attendance.yml` | On each scanned batch CSV, verifies signatures, flags forgeries, and rebuilds the attendance summaries (including `summary.json`). |
 | `publish-attendance.yml` | Delivers each student their own `attendance/MY-ATTENDANCE.md` receipt; runs automatically after `verify-attendance`, or manually with a dry-run. The only step that writes attendance to student repos. See [Attendance](attendance.md). |
