@@ -57,7 +57,7 @@ Each activity is one object in `grader/assignments.json`. Only `id`, `type`, and
 | Field | Meaning |
 | --- | --- |
 | `id` | Unique activity id; also the receipt filename. |
-| `type` | `vitest`, `dart`, or `quiz`. |
+| `type` | `vitest`, `dart`, `flutter`, or `quiz`. (`flutter` grades widget tests and captures a mobile screenshot in the test.) |
 | `namePrefix` | Submission-repo prefix (`m1a1-`). |
 | `key` | Quiz only: path to the answer key. |
 | `totalPoints` | Canvas point value; reconciled vs Canvas into `gradebook/points-mismatch.md`. |

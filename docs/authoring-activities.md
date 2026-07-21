@@ -81,7 +81,7 @@ required.
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `id` | yes | Unique activity id; also the receipt filename (for example `m1a1`). |
-| `type` | yes | `vitest` (Node tests), `dart` (`dart test`), or `quiz` (match answers to a key). |
+| `type` | yes | `vitest` (Node tests), `dart` (`dart test`), `flutter` (`flutter test`, front-end with screenshots), or `quiz` (match answers to a key). |
 | `namePrefix` | yes | Student repos for this activity start with this (`m1a1-` matches `m1a1-<classcode>-<handle>`). |
 | `key` | quiz only | Path to the answer key, for example `grader/q1/key.json`. |
 | `totalPoints` | no | Canvas point value; reconciled vs Canvas into `gradebook/points-mismatch.md`. |
@@ -170,7 +170,8 @@ The engine is identical; only the test layout and runner differ.
 | --- | --- | --- | --- | --- |
 | JS / React | `vitest` | `grader/<id>/hello.test.js` or `grader/<id>/test/*.test.jsx` | Vitest + `@testing-library/react` | Design activities use `previews: "branch"`. |
 | HTML/CSS/JS | `vitest` | `grader/<id>/test/*.test.js` | Vitest + `jsdom` (parses `src/index.html`) | Grades DOM structure. Previews rendered locally by its grade sweep, not from a branch. |
-| Dart / Flutter | `dart` | `grader/<id>/test/<name>_test.dart` | `dart pub get` + `dart test --reporter json` | Student code in `bin/` and `lib/`; needs the Dart SDK (CI uses `setup-dart`). |
+| Dart (logic) | `dart` | `grader/<id>/test/<name>_test.dart` | `dart pub get` + `dart test --reporter json` | Pure-Dart logic; student code in `bin/`/`lib/`; needs the Dart SDK (CI uses `setup-dart`). |
+| Flutter (front-end) | `flutter` | `grader/<id>/test/<name>_test.dart` (+ a `capture:` golden test) | `flutter pub get` + `flutter test --update-goldens --reporter json` | Widget tests score behaviour; a `capture:`-named golden test renders the screen in a `device_frame` phone at a mobile size and writes a PNG (the sweep excludes `capture:` tests from the score, copies the PNG into `previewDir`, and hands it to AI feedback exactly like the web local-render path). Needs Flutter (CI uses `subosito/flutter-action`). No `previews: "branch"` - the screenshot is produced in the test. |
 | Quiz (any) | `quiz` | `grader/<id>/key.json` | Answer match (case-insensitive, trimmed) | Student answers in `quizzes/<id>/answers.json`. |
 
 Two grading paths, one shape: JS and HTML both run under Vitest (HTML via jsdom
