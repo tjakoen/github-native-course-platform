@@ -85,6 +85,7 @@ acting only on an explicit `execute` / `publish=true`.
 | `publish-material.yml` | Copies a unit's `content/` into every workspace in the section. |
 | `canvas-push.yml` | Pushes gradebook scores to Canvas (modes: `check`, `dry-run`, `execute`, `comment`). |
 | `canvas-export.yml` | Emits an offline Canvas-import CSV. |
+| `canvas-quiz-import.yml` | Builds a quiz's QTI package from `quiz.json` and imports it into Canvas via Content Migrations. Dry-run by default; imports unpublished. See [LMS and Canvas](lms-canvas.md). |
 | `provision-workspaces.yml` | Creates a workspace for a student who has activities but none, adding the student as an admin collaborator on it; backfills a blank `student.json`. Never deletes or renames. |
 | `prune-gradebook.yml` | Drops gradebook rows whose submission repo 404s (deleted/renamed). |
 | `audit-names.yml` | Flags misnamed repos and blank `student.json`. Weekly plus manual. |
@@ -108,6 +109,7 @@ The shared tools are **byte-identical across all teacher repos**; only
 | `provision-workspaces.mjs`, `prune-gradebook.mjs`, `audit-repo-names.mjs` | Roster/repo hygiene. |
 | `org-audit.mjs` | Read-only cross-org hygiene plus an access audit. |
 | `canvas-push.mjs`, `canvas-export.mjs`, `canvas-pull-points.mjs` | Canvas sync and points reconcile. |
+| `build-quiz-qti.mjs`, `canvas-quiz-import.mjs`, `canvas-pull-quiz-grades.mjs` | Quiz-to-Canvas: build the QTI package (offline, deterministic) from `quiz.json`, import it via Content Migrations, and pull Canvas quiz grades back into the gradebook. See [LMS and Canvas](lms-canvas.md). |
 | `list-section-repos.mjs`, `sync-unit.mjs` | Section listing and content sync helpers. |
 | `generate-attendance-qrs.mjs`, `verify-attendance.mjs`, `publish-attendance.mjs` | Attendance: sign/commit per-student QRs and refresh the roster; verify scanned batches and build the summaries; deliver each student their own receipt. See [Attendance](attendance.md). |
 
@@ -145,5 +147,7 @@ Student-side (delivered on publish): `GRADES.md`, `grades/<id>.json`, `FEEDBACK.
 - **Cross-repo credential required.** A fine-grained PAT is sufficient for a solo
   admin; the built-in `GITHUB_TOKEN` is repo-scoped only, and org-admin status does
   not change that.
-- **Static Pages cannot write**, which is why quizzes are answered by editing
-  `answers.json` in the repo rather than through a hosted form.
+- **Static Pages cannot write**, which is why a repo-graded quiz is answered by
+  editing `answers.json` in the repo rather than through a hosted form. A quiz can
+  instead be hosted and auto-graded in Canvas by importing its QTI package (see
+  [LMS and Canvas](lms-canvas.md)); then students answer it in Canvas.

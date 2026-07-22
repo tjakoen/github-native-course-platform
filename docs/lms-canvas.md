@@ -59,6 +59,33 @@ therefore delivers an AI-graded activity to **both** the student repo (via the
 publish workflow) and Canvas (grade + breakdown comment), so flip it only once the
 activity is fully reviewed.
 
+## Quizzes to Canvas (one-way QTI import)
+
+A quiz can be hosted and auto-graded **in Canvas** instead of graded from the
+student repo. The teacher repo stays the source of truth: the quiz is authored
+once as `quizzes/<q>/quiz.json` (a structured SSOT of questions, types, and
+accepted answers), and a generator turns it into a portable, committed QTI 1.2
+package under `quizzes/<q>/canvas/` (both the importable `<q>-qti.zip` and the
+unzipped XML, so the package diffs cleanly in review).
+
+- `tools/build-quiz-qti.mjs <q>` builds the QTI package from `quiz.json`. It is
+  **offline and deterministic** (no network, no external dependency, byte-stable
+  output), so the committed package is reproducible and reviewable.
+- `tools/canvas-quiz-import.mjs <q>` (and the `canvas-quiz-import.yml` workflow)
+  uploads that package via Canvas **Content Migrations** (`qti_converter`), which
+  imports into **both Classic and New Quizzes**, so the engine choice does not
+  gate the import. Dry-run by default; `--execute` imports the quiz **unpublished**
+  for your review, and an existence check skips a re-import unless you pass
+  `--force`. Short-answer questions map to case-insensitive fill-in-the-blank with
+  multiple accepted answers; multiple choice is supported too.
+
+Because Canvas hosts and grades a Canvas-native quiz, **Canvas is the grade source
+for that quiz**. To keep a unified local record, `tools/canvas-pull-quiz-grades.mjs
+<q>` pulls each student's Canvas quiz score back into `gradebook/grades.csv`
+(dry-run by default; matches on student number, upserts one row per student). This
+replaces the older path where a quiz was published into student repos and graded
+from a committed answer file.
+
 ## Swapping in another LMS
 
 Because grades live in GitHub and the LMS is only a final export target, supporting
