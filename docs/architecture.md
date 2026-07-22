@@ -148,7 +148,7 @@ only with an explicit `execute`/`publish=true`.
 | **Grade sweep** | `grade.yml` | Clones each submission at its snapshot commit, grades against the canonical `grader/<id>/`, writes the gradebook (`grades.csv`, `GRADEBOOK.md`, AI notes). **Teacher-side only - never touches student repos.** |
 | **Publish grades** | `publish.yml` | The **ONLY** workflow that writes to student repos. Delivers `GRADES.md` + receipts + `FEEDBACK.md` (+ previews) into each workspace, and only for activities flagged `publish:true`. Dry-run unless `publish=true`. |
 | **Publish material** | `publish-material.yml` | Copies course `content/` into every workspace repo in the section. No student action; never touches the submission zone. |
-| **Publish quiz** | `publish-quiz.yml` | Releases a quiz's published part into student repos; the answer key stays teacher-side. *(Currently ADET-only; quizzes are moving to Canvas, so this is slated to be retired.)* |
+| **Quiz to Canvas** | `canvas-quiz-import.yml` | Builds a quiz's QTI package from `quizzes/<q>/quiz.json` and imports it into Canvas (Content Migrations); students take and are graded on the quiz in Canvas. Replaces the retired `publish-quiz.yml` (which released a repo-graded quiz into student repos). See [LMS and Canvas](lms-canvas.md). |
 
 **Canvas sync:**
 
