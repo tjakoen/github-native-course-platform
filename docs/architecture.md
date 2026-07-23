@@ -199,8 +199,10 @@ worth it only for multi-maintainer orgs, rotation, and tighter scoping.
   other files download on click.
 - **Video:** link to YouTube/Vimeo (committed `.mp4` won't play inline in the
   repo view). Large media → link out or Git LFS rather than committing.
-- Publish = "Publish material" workflow → auto-merged PR drops the folder into
-  the section. Re-publishing overwrites the folder (PR shows the diff).
+- Publish = "Publish material" workflow → a direct course-bot commit drops the
+  folder into each workspace's default branch (no PR: PRs and their merge
+  commits were attributed to the token owner's profile). Re-publishing
+  overwrites the folder (the commit shows the diff).
 - **Optional:** turn on Pages for `content/` for a polished site (and real video
   embeds). Requires a paid plan - see §10.
 
