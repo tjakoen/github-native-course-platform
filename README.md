@@ -20,7 +20,7 @@ The dashboard doesn't apply grades itself. It *generates a prompt* holding every
 
 ## How to use it (you review, the AI applies)
 
-1. **Connect.** First open shows Settings. Paste your teacher repo URLs (one per line) and a fine-grained GitHub PAT scoped to just those repos. Both stay in this browser only.
+1. **Connect.** First open shows Settings. Add a row per teacher repo: the repo URL and that repo's own fine-grained GitHub PAT (scoped to just that repo). Each section carries its own token, so one expired PAT only affects that section. Everything stays in this browser only.
 2. **Review.** Open the AI Review tab. Each held grade shows the automated score, the AI-proposed score in grain type, the screenshots or code (fetched on demand), and two feedback boxes (student-facing prose and instructor-only notes). Approve, override the score, flag for a closer look, or edit the text. Editing flips it from grain to clean, because now a human wrote it. Decisions are saved in your browser and can be exported/imported as a JSON backup.
 3. **Send the intent.** Hit a Generate prompt button, then **Send to repo →**. The prompt lands as `gradebook/intents/<timestamp>-<kind>.md` in the teacher repo. It holds every decision you made, and blanks anything you flagged or skipped so it stays out of both the student publish and the Canvas push.
 4. **Run it locally.** In a Claude Code session opened in the teacher repo, say "run the pending intents." The AI reads the intent file, does the writing (the gradebook, the feedback files, the Canvas push), and archives the intent. You watch it happen and keep the final say. Hit **Refresh** to see the result.
@@ -55,9 +55,9 @@ The look comes from the `@tjakoen/grain` design-system package. The Pages workfl
 //npm.pkg.github.com/:_authToken=YOUR_TOKEN
 ```
 
-## Your token
+## Your tokens
 
-Use a **fine-grained personal access token** scoped to only your teacher repos, with **Contents: Read and write** (read for the gradebooks; write only so the app can file intent prompts under `gradebook/intents/`) and **Metadata: Read**. Give it a short expiry. It never leaves your browser, and the only host the page can reach is `api.github.com`.
+Give **each teacher repo its own fine-grained personal access token**, scoped to only that one repo, with **Contents: Read and write** (read for the gradebook; write only so the app can file intent prompts under `gradebook/intents/`) and **Metadata: Read**. Give each a short expiry. Per-repo tokens mean one expired or rejected PAT only affects that section, not every section, and each token's blast radius is a single repo. They never leave your browser, and the only host the page can reach is `api.github.com`.
 
 ## Status
 

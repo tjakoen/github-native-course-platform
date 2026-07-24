@@ -4,9 +4,9 @@
 // data half now lives in lib/. The app READS everything and WRITES exactly one
 // thing: Intent prompt files into gradebook/intents/ (executed by Claude Code
 // locally - "run pending intents").
-import { setToken, putIntent, AuthError, rate } from "./lib/gh.mjs";
+import { putIntent, AuthError, rate } from "./lib/gh.mjs";
 import { loadConfig, saveConfig } from "./lib/store.mjs";
-import { discoverSections } from "./lib/config.mjs";
+import { discoverSections, parseRepoURL } from "./lib/config.mjs";
 import { loadSection } from "./lib/gradebook.mjs";
 import { shotsFor, shotsCached } from "./lib/shots.mjs";
 import { codeFor, codeCached } from "./lib/code.mjs";
@@ -35,32 +35,42 @@ function wireSend(s,kind,aid,txt){
 }
 
 function openSettings(firstRun){
- const c=loadConfig()||{repos:[],githubToken:"",labels:{}};
+ const c=loadConfig()||{repos:[],labels:{}};
  const d=el("div","drawer on"); const p=el("div","dp"); d.append(p); document.body.append(d);
+ // Each teacher repo gets its OWN row: URL + its own fine-grained PAT. One
+ // rejected/expired token then only takes down that one section, not all.
+ const rowHTML=(r={})=>"<div class='repoRow' style='display:flex;gap:8px;margin-bottom:8px;align-items:flex-start'>"+
+   "<div style='flex:1;min-width:0'>"+
+    "<input class='field__input rUrl mono' type='text' value='"+esc(r.url||"")+"' placeholder='github.com/org/teacher-subject-section-name'>"+
+    "<input class='field__input rTok' type='password' value='"+esc(r.token||"")+"' placeholder='github_pat_… (this repo's PAT)' style='margin-top:6px'>"+
+   "</div>"+
+   "<button class='btn rDel' data-size='sm' data-variant='soft' title='Remove this repo' style='flex:none'>×</button>"+
+  "</div>";
  p.innerHTML="<button class='x'>×</button><h3>Settings</h3>"+
-  "<div class='muted'>Stored in THIS browser's localStorage only - anyone with access to this browser profile can read the token. Use a fine-grained PAT scoped to just the teacher repos (Contents: Read and write, Metadata: Read) with a short expiry.</div>"+
-  "<label class='field'><span class='field__label'>Teacher repo URLs <span class='mut'>- one per line, e.g. github.com/org/teacher-subject-section-name</span></span>"+
-  "<textarea id='sRepos' class='field__input fta mono' rows='5' placeholder='github.com/org/teacher-webdev-2a-name'>"+esc(c.repos.join("\n"))+"</textarea></label>"+
-  "<label class='field'><span class='field__label'>GitHub fine-grained PAT</span>"+
-  "<input id='sTok' class='field__input' type='password' value='"+esc(c.githubToken||"")+"' placeholder='github_pat_…'></label>"+
-  "<div style='display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap'><button class='btn' data-size='sm' id='sSave'>Save & load</button> <button class='btn' data-size='sm' data-variant='soft' id='sTest'>Test connection</button> <span class='mut' id='sMsg' style='font-size:12px'></span></div>";
- const read=()=>({repos:$("#sRepos").value.split("\n").map(x=>x.trim()).filter(Boolean),githubToken:$("#sTok").value.trim(),labels:c.labels||{}});
+  "<div class='muted'>Stored in THIS browser's localStorage only - anyone with access to this browser profile can read the tokens. Give each teacher repo its own fine-grained PAT scoped to just that repo (Contents: Read and write, Metadata: Read) with a short expiry.</div>"+
+  "<div class='field__label' style='margin-top:12px'>Teacher repos <span class='mut'>- one repo + its own PAT per row</span></div>"+
+  "<div id='sRepos'>"+((c.repos.length?c.repos:[{}]).map(rowHTML).join(""))+"</div>"+
+  "<button class='btn' data-size='sm' data-variant='soft' id='sAdd' style='margin-top:2px'>+ Add repo</button>"+
+  "<div style='display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap'><button class='btn' data-size='sm' id='sSave'>Save & load</button> <button class='btn' data-size='sm' data-variant='soft' id='sTest'>Test connection</button> <span class='mut' id='sMsg' style='font-size:12px'></span></div>";
+ const read=()=>({repos:[...p.querySelectorAll(".repoRow")].map(row=>({url:row.querySelector(".rUrl").value.trim(),token:row.querySelector(".rTok").value.trim()})).filter(r=>r.url),labels:c.labels||{}});
+ const wireDel=()=>p.querySelectorAll(".rDel").forEach(b=>b.onclick=()=>{const rows=p.querySelectorAll(".repoRow");if(rows.length>1)b.closest(".repoRow").remove();else{b.closest(".repoRow").querySelector(".rUrl").value="";b.closest(".repoRow").querySelector(".rTok").value="";}});
+ wireDel();
+ $("#sAdd").onclick=()=>{ $("#sRepos").insertAdjacentHTML("beforeend",rowHTML()); wireDel(); };
  const close=()=>d.remove();
- p.querySelector(".x").onclick=()=>{ if(firstRun&&!loadConfig()){$("#sMsg").textContent="Add at least one repo and a token, then Save.";return;} close(); };
+ p.querySelector(".x").onclick=()=>{ if(firstRun&&!loadConfig()){$("#sMsg").textContent="Add at least one repo (URL + PAT), then Save.";return;} close(); };
  d.onclick=e=>{if(e.target===d)p.querySelector(".x").onclick()};
  $("#sTest").onclick=async()=>{
-  const v=read(); if(!v.githubToken||!v.repos.length){$("#sMsg").textContent="Need a token and at least one repo URL.";return;}
-  $("#sMsg").textContent="Testing…"; setToken(v.githubToken);
+  const v=read(); if(!v.repos.length){$("#sMsg").textContent="Add at least one repo URL.";return;}
+  const noTok=v.repos.filter(r=>!r.token); if(noTok.length){$("#sMsg").textContent=noTok.length+" repo(s) have no PAT.";return;}
+  $("#sMsg").textContent="Testing…";
   try{
-   const me=await fetch("https://api.github.com/user",{headers:{Authorization:"Bearer "+v.githubToken,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}});
-   if(!me.ok){$("#sMsg").textContent="Token rejected ("+me.status+").";return;}
-   const u=await me.json();
    const {sections,errors}=await discoverSections(v.repos,v.labels);
-   $("#sMsg").textContent="✓ @"+u.login+" · "+sections.length+" section(s) reachable"+(errors.length?" · "+errors.length+" problem(s): "+errors.map(e=>e.err).join("; "):"");
+   $("#sMsg").textContent="✓ "+sections.length+" section(s) reachable"+(errors.length?" · "+errors.length+" problem(s): "+errors.map(e=>(parseRepoURL(e.url)?.repo||e.url)+": "+e.err).join("; "):"");
   }catch(e){$("#sMsg").textContent="Failed: "+e.message;}
  };
  $("#sSave").onclick=()=>{
-  const v=read(); if(!v.githubToken||!v.repos.length){$("#sMsg").textContent="Need a token and at least one repo URL.";return;}
+  const v=read(); if(!v.repos.length){$("#sMsg").textContent="Need at least one repo URL.";return;}
+  const noTok=v.repos.filter(r=>!r.token); if(noTok.length){$("#sMsg").textContent=noTok.length+" repo(s) have no PAT. Give every repo its own token.";return;}
   saveConfig(v); close(); boot();
  };
 }
@@ -68,8 +78,7 @@ function openSettings(firstRun){
 async function boot(){
  const c=loadConfig();
  app.innerHTML="<div class='wrap'><h1>HAU Grading Review</h1><div class='muted' id='bootmsg'>Loading…</div></div>";
- if(!c){ $("#bootmsg").textContent="Live from GitHub - nothing loads until you connect a token and your teacher repos."; openSettings(true); return; }
- setToken(c.githubToken);
+ if(!c){ $("#bootmsg").textContent="Live from GitHub - nothing loads until you connect your teacher repos and their tokens."; openSettings(true); return; }
  try{
   $("#bootmsg").textContent="Discovering sections…";
   const {sections:scs,errors}=await discoverSections(c.repos,c.labels||{});

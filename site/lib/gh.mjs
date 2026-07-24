@@ -4,8 +4,25 @@
 // gradebook/intents/ (putIntent below). Grades, notes, publish flags and
 // everything else are still only ever written by Claude Code executing those
 // intents locally - keep it that way.
-let TOKEN = "";
-export const setToken = t => { TOKEN = t || ""; };
+// Per-repo tokens: each teacher repo carries its own fine-grained PAT (see
+// Settings), so one repo's rejected/expired token never blocks the others. The
+// registry is keyed by "org/repo" (lowercased); every request path here is
+// /repos/<org>/<repo>/... so the right token is picked by parsing that out.
+// DEFAULT_TOKEN is only a fallback for a repo line that omits its own token.
+let DEFAULT_TOKEN = "";
+const TOKENS = new Map(); // "org/repo" (lowercase) -> token
+export const setToken = t => { DEFAULT_TOKEN = t || ""; };
+export function setRepoTokens(entries) {
+  TOKENS.clear();
+  for (const e of entries || []) {
+    if (e && e.org && e.repo && e.token) TOKENS.set((e.org + "/" + e.repo).toLowerCase(), e.token);
+  }
+}
+export const tokenForRepo = (org, repo) => TOKENS.get((org + "/" + repo).toLowerCase()) || DEFAULT_TOKEN;
+function tokenForURL(url) {
+  const m = String(url).match(/^\/repos\/([^/]+)\/([^/?#]+)/);
+  return m ? tokenForRepo(m[1], m[2]) : DEFAULT_TOKEN;
+}
 
 export class AuthError extends Error {}
 
@@ -17,7 +34,7 @@ async function req(url, accept, parse) {
   const key = url + "|" + accept;
   const hit = CACHE.get(key);
   const headers = {
-    Authorization: "Bearer " + TOKEN,
+    Authorization: "Bearer " + tokenForURL(url),
     Accept: accept,
     "X-GitHub-Api-Version": "2022-11-28",
   };
@@ -66,7 +83,7 @@ export async function putIntent(org, repo, path, content, message) {
   const r = await fetch(`https://api.github.com/repos/${org}/${repo}/contents/${path}`, {
     method: "PUT",
     headers: {
-      Authorization: "Bearer " + TOKEN,
+      Authorization: "Bearer " + tokenForRepo(org, repo),
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
       "Content-Type": "application/json",

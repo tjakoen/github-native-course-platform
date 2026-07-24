@@ -4,12 +4,14 @@
 
 1. Open the hosted dashboard: **https://tjakoen.github.io/grader-ui/**. The deployed
    page is an empty shell — it ships no student data.
-2. First open lands on **Settings**. Provide two things, both of which stay in your
-   own browser (localStorage) and are never sent anywhere but `api.github.com`:
-   - **Teacher repo URLs**, one per line (e.g. `github.com/HAU-6INTROWEB/teacher-6introweb-2106-tjakoen`).
-   - A **fine-grained GitHub PAT** scoped to just those repos, with **Contents: Read
-     and write** + **Metadata: Read**. (Read pulls the gradebooks; write is only for
-     dropping the generated prompt into `gradebook/intents/`.)
+2. First open lands on **Settings**. Add one row **per teacher repo**, and everything
+   stays in your own browser (localStorage), never sent anywhere but `api.github.com`:
+   - The **repo URL** (e.g. `github.com/HAU-6INTROWEB/teacher-6introweb-2106-tjakoen`).
+   - That repo's **own fine-grained GitHub PAT**, scoped to just that one repo, with
+     **Contents: Read and write** + **Metadata: Read**. (Read pulls the gradebook; write
+     is only for dropping the generated prompt into `gradebook/intents/`.) Each repo
+     carries its own token, so one expired or rejected PAT only affects that section.
+     Use **+ Add repo** for each additional section.
 3. Save. Sections are **auto-discovered** from the repos you listed: the repo name
    gives the subject and section, the remote gives the org, and each repo's
    `grader/assignments.json` says which activities have screenshots. No config file.

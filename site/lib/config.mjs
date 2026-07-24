@@ -2,7 +2,7 @@
 // configured teacher-repo URLs instead of scanning classes/. Everything still
 // derives from ground truth: the repo NAME (same teacher-<subject>-<section>-<name>
 // convention the folder scan used) and the repo's grader/assignments.json.
-import { ghJSON } from "./gh.mjs";
+import { ghJSON, setRepoTokens } from "./gh.mjs";
 
 const NAME = /^teacher-([a-z0-9]+)-([a-z0-9]+)-/i; // teacher-<subjectcode>-<section>-<name>
 
@@ -11,12 +11,19 @@ export function parseRepoURL(u) {
   return m ? { org: m[1], repo: m[2] } : null;
 }
 
+// Normalize a config repo entry (string | {url, token}) to { url, token }.
+const asEntry = r => typeof r === "string" ? { url: r, token: "" } : { url: String(r && r.url || ""), token: String(r && r.token || "") };
+
 // -> [{ key, section, repo, org, subject, acts, pol }] sorted by key; skips
-// anything that isn't a reachable teacher repo (returned separately as errors)
-export async function discoverSections(repoUrls, labels = {}) {
+// anything that isn't a reachable teacher repo (returned separately as errors).
+// Accepts per-repo entries ({url, token}) and registers each repo's own token
+// with the API layer BEFORE discovering, so every fetch below uses the right PAT.
+export async function discoverSections(repos, labels = {}) {
+  const entries = (repos || []).map(asEntry).filter(e => e.url.trim());
+  setRepoTokens(entries.map(e => { const p = parseRepoURL(e.url); return p ? { org: p.org, repo: p.repo, token: e.token } : null; }).filter(Boolean));
   const sections = [], errors = [];
-  for (const u of repoUrls) {
-    const line = String(u).trim();
+  for (const e of entries) {
+    const line = e.url.trim();
     if (!line) continue;
     const p = parseRepoURL(line);
     if (!p) { errors.push({ url: line, err: "not a repo URL" }); continue; }
