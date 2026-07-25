@@ -1,7 +1,10 @@
 # Grading Dashboard - UI plan
 
 > Design note (planning), part of the [documentation](../README.md). Status:
-> planning only, not yet implemented.
+> **superseded by the Course Console** (`console/` in this repo, hosted at
+> tjakoen.github.io/github-native-course-platform): a single hosted data-free
+> shell with per-repo PATs and intent-prompt writes, rather than the per-repo
+> Pages deploy with in-app writes sketched here. Kept as design history.
 
 A teacher-facing web dashboard layered on top of the existing GitHub-native
 grading platform. It **reads** committed gradebook artifacts and GitHub run

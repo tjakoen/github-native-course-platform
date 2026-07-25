@@ -27,6 +27,10 @@ The dashboard doesn't apply grades itself. It *generates a prompt* holding every
 
 Nothing reaches a student or Canvas from a grade you did not review. The exact prompts it emits are catalogued in [docs/commands.md](docs/commands.md); the full walkthrough is in [docs/usage.md](docs/usage.md).
 
+## The Scan tab (attendance)
+
+The per-repo attendance QR scanner now lives here as the **Scan** tab: pick a section, point the phone camera at student QRs, commit the batch. Bookmark the `#/scan` hash on a phone home screen - it boots straight into the scanner without loading any gradebook. Scans commit as CSV batches to the teacher repo (verified server-side by its verify-attendance workflow); an "Add manually" field records a teacher-attested `manual` row for a student without their QR. QR decoding is self-hosted (vendored jsQR + native BarcodeDetector when available) - the strict one-host CSP is unchanged.
+
 ## Structure
 
 ```

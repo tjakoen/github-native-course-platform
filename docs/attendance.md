@@ -13,9 +13,12 @@ instructor can record attendance.
    any student workspace that lacks one, and refreshes the teacher-side
    `attendance/roster.json` (number to name) the scanner uses to show names.
    Students save the image to their phone's Photos.
-2. **Scan.** The instructor opens the scanner (a GitHub Pages page), which reads
-   the roster and turns the phone camera into a QR reader. Each scan is recorded
-   with a timestamp.
+2. **Scan.** The instructor opens the **Scan tab of the hosted Course Console**
+   (bookmark its `#/scan` hash on a phone home screen - it boots straight into
+   the scanner), picks the section, and the phone camera becomes a QR reader
+   showing roster names. Each scan is recorded with a timestamp. (The old
+   per-teacher-repo Pages scanner is retired in favor of this tab; the CSV
+   format below is unchanged.)
 3. **Commit batches.** Scans are grouped into a *batch* (one scanning period).
    The instructor commits a batch at any time - safe against a dead phone - and
    starts a new batch for latecomers or a second class the same day. Each batch
@@ -34,12 +37,28 @@ instructor can record attendance.
 
 ## What the QR contains
 
-The QR encodes `<studentNumber>.<signature>`, where the signature is
+The QR encodes `<section>.<studentNumber>.<signature>`, where the signature is
 `HMAC-SHA256(ATTENDANCE_HMAC_SECRET, "<section>:<studentNumber>")` (first 12
-base64url chars). The student number is in the clear so the scanner can show a
-name; the signature is what a forger cannot mint without the secret. A
-hand-made or edited QR fails verification and is marked **FLAGGED** in the batch
-summary (and the workflow run reds).
+base64url chars). The section prefix lets the scanner reject a wrong-class QR at
+scan time; older sectionless `<studentNumber>.<signature>` codes still verify.
+The student number is in the clear so the scanner can show a name; the signature
+is what a forger cannot mint without the secret. A hand-made or edited QR fails
+verification and is marked **FLAGGED** in the batch summary (and the workflow
+run reds).
+
+## Manual attendance (no QR at hand)
+
+Two teacher-attested paths, both recording the literal word `manual` in the
+signature column - `Verify attendance` counts such rows as present and labels
+them **MANUAL** (never FLAGGED). The trust model is the commit itself: these
+CSVs live in the private teacher repo, so the ability to commit one is the
+instructor's authority, the same trust the gradebook rests on.
+
+- **At the door:** the Scan tab has an "Add manually" field (with roster
+  autocomplete) that drops a student into the current batch without a QR.
+- **Retroactively:** the Attendance tab's **Manual attendance -> prompt** picks
+  students and a date and generates an intent; the AI appends the rows to that
+  date's `manual.csv`, pushes, and the usual verify + receipts pipeline runs.
 
 Verification runs only in the `Verify attendance` workflow, which holds the
 secret - never in the scanner. `roster.json` deliberately carries names only,

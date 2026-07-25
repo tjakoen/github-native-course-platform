@@ -48,7 +48,7 @@ Per-workflow env pins each teacher repo to one section via `SECTION` and
 | `CANVAS_TOKEN`, `CANVAS_BASE_URL` | Canvas grade sync. |
 | `ATTENDANCE_HMAC_SECRET` | Signs and verifies attendance QRs (any random string, per teacher repo). See [Attendance](attendance.md). |
 
-_(AI feedback needs no secret: notes are drafted in a Claude Code session via the grader-ui prompt, not a hosted model.)_
+_(AI feedback needs no secret: notes are drafted in a Claude Code session via the Course Console prompt, not a hosted model.)_
 
 ## `assignments.json` flags
 

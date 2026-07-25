@@ -15,13 +15,15 @@ as a single CSV at the end. Nothing is hosted.
 
 ## Repository layout
 
-This is the umbrella / overview repo. The working code lives in two template
-repos, included here as **submodules**:
+This is the umbrella / overview repo and the home of the **Course Console**. The
+template code lives in two template repos, included here as **submodules**; the
+console is a tracked directory:
 
 | Path | Repo | What it is |
 | --- | --- | --- |
 | `teacher-template/` | teacher control center | The engine: `tools/` (Node), `.github/workflows/`, `grader/`, and `course.config.json`. |
 | `student-template/` | student workspace | The per-student skeleton: content/quizzes/grades zones plus the student's own notes/journal/project. |
+| `console/` | (this repo; formerly the standalone grader-ui) | The Course Console: a data-free Pages shell (deployed by `.github/workflows/pages.yml` to tjakoen.github.io/github-native-course-platform) for grading review, the attendance QR scanner, and intent-prompt generation. Has its own `console/CLAUDE.md` - read it before touching `console/`. `console/classes/`, `console/out/`, and `console/grader.config.json` are gitignored live-instance data (PII) - never commit them. |
 
 To update a submodule: edit inside its folder, commit + push there, then from the
 umbrella root `git add <folder>` and commit to move the pin.

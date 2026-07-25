@@ -25,16 +25,16 @@ authoring, and student use.
 
 ## The pieces
 
-This repo is the **overview**. The three working pieces live in their own repositories, included here as submodules:
+This repo is the **overview** and the home of the **Course Console**. The two template repos live in their own repositories, included here as submodules; the console is a tracked directory:
 
 | Folder | Repository | What it is |
 | --- | --- | --- |
 | teacher-template/ | **[teacher-subjectcode-classcode-name](https://github.com/tjakoen/teacher-subjectcode-classcode-name)** | The instructor control center: Actions workflows + Node tooling + grader. Generic and config-driven - a real GitHub template. |
 | student-template/ | **[student-subjectcode-classcode-name](https://github.com/tjakoen/student-subjectcode-classcode-name)** | The student workspace: where a student reads material, submits, and sees grades. |
-| grader-ui/ | **[grader-ui](https://github.com/tjakoen/grader-ui)** | The local grading-review surface: reads the teacher repos' gradebooks, builds a static review dashboard, and emits the prompts an AI runs to apply the decisions. It never writes to a repo itself - the human reviews, the AI writes. |
+| console/ | (this repo; formerly the standalone [grader-ui](https://github.com/tjakoen/grader-ui)) | The **Course Console**, hosted at [tjakoen.github.io/github-native-course-platform](https://tjakoen.github.io/github-native-course-platform/): a data-free Pages shell that reads the teacher repos live, runs the grading review and the attendance QR scanner, and emits the prompts an AI runs to apply decisions. Grade writes still go through human-reviewed intents; the scanner commits teacher-attested attendance batches directly. |
 
 ~~~bash
-# clone with both templates included
+# clone with both template submodules included
 git clone --recurse-submodules https://github.com/tjakoen/github-native-course-platform.git
 ~~~
 
@@ -47,7 +47,7 @@ Also here: a synthetic [demo/](demo/) of the output (fictional students, no real
 - **Source-of-truth split.** The student repo owns submissions; the teacher repo owns grades. Nothing official is ever read back from a student repo, so there is nothing to tamper with.
 - **Grade off-repo.** Grades are computed in the teacher repo from canonical tests against a snapshot commit, never from code running inside the student's repo.
 - **Honest about integrity.** Take-home work cannot be proctored. The design deters the honest majority (per-student variants, deadline snapshots, viva spot-checks) rather than pretending to prevent the determined.
-- **Even attendance is native.** Each student carries a signed QR in their workspace; the instructor scans it with a phone (a Pages page), and scans commit as CSV batches that a workflow verifies and summarizes. See [Attendance](docs/attendance.md).
+- **Even attendance is native.** Each student carries a signed QR in their workspace; the instructor scans it with a phone (the Course Console Scan tab), and scans commit as CSV batches that a workflow verifies and summarizes. See [Attendance](docs/attendance.md).
 
 See [Core concepts](docs/concepts.md) for how these turn into a concrete repository layout.
 

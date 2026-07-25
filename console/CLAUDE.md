@@ -13,10 +13,15 @@ It is a **data-free GitHub Pages shell** (`site/`) that reads the teacher repos'
 the GitHub API in the browser, shows one grading-review dashboard, and generates the prompts an AI
 runs to apply grading decisions (write grades, publish feedback, push to Canvas). The human reviews
 and decides; the AI does the writing. The single most important thing to know before touching it:
-**it never writes to a repo itself.** It emits a prompt (an intent) that a human runs in a Claude
-Code session. That review gate is the whole design, so keep the mutation on the AI's side of a human
-decision. (The local static build was retired 2026-07-24 in favor of the hosted shell; the
-maintenance CLIs under `src/` — audit/fix/blanks — stay.)
+**writes are tiered, and grades never bypass the review gate.** Anything touching grades, feedback,
+or student-facing delivery flows only through an emitted intent prompt that a human runs in a Claude
+Code session. The console's own direct writes are limited to two teacher-attested, engine-gated
+kinds: filing those intent files, and committing attendance scan batch CSVs from the Scan tab
+(validated server-side by the per-repo verify-attendance workflow). Keep every new mutation either
+behind an intent or behind an existing dry-run-gated repo workflow - never an unreviewed in-app
+grade write. (The local static build was retired 2026-07-24 in favor of the hosted shell; the
+maintenance CLIs under `src/` — audit/fix/blanks — stay. The per-repo attendance scanner was
+absorbed as the Scan tab 2026-07-25.)
 
 ## How I work here (non-negotiables)
 

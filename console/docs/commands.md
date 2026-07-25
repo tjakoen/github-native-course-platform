@@ -48,6 +48,22 @@ data-hygiene tools, not part of the review flow.
   the Canvas push), so an activity-wide `publish only=<id>` delivers exactly the
   cleared students and finalize is effectively one-shot.
 
+- **Manual attendance** (Attendance tab). Pick students + a date; the intent
+  tells the assistant to append teacher-attested rows (signature column =
+  the literal word `manual`) to `attendance/sessions/<date>/manual.csv`,
+  merge-never-overwrite, and push - the verify + receipts pipeline then runs on
+  its own. verify-attendance counts these rows as present (MANUAL), never
+  FLAGGED.
+
+## Direct writes (the two non-intent mutations)
+
+The Scan tab is the absorbed per-repo attendance scanner: it commits scan batch
+CSVs (`attendance/sessions/<date>/<HHMM>-<label>.csv`) straight to the teacher
+repo with the same per-repo PAT, and its "Add manually" field records a
+teacher-attested `manual` row without a QR. Both are validated server-side by
+the repo's verify-attendance workflow; grades and feedback still never have a
+direct write path.
+
 ## The review gate (invariant)
 
 Instructor-only scores and the AI likelihood / "vibecode" flag never reach

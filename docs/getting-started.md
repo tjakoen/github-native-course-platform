@@ -62,7 +62,7 @@ token does.
 
 Add the other secrets when you need them: `CANVAS_TOKEN` and `CANVAS_BASE_URL`
 for grade sync. AI feedback needs no secret (notes are drafted in a Claude Code
-session via the grader-ui prompt). None are needed to prove the core loop.
+session via the Course Console prompt). None are needed to prove the core loop.
 
 ## 4. Lock down the org
 

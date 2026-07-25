@@ -108,7 +108,7 @@ Selected by the `feedback` flag:
   carries a flag; it never invents design praise from a blank page.
 - **How it runs.** No metered model and no API key. During grading the sweep
   writes a self-contained input file per submission (rubric, class context,
-  student source, screenshots, output format); the grader-ui "Generate feedback"
+  student source, screenshots, output format); the Course Console "Generate feedback"
   prompt then has a Claude Code session, on the instructor's own subscription,
   draft each note. Everything downstream (the held-for-review split, the Canvas
   comment wall) is unchanged. For the original GitHub Models design, see [Design
