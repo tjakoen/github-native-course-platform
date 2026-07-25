@@ -109,6 +109,13 @@ export async function loadSection(sc) {
 
   const heldCount = assignments.filter(a=>a.aiGraded).length;
   const blank = students.filter(s=>!s.number).length;
-  return { ...sc, assignments, students,
-    stats: { students: students.length, activities: assignments.length, held: heldCount, blankStudentJson: blank } };
+
+  // Attendance: verify-attendance writes attendance/summary.json (keyed by
+  // studentNumber). Optional - absent for sections with no scans yet.
+  let attendance = null;
+  const attTxt = await ghText(`${base}/contents/attendance/summary.json`);
+  if (attTxt) { try { attendance = JSON.parse(attTxt); } catch { attendance = null; } }
+
+  return { ...sc, assignments, students, attendance,
+    stats: { students: students.length, activities: assignments.length, held: heldCount, blankStudentJson: blank, sessions: attendance?.sessionDates?.length || 0 } };
 }

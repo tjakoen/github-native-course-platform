@@ -142,10 +142,10 @@ function render(){
  w.append(tabs);
  // mode toggle
  const mt=el("nav","tab-bar");
- [["book","Gradebook"],["ai","AI Review ("+s.stats.held+")"]].forEach(([k,l])=>{const b=el("div","tab",l);if(mode===k)b.dataset.active="true";b.onclick=()=>{mode=k;render()};mt.append(b)});
+ [["book","Gradebook"],["ai","AI Review ("+s.stats.held+")"],["att","Attendance"+(s.stats.sessions?" ("+s.stats.sessions+")":"")]].forEach(([k,l])=>{const b=el("div","tab",l);if(mode===k)b.dataset.active="true";b.onclick=()=>{mode=k;render()};mt.append(b)});
  w.append(mt);
  app.append(w);
- if(mode==="ai") renderAI(s,w); else renderBook(s,w);
+ if(mode==="ai") renderAI(s,w); else if(mode==="att") renderAttendance(s,w); else renderBook(s,w);
  $("#theme").onclick=toggleTheme;
  $("#reload").onclick=()=>boot();
  $("#cfg").onclick=()=>openSettings(false);
@@ -178,6 +178,52 @@ function renderBook(s,w){
  $("#deliver").onclick=()=>showDeliver(s);
 }
 function renderMatrixOnly(s){ const old=$("#matrixcard"); if(old){const n=matrix(s);old.replaceWith(n);} }
+
+// ================= ATTENDANCE =================
+function renderAttendance(s,w){
+ const att=s.attendance;
+ if(!att||!att.sessionDates||!att.sessionDates.length){
+  w.append(el("div","card","<h2>Attendance</h2><p class='mut' style='padding:0 14px 14px'>No attendance data for this section yet. It appears here once <b>verify-attendance</b> runs on committed scans.</p>"));
+  return;
+ }
+ const dates=att.sessionDates.slice().sort();
+ const rate=st=>{const a=att.students[st.number];return a?a.count/dates.length:null};
+ const tiles=el("div","stats");
+ const avgRate=avg(s.students.map(rate));
+ const atRisk=s.students.filter(st=>{const r=rate(st);return r!=null&&r<0.5}).length;
+ tiles.innerHTML=[
+  ["Sessions",dates.length],["Last session",att.lastSession||dates[dates.length-1]],
+  ["Students tracked",Object.keys(att.students).length],
+  ["Avg attendance",avgRate==null?"-":Math.round(avgRate*100)+"%"],
+  ["Below 50%",atRisk],
+ ].map(([l,n])=>'<div class="stat"><span class="stat__value">'+n+'</span><span class="stat__label">'+l+'</span></div>').join("");
+ w.append(tiles);
+ const ctl=el("div","ctl");
+ ctl.innerHTML='<input class="field__input search" id="q" placeholder="Filter students…" value="'+esc(q)+'">';
+ w.append(ctl);
+ w.append(attMatrix(s,dates));
+ $("#q").oninput=e=>{q=e.target.value.toLowerCase();const old=$("#attmatrix");if(old)old.replaceWith(attMatrix(s,dates));};
+}
+function attMatrix(s,dates){
+ const att=s.attendance;
+ const card=el("div","card"); card.id="attmatrix";
+ card.append(el("h2",null,"Attendance - students × sessions <span class='mut' style='font-weight:400'>(✓ present · absent)</span>"));
+ const sc=el("div","scroll"); const t=el("table","matrix");
+ // union of gradebook students + any attendance-only numbers (present in scans but no graded work)
+ const gradeNums=new Set(s.students.map(st=>st.number).filter(Boolean));
+ const extras=Object.keys(att.students).filter(n=>!gradeNums.has(n)).map(n=>({number:n,name:"",github:"",attOnly:true}));
+ const all=s.students.concat(extras);
+ const thead="<tr><th class='stu'>Student</th><th>#</th>"+dates.map(d=>"<th class='center'>"+esc(d.slice(5))+"</th>").join("")+"<th class='center'>Present</th></tr>";
+ const rows=all.filter(st=>!q||(st.name||"").toLowerCase().includes(q)||(st.number||"").includes(q)||(st.github||"").toLowerCase().includes(q)).map(st=>{
+  const a=att.students[st.number]; const present=new Set(a?a.present:[]);
+  let tds="<td class='stu'>"+esc(st.name||(st.attOnly?"(attendance only)":"(blank)"))+(st.github?" <span class='pill'>@"+esc(st.github)+"</span>":"")+"</td><td class='mut'>"+esc(st.number||"-")+"</td>";
+  dates.forEach(d=>{tds+=present.has(d)?"<td class='cell'><b>✓</b></td>":"<td class='cell mut'>·</td>";});
+  const cnt=a?a.count:0, pct=Math.round((cnt/dates.length)*100);
+  tds+="<td class='center"+(pct<50?" mut":"")+"'>"+cnt+"/"+dates.length+" <span class='pill'>"+pct+"%</span></td>";
+  return "<tr>"+tds+"</tr>";
+ }).join("");
+ t.innerHTML=thead+rows; sc.append(t); card.append(sc); return card;
+}
 
 // ================= AI REVIEW =================
 function heldActs(s){return s.assignments.filter(a=>a.aiGraded)}

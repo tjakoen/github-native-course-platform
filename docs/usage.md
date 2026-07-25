@@ -23,7 +23,10 @@
 2. **Review:** Gradebook tab for the full matrix, AI Review tab for held AI grades.
    Approve / override / flag; edit the student-facing and instructor-only text.
    Decisions persist in the browser (localStorage) and can be backed up with
-   **Export decisions** (import merges a backup back in).
+   **Export decisions** (import merges a backup back in). The **Attendance** tab
+   shows a students-by-sessions matrix (read from each teacher repo's
+   `attendance/summary.json`, produced by verify-attendance) with per-student
+   present counts and a below-50% flag; it is absent for sections with no scans.
 3. **Act:** use a "Generate prompt" button to produce the Intent. The dashboard writes
    it to `gradebook/intents/` in the repo (or use the drawer's Copy button), then you
    run the pending intents in a Claude Code session. The AI writes the grades /
