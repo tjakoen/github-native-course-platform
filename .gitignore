@@ -1,3 +1,10 @@
 node_modules/
 .DS_Store
 *.log
+
+# Console live-instance data (PII) — belt-and-braces on top of console/.gitignore
+console/classes/
+console/out/
+console/grader.config.json
+console/node_modules/
+console/site/theme.css
