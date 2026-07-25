@@ -3,7 +3,7 @@
 // token can't take down every section. Review decisions live under their own
 // long-standing key (hau-grade-decisions-v1) in app.mjs, byte-compatible with the
 // retired local dashboard so exported backups import cleanly.
-const CKEY = "grader-ui-config-v1";
+const CKEY = "grader-ui-config-v1"; // legacy key name kept on purpose: same-origin carry-over from the old grader-ui Pages path
 
 // Old shape was { repos: ["url", ...], githubToken: "one token for all" }.
 // Migrate it to per-repo rows, seeding each row's token from the shared one.

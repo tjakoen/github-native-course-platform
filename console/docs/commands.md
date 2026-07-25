@@ -9,7 +9,7 @@ Code session, and the AI performs the writes as `git`/`gh` operations
 ## Getting the data (the hosted shell does this for you)
 
 There are no local build/fetch commands. The dashboard at
-**https://tjakoen.github.io/grader-ui/** pulls everything live from the GitHub API
+**https://tjakoen.github.io/github-native-course-platform/** pulls everything live from the GitHub API
 in your browser: gradebooks on load, and screenshots / submission code on demand as
 you open each review. **↻ Refresh** re-fetches. See [usage.md](usage.md) for the
 Settings (repo URLs + PAT) that authorize those reads.

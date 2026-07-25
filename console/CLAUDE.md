@@ -1,4 +1,4 @@
-# CLAUDE.md: grader-ui
+# CLAUDE.md: Course Console
 
 > Wires this repo into Tjakoen's personal standards (how I build with AI, voice, badges, AI-use
 > posture). The standards live publicly at `https://tjakoen.github.io/standards` (source: the
@@ -8,7 +8,7 @@
 
 ## What this is
 
-grader-ui is a hosted review surface for the [GitHub-Native Course Platform](https://github.com/tjakoen/github-native-course-platform).
+Course Console (this directory, formerly the standalone grader-ui repo) is the hosted management and review surface of the GitHub-Native Course Platform.
 It is a **data-free GitHub Pages shell** (`site/`) that reads the teacher repos' gradebooks live from
 the GitHub API in the browser, shows one grading-review dashboard, and generates the prompts an AI
 runs to apply grading decisions (write grades, publish feedback, push to Canvas). The human reviews

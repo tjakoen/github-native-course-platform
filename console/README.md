@@ -1,4 +1,4 @@
-# 📋 grader-ui
+# 📋 Course Console
 
 [![Made with Claude](https://img.shields.io/badge/Made_with-Claude-D97757?logo=anthropic&logoColor=white)](https://tjakoen.github.io/notes/ten-times-zero)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-2ea44f)](LICENSE)
@@ -6,7 +6,7 @@
 ![Data: none at rest](https://img.shields.io/badge/data_at_rest-none-2ea44f)
 ![Design system: GRAIN](https://img.shields.io/badge/design_system-GRAIN-2ea44f)
 
-> A hosted review surface for the [GitHub-Native Course Platform](https://github.com/tjakoen/github-native-course-platform). It reads your teacher repos' gradebooks **live from the GitHub API in your browser**, shows one review dashboard, and generates the prompts an AI runs to apply your decisions. You review and decide; the AI does the typing.
+> The hosted management and review surface of the GitHub-Native Course Platform (this repo). It reads your teacher repos' gradebooks **live from the GitHub API in your browser**, shows one review dashboard, and generates the prompts an AI runs to apply your decisions. You review and decide; the AI does the typing.
 
 The platform grades take-home and in-lab work with an AI, then *holds every AI grade for review*. This is where that review happens. AI-proposed grades and feedback show up in *grain* type; the moment you approve or edit one, it flips to *clean* type. Provenance is visible in the page itself, which is the one idea [GRAIN](https://tjakoen.github.io/grain) exists to make real.
 

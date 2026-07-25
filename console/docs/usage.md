@@ -2,7 +2,7 @@
 
 ## Setup (one time)
 
-1. Open the hosted dashboard: **https://tjakoen.github.io/grader-ui/**. The deployed
+1. Open the hosted dashboard: **https://tjakoen.github.io/github-native-course-platform/**. The deployed
    page is an empty shell — it ships no student data.
 2. First open lands on **Settings**. Add one row **per teacher repo**, and everything
    stays in your own browser (localStorage), never sent anywhere but `api.github.com`:

@@ -1,4 +1,4 @@
-// HAU Grading Review - hosted, data-free shell. All gradebook data is fetched
+// Course Console - hosted, data-free shell. All gradebook data is fetched
 // live from api.github.com with the teacher's own token (Settings). The UI half
 // is the retired local dashboard's script, ported verbatim where possible; the
 // data half now lives in lib/. The app READS everything and WRITES exactly one
@@ -28,8 +28,8 @@ function wireSend(s,kind,aid,txt){
   b.disabled=true; b.textContent="Sending…";
   const ts=new Date().toISOString().replace(/[-:]/g,"").replace(/\..+/,"").replace("T","-");
   const path="gradebook/intents/"+ts+"-"+kind+(aid?"-"+aid:"")+".md";
-  const body=txt+"\n---\n_Filed by grader-ui at "+new Date().toISOString()+". When this intent is done, move this file to gradebook/intents/done/ in the same commit as the changes._\n";
-  try{ await putIntent(s.org,s.repo,path,body,":memo: grader-ui intent: "+kind+(aid?" "+aid:"")); b.textContent="Sent ✓ "+path.split("/").pop(); }
+  const body=txt+"\n---\n_Filed by Course Console at "+new Date().toISOString()+". When this intent is done, move this file to gradebook/intents/done/ in the same commit as the changes._\n";
+  try{ await putIntent(s.org,s.repo,path,body,":memo: console intent: "+kind+(aid?" "+aid:"")); b.textContent="Sent ✓ "+path.split("/").pop(); }
   catch(e){ b.disabled=false; b.textContent="Send to repo →"; alert("Sending failed: "+e.message); }
  };
 }
@@ -77,7 +77,7 @@ function openSettings(firstRun){
 
 async function boot(){
  const c=loadConfig();
- app.innerHTML="<div class='wrap'><h1>HAU Grading Review</h1><div class='muted' id='bootmsg'>Loading…</div></div>";
+ app.innerHTML="<div class='wrap'><h1>Course Console</h1><div class='muted' id='bootmsg'>Loading…</div></div>";
  if(!c){ $("#bootmsg").textContent="Live from GitHub - nothing loads until you connect your teacher repos and their tokens."; openSettings(true); return; }
  try{
   $("#bootmsg").textContent="Discovering sections…";
@@ -89,7 +89,7 @@ async function boot(){
   const sections=[];
   for(const sc of scs){ $("#bootmsg").textContent="Loading "+sc.key+"… ("+(sections.length+1)+"/"+scs.length+")"; sections.push(await loadSection(sc)); }
   DATA={generatedAt:new Date().toISOString(),sections};
-  if(errors.length) console.warn("grader-ui: skipped repos",errors);
+  if(errors.length) console.warn("course-console: skipped repos",errors);
   cur=Math.min(cur,sections.length-1); render();
  }catch(e){
   if(e instanceof AuthError){ $("#bootmsg").textContent=e.message; openSettings(false); }
@@ -135,7 +135,7 @@ function render(){
  const s=DATA.sections[cur];
  app.innerHTML="";
  const w=el("div","wrap");
- const head=el("div"); head.innerHTML='<div class="hdr-actions"><button class="btn" data-size="sm" data-variant="soft" id="reload" title="Re-fetch everything from GitHub">↻ Refresh</button><button class="btn" data-size="sm" data-variant="soft" id="cfg" title="Repos & token">⚙ Settings</button><button class="btn" data-size="sm" data-variant="soft" id="expDec" title="Download all review decisions as a JSON backup">⭳ Export decisions</button><button class="btn" data-size="sm" data-variant="soft" id="impDec" title="Merge decisions from a JSON backup file">⭱ Import</button><input type="file" id="impFile" accept="application/json,.json" style="display:none"><button class="btn" data-size="sm" data-variant="soft" id="theme">◐ scheme</button></div><h1>HAU Grading Review</h1><div class="muted">loaded '+new Date(DATA.generatedAt).toLocaleString()+' · live from GitHub · <b>read-only - writes go through Intents</b>'+(rate.remaining!=null?' · API '+rate.remaining+'/'+rate.limit:'')+'</div>';
+ const head=el("div"); head.innerHTML='<div class="hdr-actions"><button class="btn" data-size="sm" data-variant="soft" id="reload" title="Re-fetch everything from GitHub">↻ Refresh</button><button class="btn" data-size="sm" data-variant="soft" id="cfg" title="Repos & token">⚙ Settings</button><button class="btn" data-size="sm" data-variant="soft" id="expDec" title="Download all review decisions as a JSON backup">⭳ Export decisions</button><button class="btn" data-size="sm" data-variant="soft" id="impDec" title="Merge decisions from a JSON backup file">⭱ Import</button><input type="file" id="impFile" accept="application/json,.json" style="display:none"><button class="btn" data-size="sm" data-variant="soft" id="theme">◐ scheme</button></div><h1>Course Console</h1><div class="muted">loaded '+new Date(DATA.generatedAt).toLocaleString()+' · live from GitHub · <b>read-only - writes go through Intents</b>'+(rate.remaining!=null?' · API '+rate.remaining+'/'+rate.limit:'')+'</div>';
  w.append(head);
  const tabs=el("nav","tab-bar");
  DATA.sections.forEach((x,i)=>{const t=el("div","tab",esc(x.subject)+" · "+x.section);if(i===cur)t.dataset.active="true";t.onclick=()=>{cur=i;q="";revAct=null;render()};tabs.append(t)});

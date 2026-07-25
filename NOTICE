@@ -9,3 +9,7 @@ original author, as required by the Apache License, Version 2.0 (section 4).
 
 Course materials created by an instructor deploying this platform are authored
 by that instructor. Each student's own work remains theirs.
+
+The Course Console (console/, formerly the standalone grader-ui repository) is
+part of this product and carries the same copyright and attribution. It is built
+on the GRAIN design system.
