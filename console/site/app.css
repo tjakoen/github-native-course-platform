@@ -89,3 +89,17 @@ textarea.fta.mono{font-family:var(--font-mono);font-size:var(--text-xs);line-hei
 /* ---- hosted-shell additions (boot + settings, product-owned to the Pages build) ---- */
 .boot{padding:var(--space-6);text-align:center;color:var(--color-muted);font-size:var(--text-base)}
 #bootmsg a{color:var(--color-accent)}
+
+/* ---- Scan tab (absorbed attendance scanner) ---- */
+/* GRAIN collapses success/danger to ink by design; a door scanner needs the fast
+   green/red read at a glance, so we re-point those token slots (the supported way
+   to theme GRAIN) - the rest of the palette stays untouched. */
+.scanview{--scan-ok:#137333;--scan-ok-soft:color-mix(in srgb,#137333 16%,transparent);
+  --scan-bad:#b00020;--scan-bad-soft:color-mix(in srgb,#b00020 16%,transparent);
+  display:flex;flex-direction:column;gap:var(--space-4);max-width:640px}
+[data-color-scheme="dark"] .scanview{--scan-ok:#5cd07a;--scan-bad:#ff6b6b}
+.scan-video{width:100%;border:1px solid var(--color-line);border-radius:var(--radius-md);background:var(--paper-2)}
+.scan-status{padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);font-weight:var(--font-weight-semibold)}
+.scan-status.ok{background:var(--scan-ok-soft);color:var(--scan-ok)}
+.scan-status.dup{background:var(--paper-2);color:var(--color-muted)}
+.scan-status.bad{background:var(--scan-bad-soft);color:var(--scan-bad)}

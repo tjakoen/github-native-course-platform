@@ -28,6 +28,7 @@ const GRAIN_COMPONENTS = [
   "components/molecules/callout/callout.css",     // .callout — the Canvas-panel aside
   "components/molecules/tab/tab.css",             // .tab — section/mode/activity switchers
   "components/molecules/made-with/made-with.css", // .made-with — the fleet byline footer
+  "components/molecules/status-list/status-list.css", // .status-list — the scanner's scanned-names list
   "components/organisms/tab-bar/tab-bar.css",     // .tab-bar — the strip the tabs sit in
 ];
 

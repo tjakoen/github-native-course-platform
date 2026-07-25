@@ -10,6 +10,7 @@ import { discoverSections, parseRepoURL } from "./lib/config.mjs";
 import { loadSection } from "./lib/gradebook.mjs";
 import { shotsFor, shotsCached } from "./lib/shots.mjs";
 import { codeFor, codeCached } from "./lib/code.mjs";
+import { renderScanView, stopScanner } from "./lib/attendance-scan.mjs";
 
 const $=(s,r=document)=>r.querySelector(s), el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e};
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -86,6 +87,10 @@ async function boot(){
    $("#bootmsg").innerHTML="No teacher repos reachable."+(errors.length?" "+esc(errors.map(e=>e.url+": "+e.err).join(" · ")):"")+" <a href='#' id='fixCfg'>Open settings</a>";
    $("#fixCfg").onclick=e=>{e.preventDefault();openSettings(false)}; return;
   }
+  // Fast path for the classroom door: #/scan boots straight into the scanner
+  // from the discovery list, WITHOUT loading any gradebook (quick on a phone,
+  // near-zero API budget). Bookmark this hash on the phone's home screen.
+  if(location.hash.startsWith("#/scan")){ renderScanPage(scs); return; }
   const sections=[];
   for(const sc of scs){ $("#bootmsg").textContent="Loading "+sc.key+"… ("+(sections.length+1)+"/"+scs.length+")"; sections.push(await loadSection(sc)); }
   DATA={generatedAt:new Date().toISOString(),sections};
@@ -96,6 +101,20 @@ async function boot(){
   else { $("#bootmsg").innerHTML="Load failed: "+esc(e.message)+" · <a href='#' id='fixCfg'>settings</a>"; const f=$("#fixCfg"); if(f)f.onclick=ev=>{ev.preventDefault();openSettings(false)}; }
  }
 }
+// The standalone scanner page (#/scan): minimal header + the scan view, fed by
+// the light discovery objects. "Full console" clears the hash and boots normally.
+function renderScanPage(scs){
+ app.innerHTML="";
+ const w=el("div","wrap");
+ const head=el("div"); head.innerHTML='<div class="hdr-actions"><button class="btn" data-size="sm" data-variant="soft" id="full">Full console</button><button class="btn" data-size="sm" data-variant="soft" id="cfg">⚙ Settings</button></div><h1>Course Console · Scan</h1><div class="muted">attendance scanner · commits batch CSVs to the teacher repo · signatures verified server-side</div>';
+ w.append(head);
+ const mountEl=el("div"); w.append(mountEl); app.append(w);
+ renderScanView(mountEl,scs,null);
+ $("#full").onclick=()=>{ stopScanner(); location.hash=""; boot(); };
+ $("#cfg").onclick=()=>openSettings(false);
+ app.insertAdjacentHTML("beforeend",'<footer class="made-with">made with <a href="https://tjakoen.github.io/grain">GRAIN</a> by <a href="https://tjakoen.github.io">tjakoen</a></footer>');
+}
+
 function curScheme(){ return document.documentElement.getAttribute("data-color-scheme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"); }
 function cellColor(pct){ if(pct==null)return""; const g=Math.round(pct*120); const dark=curScheme()==="dark"; return "background:hsl("+g+"deg "+(dark?"30%":"55%")+" "+(dark?"24%":"90%")+")"; }
 // ---- review decisions (persisted in this browser) ----
@@ -132,6 +151,7 @@ function importDecisions(file){
 }
 
 function render(){
+ stopScanner(); // leaving the Scan tab (or re-rendering) releases the camera
  const s=DATA.sections[cur];
  app.innerHTML="";
  const w=el("div","wrap");
@@ -142,10 +162,10 @@ function render(){
  w.append(tabs);
  // mode toggle
  const mt=el("nav","tab-bar");
- [["book","Gradebook"],["ai","AI Review ("+s.stats.held+")"],["att","Attendance"+(s.stats.sessions?" ("+s.stats.sessions+")":"")]].forEach(([k,l])=>{const b=el("div","tab",l);if(mode===k)b.dataset.active="true";b.onclick=()=>{mode=k;render()};mt.append(b)});
+ [["book","Gradebook"],["ai","AI Review ("+s.stats.held+")"],["att","Attendance"+(s.stats.sessions?" ("+s.stats.sessions+")":"")],["scan","Scan"]].forEach(([k,l])=>{const b=el("div","tab",l);if(mode===k)b.dataset.active="true";b.onclick=()=>{mode=k;render()};mt.append(b)});
  w.append(mt);
  app.append(w);
- if(mode==="ai") renderAI(s,w); else if(mode==="att") renderAttendance(s,w); else renderBook(s,w);
+ if(mode==="ai") renderAI(s,w); else if(mode==="att") renderAttendance(s,w); else if(mode==="scan") renderScanView(w,DATA.sections,s.key); else renderBook(s,w);
  $("#theme").onclick=toggleTheme;
  $("#reload").onclick=()=>boot();
  $("#cfg").onclick=()=>openSettings(false);

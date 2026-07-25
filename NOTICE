@@ -13,3 +13,7 @@ by that instructor. Each student's own work remains theirs.
 The Course Console (console/, formerly the standalone grader-ui repository) is
 part of this product and carries the same copyright and attribution. It is built
 on the GRAIN design system.
+
+The Course Console bundles jsQR 1.4.0 (console/site/vendor/jsQR.js), Copyright
+Cosmo Wolfe, licensed under the Apache License, Version 2.0
+(https://github.com/cozmo/jsQR).
