@@ -60,6 +60,15 @@ jobs:
             echo "::error::gradebook CSV found in artifact"; exit 1; fi
           if find dist -name 'grades.csv' -o -name 'shots-manifest.json' -o -path '*dashboard-assets*' -o -name 'student.json' -o -path '*classes*' | grep -q .; then
             echo "::error::local data artifact found in dist/"; exit 1; fi
+          # The search index is client-built in memory ONLY; a search.json at rest
+          # would mean student data leaked into the artifact.
+          if test -e dist/search.json; then
+            echo "::error::search.json must never ship (search index is in-memory only)"; exit 1; fi
+          # No JSON in the artifact may carry gradebook identity columns (tours,
+          # fixtures, any future static data included).
+          if grep -rlE '"studentNumber"|"fullName"|"githubAccount"' dist/ --include='*.json' 2>/dev/null | grep -q .; then
+            echo "::error::student-identity fields found in a shipped JSON"; exit 1; fi
+          test -s dist/vendor/grain/lightbox.js || { echo "::error::grain vendor scripts missing"; exit 1; }
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:

@@ -61,7 +61,7 @@ input.num{width:4.5rem;flex:none}
 .dp{position:absolute;right:0;top:0;height:100%;width:min(720px,94vw);background:var(--paper);border-left:1px solid var(--color-line);overflow:auto;padding:var(--space-5)}
 .dp h3{margin:0 0 var(--space-1)}
 .dp .x{float:right;cursor:pointer;color:var(--color-muted);font-size:var(--text-xl);border:0;background:none}
-.dp.wide{width:min(1240px,97vw)}
+.dp.wide{width:min(1600px,90vw)}
 .rvhead{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;margin-bottom:var(--space-1)}
 .rvnav{margin-left:auto;display:flex;align-items:center;gap:var(--space-2)}
 .rvnav .cnt{color:var(--color-muted);font-size:var(--text-xs);font-variant-numeric:tabular-nums;min-width:52px;text-align:center}

@@ -358,7 +358,7 @@ function renderAI(s,w){
 function shotsHTML(list){
  if(list===null) return "<div class='noshot'>Loading screenshots from the previews branch…</div>";
  if(!list.length) return "<div class='noshot'>No screenshots for this submission.<br><span style='font-size:12px'>(not a design activity, or no preview was published)</span></div>";
- return list.map(sh=>"<div class='shot'><div class='cap'>"+esc(sh.label)+"</div><a href='"+esc(sh.file)+"' target='_blank' rel='noopener'><img loading='lazy' src='"+esc(sh.file)+"' alt='"+esc(sh.label)+" screenshot'></a></div>").join("");
+ return list.map(sh=>"<div class='shot'><div class='cap'>"+esc(sh.label)+"</div><a href='"+esc(sh.file)+"' target='_blank' rel='noopener' data-lightbox data-lightbox-caption='"+esc(sh.label)+"'><img loading='lazy' src='"+esc(sh.file)+"' alt='"+esc(sh.label)+" screenshot'></a></div>").join("");
 }
 function codeHTML(files){
  if(files===undefined) return "<div class='noshot'>Loading source from GitHub…</div>";
@@ -399,16 +399,18 @@ function openReview(s,aid,skey){
   idx=i; const sk=order[i];
   const st=s.students.find(x=>skeyOf(x)===sk); const r=st.activities[aid];
   const orig=parseNote(r.note);
-  // lazy media: kick off the fetch on first sight of this repo, repaint when it lands
+  // lazy media, per pane: screenshots fetch on first sight (they are the default
+  // pane); CODE fetches only when its tab is opened, so shots never wait on it.
   const shots=shotsCached(s.section,r.repo);   // null = loading, [] = none
-  const files=codeCached(s.section,r.repo);    // undefined = loading, null = none
-  if(shots===null||files===undefined){
-   Promise.all([shotsFor(s.section,s.org,r.repo),codeFor(s.section,s.org,r.repo)])
-    .then(()=>{ if(document.body.contains(d)&&order[idx]===sk) paint(idx); });
-  }
+  const files=codeCached(s.section,r.repo);    // undefined = not fetched, null = none
+  const repaint=()=>{ if(document.body.contains(d)&&order[idx]===sk) paint(idx); };
+  if(shots===null) shotsFor(s.section,s.org,r.repo).then(repaint);
+  else if(shots&&!shots.length&&files===undefined) codeFor(s.section,s.org,r.repo).then(repaint); // no shots -> code becomes the default pane
+  if(leftView==="code"&&files===undefined) codeFor(s.section,s.org,r.repo).then(repaint);
   const hasShots=!!(shots&&shots.length);
   const hasCode=!!(files&&files.length);
-  if(leftView===null||(leftView==="shots"&&!hasShots&&hasCode)||(leftView==="code"&&!hasCode&&hasShots)) leftView=hasShots?"shots":(hasCode?"code":"shots");
+  const codeUnknown=files===undefined;
+  if(leftView===null||(leftView==="shots"&&!hasShots&&hasCode)||(leftView==="code"&&!hasCode&&!codeUnknown&&hasShots)) leftView=hasShots?"shots":(hasCode?"code":"shots");
   const lv=leftView;
   const curDec=getDec(s.section,aid,sk);
   const stt=decStatus({dec:curDec});
@@ -425,9 +427,9 @@ function openReview(s,aid,skey){
     "<div class='rvcol'>"+
      "<nav class='tab-bar'>"+
       "<button class='tab'"+(lv==='shots'?" data-active='true'":"")+" data-lv='shots'"+(hasShots?'':' disabled')+">Screenshots</button>"+
-      "<button class='tab'"+(lv==='code'?" data-active='true'":"")+" data-lv='code'"+(hasCode?'':' disabled')+">Code"+(hasCode?" <span class='pill'>"+files.length+"</span>":"")+"</button>"+
+      "<button class='tab'"+(lv==='code'?" data-active='true'":"")+" data-lv='code'"+((hasCode||codeUnknown)?'':' disabled')+">Code"+(hasCode?" <span class='pill'>"+files.length+"</span>":"")+"</button>"+
      "</nav>"+
-     "<div class='shots' id='lvShots' style='display:"+(lv==='shots'?'flex':'none')+"'>"+shotsHTML(shots)+"</div>"+
+     "<div class='shots' id='lvShots' data-lightbox-group style='display:"+(lv==='shots'?'flex':'none')+"'>"+shotsHTML(shots)+"</div>"+
      "<div id='lvCode' style='display:"+(lv==='code'?'block':'none')+"'>"+codeHTML(files)+"</div>"+
     "</div>"+
     "<div class='rvcol'>"+
@@ -450,8 +452,10 @@ function openReview(s,aid,skey){
   const prev=$("#prev"),next=$("#next");
   if(prev)prev.onclick=()=>{if(idx>0)paint(idx-1)};
   if(next)next.onclick=()=>{if(idx<order.length-1)paint(idx+1)};
-  // left-pane toggle (screenshots <-> code) - no repaint, just show/hide
+  // left-pane toggle (screenshots <-> code) - no repaint, just show/hide.
+  // First open of the Code tab triggers its (deferred) fetch, then repaints.
   p.querySelectorAll(".tab[data-lv]").forEach(b=>b.onclick=()=>{ if(b.disabled)return; leftView=b.dataset.lv;
+    if(leftView==="code"&&codeCached(s.section,r.repo)===undefined){ $("#lvCode").innerHTML="<p class='mut'>Loading code…</p>"; codeFor(s.section,s.org,r.repo).then(repaint); }
     $("#lvShots").style.display=leftView==="shots"?"flex":"none"; $("#lvCode").style.display=leftView==="code"?"block":"none";
     p.querySelectorAll(".tab[data-lv]").forEach(x=>{if(x.dataset.lv===leftView)x.dataset.active="true";else x.removeAttribute("data-active")}); });
   const cf=$("#cfile"); if(cf){ cf.onchange=()=>{ const f=files[+cf.value]; $("#cpre").innerHTML=hl(f.content,f.lang); }; }
