@@ -11,6 +11,8 @@ import { shotsFor, shotsCached } from "./lib/shots.mjs";
 import { codeFor, codeCached } from "./lib/code.mjs";
 import { route, start, go, dispatch, beforeEach, fallback } from "./lib/router.mjs";
 import { discover, sections, findSc, getSection, sectionCached, invalidate, ageOf, STALE_MS } from "./lib/data.mjs";
+import { missingWork, workspaceInfo } from "./lib/students.mjs";
+import { initSearch } from "./lib/search-index.mjs";
 
 const $=(s,r=document)=>r.querySelector(s), el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e};
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -101,8 +103,8 @@ function setNav(){
 function setTabs(key,mode,s){
  const t=$("#ctxTabs");
  if(!key){t.innerHTML="";return;}
- const items=[["","Gradebook","book"],["review","AI Review"+(s?" ("+s.stats.held+")":""),"ai"],["attendance","Attendance"+(s&&s.stats.sessions?" ("+s.stats.sessions+")":""),"att"]];
- t.innerHTML=items.map(([sub,l,m])=>"<a class='tab' href='"+classHref(key,sub)+"'"+(m===mode?" aria-current='page' data-active='true'":"")+">"+l+"</a>").join("");
+ const items=[["","Gradebook","book"],["students","Students"+(s?" ("+s.stats.students+")":""),"stu"],["review","AI Review"+(s?" ("+s.stats.held+")":""),"ai"],["attendance","Attendance"+(s&&s.stats.sessions?" ("+s.stats.sessions+")":""),"att"]];
+ t.innerHTML=items.map(([sub,l,m])=>{const on=m===mode||(m==="stu"&&String(mode).startsWith("profile:"));return "<a class='tab' href='"+classHref(key,sub)+"'"+(on?" aria-current='page' data-active='true'":"")+">"+l+"</a>";}).join("");
 }
 
 function statusLine(key){
@@ -148,8 +150,112 @@ function classView(key,mode){
   main.innerHTML="";
   const w=el("div","wrap");
   main.append(w);
-  if(mode==="ai") renderAI(s,w); else if(mode==="att") renderAttendance(s,w); else renderBook(s,w);
+  if(mode==="ai") renderAI(s,w); else if(mode==="att") renderAttendance(s,w);
+  else if(mode==="stu") renderStudents(s,w);
+  else if(mode&&mode.startsWith("profile:")) renderStudentProfile(s,w,mode.slice(8));
+  else renderBook(s,w);
  });
+}
+
+const profileHref=(key,sk)=>classHref(key,"students")+"/"+encodeURIComponent(sk);
+
+// ---- Students list ----
+function renderStudents(s,w){
+ const facets=el("div","ctl");
+ facets.innerHTML='<input class="field__input search" id="q" placeholder="Filter students…" value="'+esc(q)+'">'+
+  '<fieldset class="chips" data-select="multi" id="stuFacets" style="border:0;padding:0;margin:0">'+
+   '<label class="chips__chip"><input type="checkbox" value="missing"><span>Missing work</span></label>'+
+   '<label class="chips__chip"><input type="checkbox" value="blank"><span>Blank student.json</span></label>'+
+   '<label class="chips__chip"><input type="checkbox" value="atrisk"><span>Attendance &lt;50%</span></label>'+
+  '</fieldset>';
+ w.append(facets);
+ const holder=el("div"); w.append(holder);
+ const dates=(s.attendance&&s.attendance.sessionDates)||[];
+ const attOf=st=>{const a=s.attendance&&s.attendance.students[st.number];return a&&dates.length?a.count/dates.length:null};
+ const paint=()=>{
+  const on=[...w.querySelectorAll("#stuFacets input:checked")].map(c=>c.value);
+  const rows=s.students.filter(st=>{
+   if(q&&!((st.name||"").toLowerCase().includes(q)||(st.number||"").includes(q)||(st.github||"").toLowerCase().includes(q)))return false;
+   if(on.includes("missing")&&!missingWork(s,st).length)return false;
+   if(on.includes("blank")&&st.number)return false;
+   if(on.includes("atrisk")){const r=attOf(st);if(!(r!=null&&r<0.5))return false;}
+   return true;
+  });
+  holder.innerHTML="";
+  const card=el("div","card"); card.append(el("h2",null,"Students <span class='mut' style='font-weight:400'>("+rows.length+" of "+s.students.length+")</span>"));
+  const sc2=el("div","scroll"); const t=el("table","matrix");
+  t.innerHTML="<tr><th class='stu'>Student</th><th>#</th><th>@github</th><th class='center'>Auto</th><th class='center'>Held</th><th class='center'>Attendance</th><th class='center'>Missing</th></tr>"+
+   rows.map(st=>{
+    const miss=missingWork(s,st).length; const r=attOf(st);
+    return "<tr class='rowlink' data-sk='"+esc(skeyOf(st))+"'>"+
+     "<td class='stu'>"+esc(st.name||"(blank)")+"</td><td class='mut'>"+esc(st.number||"-")+"</td><td class='mut'>"+esc(st.github||"-")+"</td>"+
+     "<td class='center'>"+(st.tally.pushMax?st.tally.push+"/"+st.tally.pushMax:"-")+"</td>"+
+     "<td class='center'>"+(st.tally.heldMax?st.tally.held+"/"+st.tally.heldMax:"-")+"</td>"+
+     "<td class='center"+(r!=null&&r<0.5?" mut":"")+"'>"+(r==null?"-":Math.round(r*100)+"%")+"</td>"+
+     "<td class='center'>"+(miss?"<span class='badge' data-tone='warn'>"+miss+"</span>":"·")+"</td></tr>";
+   }).join("");
+  sc2.append(t); card.append(sc2); holder.append(card);
+  t.querySelectorAll(".rowlink").forEach(tr=>tr.onclick=()=>{ location.hash=profileHref(s.key,tr.dataset.sk); });
+ };
+ paint();
+ $("#q").oninput=e=>{q=e.target.value.toLowerCase();paint();};
+ w.querySelector("#stuFacets").onchange=paint;
+}
+
+// ---- Student profile ----
+function renderStudentProfile(s,w,sk){
+ const st=s.students.find(x=>skeyOf(x)===sk);
+ if(!st){ w.append(el("div","card","<p class='card__body'>No such student in "+esc(s.key)+". <a href='"+classHref(s.key,"students")+"'>Back to students</a></p>")); return; }
+ const dates=(s.attendance&&s.attendance.sessionDates)||[];
+ const att=s.attendance&&s.attendance.students[st.number];
+ const miss=missingWork(s,st);
+ const head=el("div");
+ head.innerHTML="<a class='mut' href='"+classHref(s.key,"students")+"'>← Students</a><h1 style='margin-top:4px'>"+esc(st.name||"(blank)")+"</h1>"+
+  "<div class='muted'>#"+esc(st.number||"?")+" · @"+esc(st.github||"?")+" · "+esc(s.subject)+" · "+esc(s.section)+"</div>";
+ w.append(head);
+ // identity + delivery card (workspace half upgrades async)
+ const idc=el("div","card"); idc.dataset.pad="sm";
+ idc.innerHTML="<h2>Identity & workspace</h2><div id='wsInfo' class='mut'>Checking workspace…</div>";
+ w.append(idc);
+ workspaceInfo(s,st).then(ws=>{
+  const box=idc.querySelector("#wsInfo"); if(!box)return;
+  if(!ws){ box.textContent="No GitHub handle on file - workspace unknown."; return; }
+  if(!ws.exists){ box.innerHTML="Workspace <code>"+esc(ws.repo)+"</code> not reachable (missing, or this repo's PAT lacks org-wide read)."; return; }
+  const sj=ws.studentJson||{};
+  const mismatch=st.number&&sj.studentNumber&&String(sj.studentNumber).trim()!==st.number;
+  box.innerHTML=
+   "<div><a href='"+esc(ws.url)+"' target='_blank' rel='noopener'>"+esc(ws.repo)+"</a></div>"+
+   "<ul class='status-list' data-grade='smooth' style='margin-top:8px'>"+
+    "<li class='status-list__item'><span class='status-list__mark'>"+(sj.studentNumber?"✓":"✗")+"</span><span class='status-list__title'>student.json "+(sj.studentNumber?"filled":"blank")+(mismatch?" <span class='badge' data-tone='bad'>number mismatch vs gradebook</span>":"")+"</span></li>"+
+    "<li class='status-list__item'><span class='status-list__mark'>"+(ws.gradesDelivered?"✓":"·")+"</span><span class='status-list__title'>GRADES.md delivered</span></li>"+
+    "<li class='status-list__item'><span class='status-list__mark'>"+(ws.feedbackDelivered?"✓":"·")+"</span><span class='status-list__title'>FEEDBACK.md delivered</span></li>"+
+    "<li class='status-list__item'><span class='status-list__mark'>"+(ws.attendanceReceipt?"✓":"·")+"</span><span class='status-list__title'>Attendance receipt</span></li>"+
+   "</ul>";
+ }).catch(()=>{ const box=idc.querySelector("#wsInfo"); if(box)box.textContent="Workspace check failed."; });
+ // activities
+ const ac=el("div","card"); ac.append(el("h2",null,"Activities"));
+ const asc=el("div","scroll"); const t=el("table","matrix");
+ t.innerHTML="<tr><th>Activity</th><th>Kind</th><th class='center'>Score</th><th class='center'>Late</th><th>Repo</th></tr>"+
+  s.assignments.map(a=>{
+   const r=st.activities[a.id];
+   if(!r) return (a.namePrefix&&!a.manual&&!a.quiz)?"<tr><td>"+esc(a.id)+"</td><td><span class='badge' data-tone='"+KTONE[a.kind]+"'>"+a.kind+"</span></td><td class='center'><span class='badge' data-tone='warn'>missing</span></td><td class='center'>·</td><td class='mut'>no submission</td></tr>":"";
+   const score=r.kind==="held"?(r.proposed!=null?r.proposed+"/"+r.proposedMax+" (held)":"held"):(r.canvasPts!=null?r.canvasPts:r.raw);
+   return "<tr><td>"+esc(a.id)+"</td><td><span class='badge' data-tone='"+KTONE[r.kind]+"'>"+r.kind+"</span></td>"+
+    "<td class='center'>"+esc(String(score))+"</td><td class='center'>"+(r.late?"LATE":"·")+"</td>"+
+    "<td class='mut'><a href='https://github.com/"+esc(s.org)+"/"+esc(r.repo)+"' target='_blank' rel='noopener'>"+esc(r.repo)+"</a></td></tr>";
+  }).join("");
+ asc.append(t); ac.append(asc); w.append(ac);
+ // missing summary + attendance
+ if(miss.length){
+  const mc=el("div","card"); mc.dataset.pad="sm";
+  mc.innerHTML="<h2>Missing work ("+miss.length+")</h2><ul class='status-list'>"+miss.map(a=>"<li class='status-list__item'><span class='status-list__mark'>✗</span><span class='status-list__title'>"+esc(a.id)+(a.title?" · "+esc(a.title):"")+"</span></li>").join("")+"</ul>";
+  w.append(mc);
+ }
+ const atc=el("div","card"); atc.dataset.pad="sm";
+ atc.innerHTML="<h2>Attendance</h2>"+(dates.length?
+  "<p>Present <b>"+(att?att.count:0)+"</b> of "+dates.length+" sessions"+(att&&att.present.length?" · last: "+esc(att.present[att.present.length-1]):"")+"</p>":
+  "<p class='mut'>No attendance data yet.</p>");
+ w.append(atc);
 }
 
 function dashView(){
@@ -173,6 +279,8 @@ route("#/", dashView);
 route("#/settings", ()=>{ setTabs(null); statusLine(null); main.innerHTML="<div class='wrap'><h1>Settings</h1><p class='lede' data-size='sm'>Repos, tokens, and your review-decision backups.</p></div>"; openSettings(false); });
 route("#/scan", ()=>location.replace("./scanner/"));
 route("#/c/:key", p=>classView(p.key,"book"));
+route("#/c/:key/students", p=>classView(p.key,"stu"));
+route("#/c/:key/students/:sk", p=>classView(p.key,"profile:"+p.sk));
 route("#/c/:key/review", p=>classView(p.key,"ai"));
 route("#/c/:key/attendance", p=>classView(p.key,"att"));
 fallback(()=>go("#/"));
@@ -201,6 +309,7 @@ async function boot(){
 // static-shell header controls
 $("#reload").onclick=()=>{ const k=curKey(); invalidate(k); dispatch(); };
 $("#theme").onclick=()=>toggleTheme();
+initSearch(()=>dispatch());
 
 function curScheme(){ return document.documentElement.getAttribute("data-color-scheme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"); }
 function cellColor(pct){ if(pct==null)return""; const g=Math.round(pct*120); const dark=curScheme()==="dark"; return "background:hsl("+g+"deg "+(dark?"30%":"55%")+" "+(dark?"24%":"90%")+")"; }

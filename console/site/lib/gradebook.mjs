@@ -22,6 +22,7 @@ export async function loadSection(sc) {
       id: a.id, totalPoints: a.totalPoints ?? null, autoPoints: a.autoPoints ?? null,
       aiGraded, manual, quiz, kind, type: a.type || null,
       locked: !!a.locked, publish: !!a.publish, feedback: a.feedback || null,
+      namePrefix: a.namePrefix ?? null, title: a.title ?? null,   // additive: missing-work + display
     };
   });
   const csvText = await ghText(`${base}/contents/gradebook/grades.csv`);

@@ -136,3 +136,6 @@ textarea.fta.mono{font-family:var(--font-mono);font-size:var(--text-xs);line-hei
 .scanner-page .appbar{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;padding:var(--space-4) 0;border-bottom:1px solid var(--color-line);margin-bottom:var(--space-4)}
 .scanner-page .appbar__title{font-size:var(--text-lg);font-weight:var(--font-weight-semibold)}
 .scanner-page .appbar .spacer{flex:1}
+.rowlink{cursor:pointer}
+.rowlink:hover td{background:var(--paper-2)}
+.ctl .chips{display:inline-flex;gap:var(--space-2);align-items:center}
