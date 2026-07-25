@@ -72,6 +72,12 @@ async function stub(route) {
   if (rest.startsWith("/contents/gradebook/notes/")) return wantsRaw ? raw(NOTE) : json({ content: b64(NOTE) });
   if (rest.startsWith("/contents/attendance/summary.json")) return wantsRaw ? raw(SUMMARY(section)) : json({ content: b64(SUMMARY(section)) });
   if (rest.startsWith("/contents/gradebook/FLAGS.md")) return wantsRaw ? raw("- m1a1-" + section + "-dupA and -dupB share studentNumber 20250009 - resolve by hand\n") : json({ content: b64("x") });
+  if (rest === "/contents/reports") return json([
+    { type: "file", name: "FLAGGED.md", size: 640, html_url: "https://github.com/x/FLAGGED.md" },
+    { type: "file", name: "canvas-push-report.json", size: 2048, html_url: "https://github.com/x/report.json" },
+  ]);
+  if (rest.startsWith("/contents/reports/FLAGGED.md")) return wantsRaw ? raw("# Flagged for review\n\nTwo submissions share **studentNumber 20250009** - resolve by hand:\n\n- m1a1-" + section + "-dupA\n- m1a1-" + section + "-dupB\n") : json({ content: b64("x") });
+  if (rest.startsWith("/contents/gradebook/GRADEBOOK.md")) return wantsRaw ? raw("# Gradebook - section " + section + "\n\n| Student | m1a1 | m2a1 |\n| --- | --- | --- |\n| Dela Cruz, Juan | 7/7 | 3/3 |\n| Santos, Maria | 7/7 | 3/3 |\n") : json({ content: b64("x") });
   if (rest.startsWith("/actions/workflows/")) return json(RUNS);
   return route.fulfill({ status: 404, body: "{}" });
 }
@@ -87,11 +93,12 @@ await ctx.addInitScript(() => {
   ], labels: { "6APSI": "Application Development", "6INTROWEB": "Intro to Web" } }));
 });
 const page = await ctx.newPage();
-const shot = async (name) => { await page.waitForTimeout(900); await page.screenshot({ path: `${OUT}/${name}.png` }); console.log("shot", name); };
+const shot = async (name, full) => { await page.waitForTimeout(900); await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: !!full }); console.log("shot", name); };
 
 await page.goto("http://localhost:8931/#/");
 await shot("01-dashboard");
 await page.goto("http://localhost:8931/#/c/6APSI-2240"); await shot("02-gradebook");
+await page.waitForTimeout(600); await page.evaluate(() => { const m = document.getElementById("main"); m.scrollTop = m.scrollHeight; }); await shot("02b-gradebook-bottom");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/activities"); await shot("03-activities");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/activities/new"); await shot("03b-activity-new");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/students"); await shot("04-students");
@@ -102,6 +109,9 @@ await page.keyboard.press("Meta+k"); await shot("07-cmdk");
 await page.keyboard.press("Escape");
 await page.goto("http://localhost:8931/#/ops/6APSI-2240"); await shot("08-ops");
 await page.goto("http://localhost:8931/#/flags"); await shot("09-flags");
+await page.goto("http://localhost:8931/#/reports"); await shot("11-reports");
+await page.goto("http://localhost:8931/#/reports/6APSI-2240/" + encodeURIComponent("reports/FLAGGED.md")); await shot("12-report-viewer");
+await page.goto("http://localhost:8931/#/"); await page.click("#loadAll").catch(() => {}); await page.waitForTimeout(1500); await shot("13-dashboard-loaded");
 await page.goto("http://localhost:8931/scanner/"); await shot("10-scanner");
 
 await browser.close();

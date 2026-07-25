@@ -4,7 +4,7 @@
 // data half now lives in lib/. The app READS everything and WRITES exactly one
 // thing: Intent prompt files into gradebook/intents/ (executed by Claude Code
 // locally - "run pending intents").
-import { AuthError, rate, ghJSON as ghJSON2 } from "./lib/gh.mjs";
+import { AuthError, rate, ghJSON as ghJSON2, ghText } from "./lib/gh.mjs";
 import { loadConfig, saveConfig } from "./lib/store.mjs";
 import { discoverSections, parseRepoURL } from "./lib/config.mjs";
 import { shotsFor, shotsCached } from "./lib/shots.mjs";
@@ -258,24 +258,68 @@ function dashView(){
  main.innerHTML="";
  const w=el("div","wrap");
  w.innerHTML="<h1>My classes</h1><p class='lede' data-size='sm'>Live from GitHub. A class's gradebook loads when you open it; nothing is stored outside this browser.</p>";
+ const ctl=el("div","ctl");
+ ctl.innerHTML='<button class="btn" data-size="sm" data-variant="soft" id="loadAll">Load all classes</button>'+
+  '<div class="meter" id="laMeter" style="flex:1;max-width:280px" hidden role="meter" aria-label="Load progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="meter__seg" data-tone="ok" style="--seg:0%"></span></div>'+
+  '<span class="mut" id="laMsg"></span>';
+ w.append(ctl);
  const grid=el("div","dashgrid");
- sections().forEach(sc=>{
+ const cardFor=sc=>{
   const s=sectionCached(sc.key);
-  const c=el("a","card dashcard"); c.href=classHref(sc.key); c.dataset.pad="sm";
+  const c=el("a","card dashcard"); c.href=classHref(sc.key); c.dataset.pad="sm"; c.dataset.dash=sc.key;
   c.innerHTML="<h2>"+esc(sc.subject)+" · "+esc(sc.section)+(sc.courseCode?" <span class='mut'>("+esc(sc.courseCode)+")</span>":"")+"</h2><div class='mut'>"+esc(sc.org)+"</div>"+
    (s?"<div class='stats stats--mini'>"+[["Students",s.stats.students],["Held",s.stats.held],["Activities",s.stats.activities]].map(([l,n])=>"<div class='stat'><span class='stat__value'>"+n+"</span><span class='stat__label'>"+l+"</span></div>").join("")+"</div>"
      :"<div class='mut'>"+sc.pol.length+" activities · open to load</div>");
-  grid.append(c);
- });
+  return c;
+ };
+ sections().forEach(sc=>grid.append(cardFor(sc)));
  w.append(grid);
+ const alertsBox=el("div"); w.append(alertsBox);
+ // cross-class alert inbox: built from whatever is LOADED (load all to fill it)
+ const paintAlerts=()=>{
+  const items=[];
+  sections().forEach(sc=>{ const s=sectionCached(sc.key); if(!s)return;
+   if(s.stats.held>0)items.push("<a href='"+classHref(sc.key,"review")+"'>"+s.stats.held+" held AI grade(s) to review</a> · "+esc(sc.key));
+   if(s.stats.blankStudentJson>0)items.push("<a href='"+classHref(sc.key,"students")+"'>"+s.stats.blankStudentJson+" blank student.json</a> · "+esc(sc.key));
+   const att=s.attendance;
+   if(att&&att.sessionDates&&att.sessionDates.length){
+    const n=s.students.filter(st=>{const a=att.students[st.number];const r=a?a.count/att.sessionDates.length:0;return st.number&&r<0.5}).length;
+    if(n)items.push("<a href='"+classHref(sc.key,"attendance")+"'>"+n+" student(s) below 50% attendance</a> · "+esc(sc.key));
+   }
+  });
+  alertsBox.innerHTML=items.length?"<div class='card' data-pad='sm'><h2>Needs a look (loaded classes)</h2><ul class='status-list'>"+items.map(h=>"<li class='status-list__item'><span class='status-list__mark'>⚑</span><span class='status-list__title'>"+h+"</span></li>").join("")+"</ul></div>":"";
+ };
+ paintAlerts();
  main.append(w);
+ const la=$("#loadAll");
+ const unloaded=()=>sections().filter(sc=>!sectionCached(sc.key));
+ if(!unloaded().length) la.hidden=true;
+ la.onclick=async()=>{
+  if(rate.remaining!=null&&rate.remaining<500){ $("#laMsg").textContent="API budget low ("+rate.remaining+" calls left) - not loading everything."; return; }
+  la.disabled=true;
+  const meter=$("#laMeter"); meter.hidden=false;
+  const list=unloaded(); let done=0;
+  for(const sc of list){
+   $("#laMsg").textContent="Loading "+sc.key+"…";
+   try{ const s=await getSection(sc.key); railHeld(sc.key,s.stats.held); const old=grid.querySelector("[data-dash='"+sc.key.replace(/'/g,"")+"']"); if(old)old.replaceWith(cardFor(sc)); }
+   catch(e){ $("#laMsg").textContent=sc.key+" failed: "+e.message; }
+   done++;
+   const pct=Math.round(done/list.length*100);
+   meter.setAttribute("aria-valuenow",pct); meter.querySelector(".meter__seg").style.setProperty("--seg",pct+"%");
+   if(rate.remaining!=null&&rate.remaining<300){ $("#laMsg").textContent="Stopped early: API budget down to "+rate.remaining+"."; break; }
+  }
+  if(done===list.length) $("#laMsg").textContent="All classes loaded.";
+  la.hidden=true; paintAlerts(); statusLine(null);
+ };
 }
 
 route("#/", dashView);
 route("#/settings", ()=>{ setTabs(null); statusLine(null); main.innerHTML="<div class='wrap'><h1>Settings</h1><p class='lede' data-size='sm'>Repos, tokens, and your review-decision backups.</p></div>"; openSettings(false); });
 route("#/scan", ()=>location.replace("./scanner/"));
 route("#/flags", flagsView);
-route("#/reports", reportsView);
+route("#/reports", ()=>reportsView());
+route("#/reports/:key", p=>reportsView(p.key));
+route("#/reports/:key/:file", p=>reportViewer(p.key,p.file));
 route("#/ops", ()=>opsView(null));
 route("#/ops/:key", p=>opsView(p.key));
 route("#/c/:key", p=>classView(p.key,"book"));
@@ -337,12 +381,48 @@ async function flagsView(){
  }
 }
 
-// ---- Reports (per-class links into the repo's reports/) ----
-function reportsView(){
+// ---- Reports (in-console reader: reports/ listing -> MILL-rendered viewer) ----
+const reportHref=(key,path)=>"#/reports/"+encodeURIComponent(key)+"/"+encodeURIComponent(path);
+function reportsView(key){
  setTabs(null); statusLine(null);
  main.innerHTML=""; const w=el("div","wrap"); main.append(w);
- w.innerHTML="<h1>Reports</h1><p class='lede' data-size='sm'>Each class's generated reports, read on GitHub (a richer in-console reader is coming).</p>"+
-  "<ul class='content-index'>"+sections().map(sc=>"<li class='content-index__item'><span class='content-index__title'><a href='https://github.com/"+esc(sc.org)+"/"+esc(sc.repo)+"/tree/main/reports' target='_blank' rel='noopener'>"+esc(sc.subject)+" · "+esc(sc.section)+" reports/</a></span><span class='content-index__meta'>GRADEBOOK: <a href='https://github.com/"+esc(sc.org)+"/"+esc(sc.repo)+"/blob/main/gradebook/GRADEBOOK.md' target='_blank' rel='noopener'>GRADEBOOK.md</a></span></li>").join("")+"</ul>";
+ w.innerHTML="<h1>Reports</h1><p class='lede' data-size='sm'>Each class's generated reports and gradebook summary, read right here (markdown renders in-console; other files open on GitHub).</p>";
+ const scs=key&&findSc(key)?[findSc(key)]:sections();
+ for(const sc of scs){
+  const card=el("div","card"); card.dataset.pad="sm";
+  card.innerHTML="<h2>"+esc(sc.subject)+" · "+esc(sc.section)+"</h2>"+
+   "<ul class='content-index rlist'><li class='content-index__item'><span class='content-index__title'><a href='"+reportHref(sc.key,"gradebook/GRADEBOOK.md")+"'>GRADEBOOK.md</a></span><span class='content-index__meta'>the human-readable gradebook</span></li></ul>"+
+   "<div class='mut rmore'>Loading reports/…</div>";
+  w.append(card);
+  ghJSON2("/repos/"+sc.org+"/"+sc.repo+"/contents/reports").then(list=>{
+   const box=card.querySelector(".rmore"); if(!box)return;
+   const files=(list||[]).filter(x=>x.type==="file");
+   if(!files.length){ box.textContent="No reports/ files."; return; }
+   box.classList.remove("mut");
+   box.innerHTML="<ul class='content-index'>"+files.map(f=>{
+    const md=/\.(md|markdown|txt|csv)$/i.test(f.name);
+    const href=md?reportHref(sc.key,"reports/"+f.name):f.html_url;
+    return "<li class='content-index__item'><span class='content-index__title'><a href='"+esc(href)+"'"+(md?"":" target='_blank' rel='noopener'")+">"+esc(f.name)+"</a></span><span class='content-index__meta'>"+(f.size!=null?Math.max(1,Math.round(f.size/1024))+" KB":"")+(md?"":" · on GitHub")+"</span></li>";
+   }).join("")+"</ul>";
+  }).catch(()=>{ const box=card.querySelector(".rmore"); if(box)box.textContent="reports/ not readable (token scope?)."; });
+ }
+}
+function reportViewer(key,path){
+ setTabs(null); statusLine(null);
+ main.innerHTML=""; const w=el("div","wrap"); main.append(w);
+ const sc=findSc(key);
+ if(!sc){ w.innerHTML="<div class='boot'>Unknown class "+esc(key)+". <a href='#/reports'>Reports</a></div>"; return; }
+ if(!/^(reports|gradebook)\/[\w][\w./ -]*$/.test(path)||path.includes("..")){ w.innerHTML="<div class='boot'>Not a report path. <a href='#/reports'>Reports</a></div>"; return; }
+ w.innerHTML="<a class='mut' href='#/reports'>← Reports</a><h1 style='margin-top:4px'>"+esc(path.split("/").pop())+"</h1>"+
+  "<div class='muted'>"+esc(sc.subject)+" · "+esc(sc.section)+" · <a href='https://github.com/"+esc(sc.org)+"/"+esc(sc.repo)+"/blob/main/"+esc(path)+"' target='_blank' rel='noopener'>open on GitHub</a></div>"+
+  "<div class='card' data-pad='sm'><div class='rbody mut'>Loading…</div></div>";
+ ghText("/repos/"+sc.org+"/"+sc.repo+"/contents/"+path.split("/").map(encodeURIComponent).join("/")).then(md=>{
+  const box=w.querySelector(".rbody"); if(!box)return;
+  if(md==null){ box.textContent="Not readable (missing file or token scope)."; return; }
+  box.classList.remove("mut");
+  if(/\.(md|markdown)$/i.test(path)) renderMd(md).then(html=>{ box.innerHTML=html; }).catch(()=>{ box.innerHTML="<pre class='code-block prompt'>"+esc(md)+"</pre>"; });
+  else box.innerHTML="<pre class='code-block prompt'>"+esc(md)+"</pre>";
+ }).catch(e=>{ const box=w.querySelector(".rbody"); if(box)box.textContent="Load failed: "+e.message; });
 }
 
 // Markdown -> GRAIN classes via the vendored MILL renderer (lazy ESM import;
@@ -655,9 +735,52 @@ function renderBook(s,w){
  w.append(ctl);
  w.append(matrix(s));
  w.append(canvasPanel(s));
+ const risk=atRiskCard(s); if(risk)w.append(risk);
+ w.append(runsCard(s));
  $("#q").oninput=e=>{q=e.target.value.toLowerCase();renderMatrixOnly(s)};
  $("#prompt").onclick=()=>showPrompt(s);
  $("#deliver").onclick=()=>showDeliver(s);
+}
+
+// At-risk strip on the class overview: low attendance and/or piling-up missing
+// work, linking straight into the student profile.
+function atRiskCard(s){
+ const att=s.attendance, dates=(att&&att.sessionDates)||[];
+ const rows=s.students.map(st=>{
+  const miss=missingWork(s,st).length;
+  const a=att&&att.students[st.number];
+  const r=(a&&dates.length)?a.count/dates.length:null;
+  const why=[];
+  if(miss>=2)why.push(miss+" missing activities");
+  if(r!=null&&r<0.5)why.push(Math.round(r*100)+"% attendance");
+  return why.length?{st,why}:null;
+ }).filter(Boolean);
+ if(!rows.length)return null;
+ const shown=rows.slice(0,8);
+ const c=el("div","card"); c.dataset.pad="sm";
+ c.innerHTML="<h2>At risk ("+rows.length+")</h2><ul class='status-list'>"+shown.map(x=>"<li class='status-list__item'><span class='status-list__mark'>⚑</span><span class='status-list__title'><a href='"+profileHref(s.key,skeyOf(x.st))+"'>"+esc(x.st.name||"(blank)")+"</a> · "+x.why.join(" · ")+"</span></li>").join("")+(rows.length>shown.length?"<li class='status-list__item'><span class='status-list__mark'>·</span><span class='status-list__title mut'>+"+(rows.length-shown.length)+" more - see <a href='"+classHref(s.key,"students")+"'>Students</a></span></li>":"")+"</ul>";
+ return c;
+}
+
+// Recent engine runs (grain timeline): the last few runs of the workflows that
+// matter day to day, newest first. Needs the PAT's Actions read scope.
+function runsCard(s){
+ const sc=findSc(s.key)||s;
+ const card=el("div","card"); card.dataset.pad="sm";
+ card.innerHTML="<h2>Recent engine runs</h2><div class='mut runsbox'>Loading runs…</div>";
+ const FILES=[["grade.yml","Grade sweep"],["publish.yml","Publish grades"],["canvas-push.yml","Canvas push"],["publish-material.yml","Publish material"],["verify-attendance.yml","Verify attendance"]];
+ Promise.all(FILES.map(([f,l])=>listRuns(sc.org,sc.repo,f,3).then(rs=>(rs||[]).map(r=>({r,label:l}))).catch(()=>[])))
+ .then(all=>{
+  const box=card.querySelector(".runsbox"); if(!box)return;
+  const runs=all.flat().sort((a,b)=>new Date(b.r.created_at)-new Date(a.r.created_at)).slice(0,8);
+  if(!runs.length){ box.textContent="No runs visible (never run, or this repo's PAT lacks Actions: Read)."; return; }
+  box.classList.remove("mut");
+  box.innerHTML="<div class='timeline'><div class='timeline__feed'>"+runs.map(({r,label})=>{
+   const tone=r.status!=="completed"?"held":r.conclusion==="success"?"good":"bad";
+   return "<div class='timeline__entry'><span class='timeline__mark'></span><div class='timeline__head'><span class='timeline__who'>"+esc(label)+"</span> <span class='badge' data-tone='"+tone+"'>"+esc(r.status!=="completed"?r.status:(r.conclusion||"done"))+"</span> <a href='"+esc(r.html_url)+"' target='_blank' rel='noopener'>run →</a></div><div class='timeline__hint'>"+new Date(r.created_at).toLocaleString()+"</div></div>";
+  }).join("")+"</div></div>";
+ });
+ return card;
 }
 function renderMatrixOnly(s){ const old=$("#matrixcard"); if(old){const n=matrix(s);old.replaceWith(n);} }
 
