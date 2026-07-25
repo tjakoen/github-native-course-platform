@@ -495,7 +495,7 @@ function opCard(sc,op){
   if(inp.type==="bool") ctl="<label class='chips__chip'><input type='checkbox' id='"+id+"'"+(inp.def==="true"?" checked":"")+"><span>"+esc(inp.name)+"</span></label>";
   else if(inp.type==="choice") ctl="<label class='field opf'><span class='field__label'>"+esc(inp.name)+"</span><select class='field__select' id='"+id+"'>"+inp.options.map(o=>"<option"+(o===inp.def?" selected":"")+">"+esc(o)+"</option>").join("")+"</select></label>";
   else if(inp.type==="text") ctl="<label class='field opf' style='width:100%'><span class='field__label'>"+esc(inp.name)+"</span><textarea class='field__input fta' rows='3' id='"+id+"'></textarea></label>";
-  else if(inp.name==="only"&&sc.pol) ctl="<label class='field opf'><span class='field__label'>only <span class='mut'>(blank = all)</span></span><select class='field__select' id='"+id+"'><option value=''></option>"+sc.pol.map(a=>"<option>"+esc(a.id)+"</option>").join("")+"</select></label>";
+  else if(inp.activity&&sc.pol) ctl="<label class='field opf'><span class='field__label'>only <span class='mut'>(blank = all)</span></span><select class='field__select' id='"+id+"'><option value=''></option>"+sc.pol.map(a=>"<option>"+esc(a.id)+"</option>").join("")+"</select></label>";
   else ctl="<label class='field opf'><span class='field__label'>"+esc(inp.name)+(inp.hint?" <span class='mut'>"+esc(inp.hint)+"</span>":"")+"</span><input class='field__input' id='"+id+"' value='"+esc(inp.def||"")+"'></label>";
   form.insertAdjacentHTML("beforeend",ctl);
  });
