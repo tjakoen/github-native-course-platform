@@ -1,0 +1,220 @@
+/* crumb/crumb.css — the guided-tour popover. Include ONLY when a page runs CRUMB tours; the
+   lamp visuals come from grain/ai/ai.css (CRUMB reuses that primitive). Tokens only (grain
+   non-negotiable) — the card reads the theme's paper/ink/border/space slots, so it re-skins with
+   the rest of the design system and never hardcodes a color. */
+
+/* A NON-MODAL <dialog> (dialog.show()) so the lit surface stays clickable through the passthrough
+   lamp — so we own its box (native modal centering/backdrop don't apply). It sits above the lamp
+   veil (--z-ai-veil 9000) and the acting label (--z-ai-surface 9002). JS sets left/top. */
+.crumb-pop {
+  position: fixed; margin: 0; inset: auto; z-index: 9100;
+  max-width: min(24rem, calc(100vw - 24px));
+  padding: 0; border: var(--border); border-radius: var(--radius-md);
+  background: var(--paper); color: var(--ink);
+  box-shadow: 0 8px 30px color-mix(in srgb, var(--ink) 24%, transparent);
+  font-family: var(--font-ui, inherit);
+}
+.crumb-pop:not([open]) { display: none; }
+@starting-style { .crumb-pop[open] { opacity: 0; transform: translateY(4px); } }
+.crumb-pop { transition: opacity 0.16s ease, transform 0.16s ease; }
+
+.crumb-pop__head {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  border-bottom: var(--border);
+}
+.crumb-pop__title { font-weight: 600; font-size: var(--text-sm); margin-right: auto; }
+.crumb-pop__count { font-size: var(--text-xs); color: var(--ink-soft, color-mix(in srgb, var(--ink) 55%, transparent)); font-variant-numeric: tabular-nums; }
+.crumb-pop__x {
+  appearance: none; border: 0; background: transparent; color: inherit; cursor: pointer;
+  font-size: var(--text-lg); line-height: 1; padding: 0 var(--space-1); opacity: 0.6;
+}
+.crumb-pop__x:hover { opacity: 1; }
+
+.crumb-pop__body { padding: var(--space-3); display: grid; gap: var(--space-2); }
+.crumb-pop__say { margin: 0; font-size: var(--text-sm); line-height: 1.5; }
+.crumb-pop__review {
+  margin: 0; font-size: var(--text-sm); line-height: 1.5;
+  padding: var(--space-2); border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border-left: 3px solid var(--accent, var(--ink));
+}
+.crumb-pop__verify {
+  margin: 0; font-size: var(--text-xs); line-height: 1.45;
+  color: var(--ink-soft, color-mix(in srgb, var(--ink) 62%, transparent));
+}
+
+.crumb-pop__foot {
+  display: flex; justify-content: flex-end; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+
+/* verification-status chip — CRUMB's own review vocab, deliberately NOT grade. Neutral-by-default;
+   only known-issue and verified carry a color hint (kept subtle, tokenized). */
+.crumb-pop__status {
+  font-size: var(--text-xs); text-transform: lowercase; letter-spacing: 0.01em;
+  padding: 2px var(--space-2); border-radius: var(--radius-pill, 999px);
+  border: var(--border); color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.crumb-pop__status[data-status="verified"] { background: color-mix(in srgb, var(--ok, green) 16%, transparent); }
+.crumb-pop__status[data-status="known-issue"] { background: color-mix(in srgb, var(--warn, orange) 18%, transparent); }
+.crumb-pop__status[data-status="changed"],
+.crumb-pop__status[data-status="new"] { background: color-mix(in srgb, var(--accent, var(--ink)) 12%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .crumb-pop { transition: none; }
+}
+
+/* ============================================================================
+   THE FRAME (B3) — a routed app-shell VARIANT: a fixed top-bar + a combined
+   nav/content sidebar + a bordered viewport. NOT an iframe (PLAN.md); the host
+   page is the real page, read as "framed" via a border edge. The host SHRINKS
+   into the framed viewport (the body rule below) — the chrome wraps AROUND the
+   site, it never covers it. One sidebar component, `data-mode="demo|dev"`
+   flipped live. Tokens only.
+   Sits above grain's lamp veil (--z-ai-veil 9000) so the chrome is clickable
+   while the lit surface stays reachable through the passthrough hole. */
+
+/* the shrink: while the frame is up, the body becomes a fixed box inset by the
+   bar + sidebar, so the whole site lives INSIDE the framed viewport instead of
+   running underneath the chrome. The chrome vars live HERE (not on .crumb-frame)
+   because the body needs them for its own inset and the frame root — a body
+   child — inherits them; one definition, no drift. `height/width: auto` beat a
+   host body that sizes itself (e.g. grain's .app-window-backdrop height:100dvh);
+   a shell that fills the body (height:100%) shrinks with it for free. The frame
+   chrome stays position:fixed and the body carries NO transform, so fixed
+   descendants (grain's lamp veil, lightboxes) keep real viewport coordinates. */
+body[data-crumb-frame] {
+  --crumb-bar-h: 3rem;
+  --crumb-side-w: min(20rem, 82vw);
+  position: fixed;
+  inset: var(--crumb-bar-h) var(--crumb-side-w) 0 0;
+  height: auto; width: auto;
+  overflow: hidden;
+}
+.crumb-frame {
+  font-family: var(--font-ui, inherit);
+}
+
+/* the bordered viewport edge — a pure visual frame around the SHRUNK host box
+   (the same inset the body rule above uses, so it hugs the site exactly).
+   pointer-events:none so it never eats a click meant for a lit surface. */
+.crumb-frame__edge {
+  position: fixed; z-index: 9110; pointer-events: none;
+  inset: var(--crumb-bar-h) var(--crumb-side-w) 0 0;
+  border: 2px solid color-mix(in srgb, var(--accent, var(--ink)) 55%, transparent);
+  border-top: 0;
+}
+
+/* top bar */
+.crumb-frame__bar {
+  position: fixed; z-index: 9120; inset: 0 0 auto 0; height: var(--crumb-bar-h);
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-3);
+  background: var(--paper); color: var(--ink);
+  border-bottom: var(--border);
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+.crumb-frame__title { font-weight: 600; font-size: var(--text-sm); }
+.crumb-frame__count {
+  font-size: var(--text-xs); font-variant-numeric: tabular-nums;
+  color: var(--ink-soft, color-mix(in srgb, var(--ink) 55%, transparent));
+}
+.crumb-frame__x { margin-left: auto; }
+
+/* the demo|dev toggle — a segmented control; the SAME step re-renders on flip. */
+.crumb-frame__modes {
+  display: inline-flex; gap: 2px; padding: 2px;
+  border: var(--border); border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.crumb-frame__mode {
+  appearance: none; border: 0; cursor: pointer;
+  font: inherit; font-size: var(--text-xs); color: var(--ink);
+  padding: 3px var(--space-3); border-radius: var(--radius-pill, 999px);
+  background: transparent; opacity: 0.7;
+}
+.crumb-frame__mode[aria-selected="true"] {
+  background: var(--paper); opacity: 1; font-weight: 600;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+/* the combined nav/content sidebar */
+.crumb-sidebar {
+  position: fixed; z-index: 9120; inset: var(--crumb-bar-h) 0 0 auto;
+  width: var(--crumb-side-w);
+  display: flex; flex-direction: column;
+  background: var(--paper); color: var(--ink);
+  border-left: var(--border);
+  box-shadow: -4px 0 24px color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+/* nav rail — the ordered steps (jump-to) */
+.crumb-sidebar__nav { overflow-y: auto; border-bottom: var(--border); flex: 0 1 auto; }
+.crumb-sidebar__list { list-style: none; margin: 0; padding: var(--space-2); display: grid; gap: 2px; }
+.crumb-sidebar__goto {
+  appearance: none; border: 0; background: transparent; color: inherit; cursor: pointer;
+  width: 100%; text-align: left; font: inherit; font-size: var(--text-sm);
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2); border-radius: var(--radius-sm);
+}
+.crumb-sidebar__goto:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.crumb-sidebar__num {
+  flex: 0 0 auto; width: 1.5rem; height: 1.5rem; display: grid; place-items: center;
+  font-size: var(--text-xs); font-variant-numeric: tabular-nums;
+  border: var(--border); border-radius: var(--radius-pill, 999px);
+  color: var(--ink-soft, color-mix(in srgb, var(--ink) 60%, transparent));
+}
+.crumb-sidebar__label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumb-sidebar__step[data-visited] .crumb-sidebar__num {
+  background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink);
+}
+.crumb-sidebar__step[data-current] .crumb-sidebar__goto {
+  background: color-mix(in srgb, var(--accent, var(--ink)) 12%, transparent);
+}
+.crumb-sidebar__step[data-current] .crumb-sidebar__num {
+  background: var(--accent, var(--ink)); color: var(--paper); border-color: transparent;
+}
+.crumb-sidebar__chip {
+  flex: 0 0 auto; font-size: 0.66rem; text-transform: lowercase; letter-spacing: 0.01em;
+  padding: 1px var(--space-2); border-radius: var(--radius-pill, 999px);
+  border: var(--border); background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.crumb-sidebar__chip[data-status="verified"] { background: color-mix(in srgb, var(--ok, green) 16%, transparent); }
+.crumb-sidebar__chip[data-status="known-issue"] { background: color-mix(in srgb, var(--warn, orange) 18%, transparent); }
+.crumb-sidebar__chip[data-status="changed"],
+.crumb-sidebar__chip[data-status="new"] { background: color-mix(in srgb, var(--accent, var(--ink)) 12%, transparent); }
+
+/* content pane — the current step's prose (+ dev review/verify) */
+.crumb-sidebar__detail {
+  flex: 1 1 auto; overflow-y: auto;
+  padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2);
+}
+.crumb-sidebar__say { margin: 0; font-size: var(--text-sm); line-height: 1.55; }
+.crumb-sidebar__review {
+  margin: 0; font-size: var(--text-sm); line-height: 1.5;
+  padding: var(--space-2); border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border-left: 3px solid var(--accent, var(--ink));
+}
+.crumb-sidebar__verify {
+  margin: 0; font-size: var(--text-xs); line-height: 1.45;
+  color: var(--ink-soft, color-mix(in srgb, var(--ink) 62%, transparent));
+}
+.crumb-sidebar__foot {
+  margin-top: auto; padding-top: var(--space-2);
+  display: flex; justify-content: flex-end; gap: var(--space-2);
+}
+
+/* narrow screens: the sidebar becomes a bottom sheet; the host box + edge inset
+   from the bottom instead of the side (same values on both, they stay glued) */
+@media (max-width: 720px) {
+  body[data-crumb-frame] { --crumb-side-w: 0px; inset: var(--crumb-bar-h) 0 45vh 0; }
+  .crumb-frame__edge { inset: var(--crumb-bar-h) 0 45vh 0; }
+  .crumb-sidebar {
+    inset: auto 0 0 0; width: auto; height: 45vh;
+    border-left: 0; border-top: var(--border);
+    box-shadow: 0 -4px 24px color-mix(in srgb, var(--ink) 16%, transparent);
+  }
+}

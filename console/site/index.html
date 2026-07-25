@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="brioche" data-cmdk-src="" data-cmdk-sprite="vendor/grain/sprite.svg">
+<html lang="en" data-theme="brioche" data-cmdk-src="" data-cmdk-sprite="vendor/grain/sprite.svg" data-crumb-prefix="./crumb">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -8,19 +8,23 @@
 <title>Course Console</title>
 <link rel="stylesheet" href="theme.css">
 <link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="vendor/crumb.css">
 <script type="module" src="vendor/grain/theme-boot.js"></script>
 </head>
 <body>
 <div class="app-shell" data-aside-hidden="true">
   <aside class="app-shell__rail side-rail" id="rail">
     <div class="side-rail__brand"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#spark"></use></svg><span>Course Console</span></div>
+    <div class="side-rail__group" data-surface="rail:global">
     <a class="nav-item" href="#/" data-nav="dash"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#loop"></use></svg><span class="nav-item__label">Dashboard</span></a>
     <a class="nav-item" href="#/flags" data-nav="flags"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#pin"></use></svg><span class="nav-item__label">Flags</span></a>
     <a class="nav-item" href="#/ops" data-nav="ops"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#tasks"></use></svg><span class="nav-item__label">Ops</span></a>
     <a class="nav-item" href="#/reports" data-nav="reports"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#traces"></use></svg><span class="nav-item__label">Reports</span></a>
-    <div class="side-rail__group" id="railClasses"><!-- one nav-item per discovered class --></div>
+    </div>
+    <div class="side-rail__group" id="railClasses" data-surface="rail:classes"><!-- one nav-item per discovered class --></div>
     <div class="side-rail__spacer"></div>
-    <a class="nav-item" href="scanner/"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#send"></use></svg><span class="nav-item__label">Scanner</span></a>
+    <a class="nav-item" href="scanner/" data-surface="rail:scanner"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#send"></use></svg><span class="nav-item__label">Scanner</span></a>
+    <button class="nav-item" type="button" data-crumb-start="first-run" style="border:0;background:none;width:100%;cursor:pointer;font:inherit;text-align:left"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#spark"></use></svg><span class="nav-item__label">Tour</span></button>
     <a class="nav-item" href="#/settings" data-nav="settings"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#settings"></use></svg><span class="nav-item__label">Settings</span></a>
   </aside>
   <div class="app-shell__scrim" data-shell="rail-close"></div>
@@ -28,18 +32,19 @@
     <button class="icon-btn" data-shell="rail-toggle" aria-label="Menu" title="Menu"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#menu"></use></svg></button>
     <nav class="tab-bar" id="ctxTabs"></nav>
     <div class="topbar-ctl">
-      <button class="window-bar__search" data-cmdk-open type="button">Search… <kbd class="kbd">⌘K</kbd></button>
-      <button class="btn" data-size="sm" data-variant="soft" id="reload" title="Re-fetch this view's data from GitHub">↻</button>
+      <button class="window-bar__search" data-cmdk-open type="button" data-surface="topbar:search">Search… <kbd class="kbd">⌘K</kbd></button>
+      <button class="btn" data-size="sm" data-variant="soft" id="reload" title="Re-fetch this view's data from GitHub" data-surface="topbar:refresh">↻</button>
       <button class="btn" data-size="sm" data-variant="soft" id="theme" title="Light/dark">◐</button>
     </div>
   </header>
   <main class="app-shell__main" id="main"><div class="boot">Loading…</div></main>
   <section class="app-shell__console" id="opConsole" hidden></section>
-  <footer class="app-shell__status status-bar" id="statusBar"></footer>
+  <footer class="app-shell__status status-bar" id="statusBar" data-surface="status:writes"></footer>
 </div>
 <script type="module" src="app.mjs"></script>
 <script src="vendor/grain/cmdk.js"></script>
 <script src="vendor/grain/shell.js"></script>
 <script src="vendor/grain/lightbox.js"></script>
+<script type="module" src="vendor/crumb.js"></script>
 </body>
 </html>

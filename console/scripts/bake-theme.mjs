@@ -68,7 +68,7 @@ const GRAIN = [
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const out = path.resolve(HERE, "../site/theme.css");
-const GRAIN_ALL = GRAIN + "\n" + grainFile("styles/cmdk.css") + "\n" + grainFile("styles/lightbox.css");
+const GRAIN_ALL = GRAIN + "\n" + grainFile("styles/cmdk.css") + "\n" + grainFile("styles/lightbox.css") + "\n" + grainFile("ai/ai.css");   // ai.css styles the spotlight lamp the CRUMB tour drives
 fs.writeFileSync(out, GRAIN_ALL);
 console.log(`theme.css baked | ${Math.round(GRAIN_ALL.length / 1024)} KB -> ${out}`);
 
@@ -90,3 +90,21 @@ await esbuild.build({
   outfile: path.resolve(HERE, "../site/vendor/mill.js"),
 });
 console.log("vendored mill renderer -> site/vendor/mill.js");
+
+// CRUMB: bundle the tour client. crumb-live.js imports grain's ai-spotlight by
+// the host-absolute path "/scripts/ai-spotlight.js" (fine on a root-mounted
+// grain app, a 404 under this project-page subpath), so the bundle resolves
+// that specifier to the installed grain package instead. Tour DATA stays in
+// site/crumb/tours/ (host-authored JSON, fetched at runtime via
+// data-crumb-prefix). crumb.css ships alongside.
+const grainSpotlight = fileURLToPath(import.meta.resolve("@tjakoen/grain/scripts/ai-spotlight.js"));
+await esbuild.build({
+  entryPoints: [fileURLToPath(import.meta.resolve("@tjakoen/crumb/crumb-live.js"))],
+  bundle: true, format: "esm", platform: "browser", minify: true,
+  outfile: path.resolve(HERE, "../site/vendor/crumb.js"),
+  plugins: [{ name: "grain-spotlight", setup(b) {
+    b.onResolve({ filter: /^\/scripts\/ai-spotlight\.js$/ }, () => ({ path: grainSpotlight }));
+  } }],
+});
+fs.copyFileSync(fileURLToPath(import.meta.resolve("@tjakoen/crumb/crumb.css")), path.resolve(HERE, "../site/vendor/crumb.css"));
+console.log("vendored crumb tour client -> site/vendor/crumb.js + crumb.css");

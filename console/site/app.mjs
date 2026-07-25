@@ -348,6 +348,12 @@ async function boot(){
   if(errors.length) console.warn("course-console: skipped repos",errors);
   fillRail();
   if(started) dispatch(); else { started=true; start(); }
+  // first-run CRUMB tour: once per browser, only after a working setup exists
+  // (never over the settings drawer). Replay anytime via the rail's Tour button.
+  if(!localStorage.getItem("hau-crumb-first-run-v1")&&window.crumb){
+   localStorage.setItem("hau-crumb-first-run-v1","1");
+   window.crumb.start("first-run");
+  }
  }catch(e){
   if(e instanceof AuthError){ main.innerHTML="<div class='boot'>"+esc(e.message)+"</div>"; openSettings(false); }
   else{ main.innerHTML="<div class='boot'>Discovery failed: "+esc(e.message)+" · <a href='#/settings'>settings</a></div>"; }

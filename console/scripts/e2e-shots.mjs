@@ -85,7 +85,16 @@ async function stub(route) {
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
 await ctx.route("https://api.github.com/**", stub);
+// The shipped tour JSON pins route to the deployed subpath; locally the site is
+// mounted at /, so serve the same tour with route rewritten (deploy-only field).
+await ctx.route("**/crumb/tours/first-run.json", async (route) => {
+  const { readFileSync } = await import("fs");
+  const j = JSON.parse(readFileSync(`${SITE}/crumb/tours/first-run.json`, "utf8"));
+  j.route = "/";
+  route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(j) });
+});
 await ctx.addInitScript(() => {
+  localStorage.setItem("hau-crumb-first-run-v1", "1");   // suppress the auto tour; shot it explicitly below
   localStorage.setItem("grader-ui-config-v1", JSON.stringify({ repos: [
     { url: "github.com/HAU-6APSI/teacher-6apsi-2240-tjakoen", token: "fake" },
     { url: "github.com/HAU-6APSI/teacher-6apsi-2203-tjakoen", token: "fake" },
@@ -112,6 +121,9 @@ await page.goto("http://localhost:8931/#/flags"); await shot("09-flags");
 await page.goto("http://localhost:8931/#/reports"); await shot("11-reports");
 await page.goto("http://localhost:8931/#/reports/6APSI-2240/" + encodeURIComponent("reports/FLAGGED.md")); await shot("12-report-viewer");
 await page.goto("http://localhost:8931/#/"); await page.click("#loadAll").catch(() => {}); await page.waitForTimeout(1500); await shot("13-dashboard-loaded");
+await page.click("[data-crumb-start]"); await page.waitForTimeout(600); await shot("14-tour-intro");
+await page.click('[data-crumb="next"]'); await page.waitForTimeout(600); await shot("15-tour-step1");
+await page.keyboard.press("Escape"); await page.waitForTimeout(300);
 await page.goto("http://localhost:8931/scanner/"); await shot("10-scanner");
 
 await browser.close();

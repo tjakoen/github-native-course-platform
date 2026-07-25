@@ -1,0 +1,15 @@
+{
+  "id": "first-run",
+  "title": "Course Console tour",
+  "route": "/github-native-course-platform/",
+  "mode": "demo",
+  "intro": "Welcome to the Course Console. Everything reads your teacher repos live from GitHub, and nothing is stored outside this browser. Here is a one-minute walk of the shell.",
+  "steps": [
+    { "surface": "rail:global", "say": "The global views. Dashboard is the overview, Flags is the inbox of things the engine wants a human to look at, Ops runs any engine workflow (always dry-run first), and Reports reads the generated reports in place." },
+    { "surface": "rail:classes", "say": "Your classes, grouped by subject. A class's gradebook loads only when you open it, and the badge counts held AI grades waiting for your review." },
+    { "surface": "topbar:search", "say": "Search everything with Cmd or Ctrl-K: views, loaded classes, activities, students, and quick actions." },
+    { "surface": "topbar:refresh", "say": "Data never refetches on its own. This button refreshes the view you are on; the status bar at the bottom shows the API budget and how fresh the loaded data is." },
+    { "surface": "rail:scanner", "say": "The attendance QR scanner is its own page, built for a phone bookmark. Scans commit as CSV batches that the teacher repo's verify workflow checks and receipts." },
+    { "surface": "status:writes", "say": "The rule everything else follows: grades, feedback, and delivery only ever leave this console as intent prompts that you run in a Claude Code session. The console never writes a grade by itself." }
+  ]
+}
