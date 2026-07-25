@@ -18,7 +18,17 @@ export function setRepoTokens(entries) {
     if (e && e.org && e.repo && e.token) TOKENS.set((e.org + "/" + e.repo).toLowerCase(), e.token);
   }
 }
-export const tokenForRepo = (org, repo) => TOKENS.get((org + "/" + repo).toLowerCase()) || DEFAULT_TOKEN;
+export const tokenForRepo = (org, repo) => {
+  const exact = TOKENS.get((org + "/" + repo).toLowerCase());
+  if (exact) return exact;
+  // Submission repos (code + screenshots) aren't in the Settings repo list, only
+  // the teacher repos are. Reuse a token registered for the SAME ORG (the teacher
+  // repo's PAT) so those fetches are authenticated - a per-repo-scoped PAT still
+  // won't read them, but an org-wide one will. Falls back to DEFAULT_TOKEN.
+  const pfx = org.toLowerCase() + "/";
+  for (const [k, t] of TOKENS) if (k.startsWith(pfx)) return t;
+  return DEFAULT_TOKEN;
+};
 function tokenForURL(url) {
   const m = String(url).match(/^\/repos\/([^/]+)\/([^/?#]+)/);
   return m ? tokenForRepo(m[1], m[2]) : DEFAULT_TOKEN;

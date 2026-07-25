@@ -47,7 +47,7 @@ function openSettings(firstRun){
    "<button class='btn rDel' data-size='sm' data-variant='soft' title='Remove this repo' style='flex:none'>×</button>"+
   "</div>";
  p.innerHTML="<button class='x'>×</button><h3>Settings</h3>"+
-  "<div class='muted'>Stored in THIS browser's localStorage only - anyone with access to this browser profile can read the tokens. Give each teacher repo its own fine-grained PAT scoped to just that repo (Contents: Read and write, Metadata: Read) with a short expiry.</div>"+
+  "<div class='muted'>Stored in THIS browser's localStorage only - anyone with access to this browser profile can read the tokens. A PAT scoped to just the teacher repo loads gradebooks and lets you file Intents. To also see <b>student code and screenshots</b> (which live in the submission repos), that repo's PAT needs read access to the whole org - use a classic PAT with <code>repo</code> scope, or a fine-grained PAT with <b>All repositories</b> (Contents: Read). Short expiry recommended.</div>"+
   "<div class='field__label' style='margin-top:12px'>Teacher repos <span class='mut'>- one repo + its own PAT per row</span></div>"+
   "<div id='sRepos'>"+((c.repos.length?c.repos:[{}]).map(rowHTML).join(""))+"</div>"+
   "<button class='btn' data-size='sm' data-variant='soft' id='sAdd' style='margin-top:2px'>+ Add repo</button>"+
