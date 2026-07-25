@@ -22,7 +22,9 @@ instructor can record attendance.
    is its own CSV.
 4. **Verify + summarize.** The `Verify attendance` workflow fires on each batch
    commit: it recomputes the signature on every scan, flags any forgery, writes a
-   per-batch summary, rebuilds the roll-up `attendance/ATTENDANCE.md`, and emits a
+   per-date summary (`attendance/sessions/<date>/<date>.md` - one file per day,
+   every batch of that day combined with a Session column), rebuilds the roll-up
+   `attendance/ATTENDANCE.md`, and emits a
    machine-readable `attendance/summary.json` (per-student verified dates - the
    feed the next step reads).
 5. **Deliver receipts.** The `Publish attendance` workflow runs automatically
