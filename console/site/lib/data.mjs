@@ -6,11 +6,17 @@
 import { discoverSections } from "./config.mjs";
 import { loadSection } from "./gradebook.mjs";
 import { ghText, ghJSON } from "./gh.mjs";
+import { snapGet, snapPut, snapDel } from "./cache.mjs";
 
 let disc = null;                 // { sections: [light sc], errors }
-const cache = new Map();         // key -> { promise, value, loadedAt }
+const cache = new Map();         // key -> { promise, value, loadedAt, revalidating }
 const flagsCache = new Map();    // key -> { value, at }
 const intentsCache = new Map();  // key -> { value, at }
+// The view repaints itself when a stale-while-revalidate refresh lands. The app
+// registers this (guarded to the current route) so data.mjs stays router-free.
+let onRevalidate = () => {};
+export const setRevalidateHook = fn => { onRevalidate = fn || (() => {}); };
+export const isRevalidating = key => { const e = cache.get(key); return !!(e && e.revalidating); };
 
 export async function discover(cfg) {
   disc = await discoverSections(cfg.repos, cfg.labels || {});
@@ -25,21 +31,64 @@ export function sectionCached(key) {
   return e && e.value ? e.value : null;
 }
 
+// Stale-while-revalidate. In-memory value fresh -> return it. In-memory value
+// stale -> return it now AND kick a background reload that repaints when it lands.
+// Nothing in memory -> try the persisted IDB snapshot (paints instantly on a cold
+// tab, revalidating if stale); otherwise block on a live load, as before.
 export function getSection(key) {
   let e = cache.get(key);
-  if (!e) {
-    const sc = findSc(key);
-    if (!sc) return Promise.reject(new Error("unknown section " + key));
-    e = { promise: null, value: null, loadedAt: 0 };
-    e.promise = loadSection(sc).then(v => { e.value = v; e.loadedAt = Date.now(); return v; })
-      .catch(err => { cache.delete(key); throw err; });
-    cache.set(key, e);
+  if (e) {
+    if (e.value && Date.now() - e.loadedAt > STALE_MS) revalidate(key);
+    return e.promise;
   }
+  const sc = findSc(key);
+  if (!sc) return Promise.reject(new Error("unknown section " + key));
+  e = { promise: null, value: null, loadedAt: 0, revalidating: false };
+  cache.set(key, e);
+  e.promise = (async () => {
+    const snap = await snapGet(key).catch(() => null);
+    if (snap && snap.value) {
+      e.value = snap.value; e.loadedAt = snap.loadedAt || 0;
+      if (Date.now() - e.loadedAt > STALE_MS) revalidate(key);
+      return snap.value;
+    }
+    const v = await loadSection(sc);
+    e.value = v; e.loadedAt = Date.now(); snapPut(key, v, e.loadedAt);
+    return v;
+  })().catch(err => { cache.delete(key); throw err; });
   return e.promise;
 }
 
+// background reload for a stale section; on success it swaps the in-memory value,
+// re-persists the snapshot, and asks the current view to repaint
+function revalidate(key) {
+  const e = cache.get(key); if (!e || e.revalidating) return;
+  const sc = findSc(key); if (!sc) return;
+  e.revalidating = true;
+  loadSection(sc)
+    .then(v => { e.value = v; e.loadedAt = Date.now(); snapPut(key, v, e.loadedAt); onRevalidate(key); })
+    .catch(() => {})
+    .finally(() => { e.revalidating = false; });
+}
+
+// Populate the in-memory cache from persisted snapshots at boot so the dashboard
+// and a first class-open paint instantly (each still revalidates when opened).
+// Local IDB reads only - never a network prefetch. Returns how many hydrated.
+export async function hydrateSnapshots() {
+  let n = 0;
+  await Promise.all(sections().map(async sc => {
+    if (cache.has(sc.key)) return;
+    const snap = await snapGet(sc.key).catch(() => null);
+    if (snap && snap.value) {
+      cache.set(sc.key, { promise: Promise.resolve(snap.value), value: snap.value, loadedAt: snap.loadedAt || 0, revalidating: false });
+      n++;
+    }
+  }));
+  return n;
+}
+
 export function invalidate(key) {
-  if (key) { cache.delete(key); flagsCache.delete(key); intentsCache.delete(key); }
+  if (key) { cache.delete(key); flagsCache.delete(key); intentsCache.delete(key); snapDel(key); }
   else { cache.clear(); flagsCache.clear(); intentsCache.clear(); }
 }
 

@@ -65,10 +65,12 @@ async function stub(route) {
   if (rest.startsWith("/contents/grader/assignments.json")) return wantsRaw ? raw(ASSIGN) : json({ content: b64(ASSIGN), sha: "sha1" });
   if (rest.startsWith("/contents/gradebook/grades.csv")) return wantsRaw ? raw(gradesCsv(section)) : json({ content: b64(gradesCsv(section)), sha: "s" });
   if (rest.startsWith("/git/trees/")) {
-    const tree = STUDENTS.filter(([, , gh]) => gh !== "beatan" && gh !== "preyes").map(([, , gh]) => ({ type: "blob", path: `gradebook/notes/m3a1/m3a1-${section}-${gh}.md` }));
+    const tree = STUDENTS.filter(([, , gh]) => gh !== "beatan" && gh !== "preyes").map(([, , gh]) => ({ type: "blob", path: `gradebook/notes/m3a1/m3a1-${section}-${gh}.md`, sha: `notesha-${section}-${gh}` }));
     ["m1-basics", "m2-react", "m3-styling", "m4-backend"].forEach(u => tree.push({ type: "tree", path: `content/${u}` }, { type: "blob", path: `content/${u}/README.md` }));
     return json({ tree });
   }
+  // F2: notes are now fetched by immutable blob sha (/git/blobs/<sha>), not by path.
+  if (rest.startsWith("/git/blobs/")) return route.fulfill({ status: 200, contentType: "text/plain", headers: { etag: '"' + p + '"' }, body: NOTE });
   if (rest.startsWith("/contents/gradebook/notes/")) return wantsRaw ? raw(NOTE) : json({ content: b64(NOTE) });
   if (rest.startsWith("/contents/attendance/summary.json")) return wantsRaw ? raw(SUMMARY(section)) : json({ content: b64(SUMMARY(section)) });
   if (rest.startsWith("/contents/gradebook/FLAGS.md")) return wantsRaw ? raw("- m1a1-" + section + "-dupA and -dupB share studentNumber 20250009 - resolve by hand\n") : json({ content: b64("x") });

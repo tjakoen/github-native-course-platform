@@ -39,11 +39,18 @@ fetched live from `api.github.com` in your browser.
   first visit; the Tour button replays it anytime.
 - **Topbar**: per-class tabs when you're inside a class (Overview, Gradebook,
   Activities, Students, AI Review, Attendance, Ops), a global search box
-  (**Cmd/Ctrl-K**), the **↻ refresh** button (re-fetches the current view's
-  data from GitHub), and a light/dark toggle.
+  (**Cmd/Ctrl-K**), the **↻ refresh** button (drops the cached snapshot and
+  re-fetches the current view from GitHub), and a light/dark toggle.
 - **Status bar** (bottom): remaining GitHub API budget, how old the current
-  view's data is (and whether it's stale enough to warrant a refresh), and
-  how many review decisions are sitting in this browser.
+  view's data is (loaded just now / N min ago, "stale" past ~10 min, or
+  "showing cached … refreshing…" while a background refresh runs), and how
+  many review decisions are sitting in this browser.
+
+Gradebooks are cached in this browser (IndexedDB) so reopening a class - or
+reloading the page - paints instantly from the last snapshot, then refreshes in
+the background; unchanged feedback notes never re-download (they are fetched by
+immutable content hash). Nothing leaves the machine. Clear it in Settings ->
+Cached data, or by removing all repos; it is also swept after 7 days.
 - **Docked ops feed**: appears at the bottom whenever you dispatch a
   workflow from Activities or Ops, and streams dry-run/execute status inline
   without leaving the page.

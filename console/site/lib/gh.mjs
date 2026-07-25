@@ -36,14 +36,26 @@ function tokenForURL(url) {
 
 export class AuthError extends Error {}
 
-// in-memory ETag cache: a conditional GET (If-None-Match) that comes back 304
-// Not Modified does not count against the primary REST rate limit
+import { httpGet, httpPut, httpTouch, isMedia } from "./cache.mjs";
+
+// Two-layer ETag cache. HOT: this in-memory Map (per tab). COLD: IndexedDB
+// (cache.mjs), so a conditional GET can revalidate cheaply even on the FIRST load
+// of a fresh tab. A 304 Not Modified still costs one request against the primary
+// REST rate limit (contrary to older lore) - it just skips re-downloading the
+// body. The real saving is the immutable fast path: a /git/blobs/<sha> URL never
+// changes, so once it is cached we serve it with NO network request at all.
 const CACHE = new Map(); // url|accept -> { etag, body }
 export const rate = { remaining: null, limit: null };
 
 async function req(url, accept, parse) {
   const key = url + "|" + accept;
-  const hit = CACHE.get(key);
+  let hit = CACHE.get(key);
+  if (!hit) {
+    const rec = await httpGet(key);   // cold layer: survives reloads and tabs
+    if (rec) { hit = { etag: rec.etag, body: rec.body }; CACHE.set(key, hit); }
+  }
+  // immutable sha-addressed blob: serve straight from cache, no request
+  if (hit && isMedia(key)) return hit.body;
   const headers = {
     Authorization: "Bearer " + tokenForURL(url),
     Accept: accept,
@@ -55,12 +67,12 @@ async function req(url, accept, parse) {
     rate.remaining = +r.headers.get("x-ratelimit-remaining");
     rate.limit = +r.headers.get("x-ratelimit-limit");
   }
-  if (r.status === 304 && hit) return hit.body;
+  if (r.status === 304 && hit) { httpTouch(key); return hit.body; }
   if (r.status === 401) throw new AuthError("GitHub rejected the token (401). Check it in Settings.");
   if (!r.ok) return null;
   const body = await parse(r);
   const etag = r.headers.get("etag");
-  if (etag) CACHE.set(key, { etag, body });
+  if (etag) { CACHE.set(key, { etag, body }); httpPut(key, etag, body); }
   return body;
 }
 

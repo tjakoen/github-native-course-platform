@@ -5,12 +5,13 @@
 // thing: Intent prompt files into gradebook/intents/ (executed by Claude Code
 // locally - "run pending intents").
 import { AuthError, rate, ghJSON as ghJSON2, ghText } from "./lib/gh.mjs";
+import { clearAll, sweep } from "./lib/cache.mjs";
 import { loadConfig, saveConfig } from "./lib/store.mjs";
 import { discoverSections, parseRepoURL } from "./lib/config.mjs";
 import { shotsFor, shotsCached } from "./lib/shots.mjs";
 import { codeFor, codeCached } from "./lib/code.mjs";
 import { route, start, go, dispatch, beforeEach, fallback } from "./lib/router.mjs";
-import { discover, sections, findSc, getSection, sectionCached, invalidate, ageOf, STALE_MS, getFlagsFiles, discoErrors, getPendingIntents, invalidateIntents } from "./lib/data.mjs";
+import { discover, sections, findSc, getSection, sectionCached, invalidate, ageOf, STALE_MS, getFlagsFiles, discoErrors, getPendingIntents, invalidateIntents, hydrateSnapshots, setRevalidateHook, isRevalidating } from "./lib/data.mjs";
 import { missingWork, workspaceInfo } from "./lib/students.mjs";
 import { initSearch } from "./lib/search-index.mjs";
 import { OPS } from "./lib/ops-catalog.mjs";
@@ -57,7 +58,10 @@ function settingsFormHTML(c){
   "<button class='btn' data-size='sm' data-variant='soft' id='sAdd' style='margin-top:2px'>+ Add repo</button>"+
   "<div style='display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap'><button class='btn' data-size='sm' id='sSave'>Save & load</button> <button class='btn' data-size='sm' data-variant='soft' id='sTest'>Test connection</button> <span class='mut' id='sMsg' style='font-size:12px'></span></div>"+
   "<div class='field__label' style='margin-top:16px'>Review decisions <span class='mut'>- browser-local; back them up</span></div>"+
-  "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'><button class='btn' data-size='sm' data-variant='soft' id='sExpDec'>↓ Export</button> <button class='btn' data-size='sm' data-variant='soft' id='sImpDec'>↑ Import</button><input type='file' id='sImpFile' accept='application/json,.json' style='display:none'></div>";
+  "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'><button class='btn' data-size='sm' data-variant='soft' id='sExpDec'>↓ Export</button> <button class='btn' data-size='sm' data-variant='soft' id='sImpDec'>↑ Import</button><input type='file' id='sImpFile' accept='application/json,.json' style='display:none'></div>"+
+  "<div class='field__label' style='margin-top:16px'>Cached data <span class='mut'>- gradebooks kept in this browser for fast reloads</span></div>"+
+  "<div class='muted' data-size='sm'>To make reloads fast, gradebook data (including student names and numbers) is cached in this browser's IndexedDB. It never leaves the machine, is swept after 7 days, and is wiped when you remove all repos. Clear it now if you are on a shared computer.</div>"+
+  "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px'><button class='btn' data-size='sm' data-variant='soft' id='sClearCache'>Clear cached data</button> <span class='mut' id='sCacheMsg' style='font-size:12px'></span></div>";
 }
 function wireSettingsForm(scope,c,close,firstRun){
  const rowHTML=()=>"<div class='repoRow' style='display:flex;gap:8px;margin-bottom:8px;align-items:flex-start'>"+
@@ -73,6 +77,7 @@ function wireSettingsForm(scope,c,close,firstRun){
  wireDel();
  scope.querySelector("#sAdd").onclick=()=>{ scope.querySelector("#sRepos").insertAdjacentHTML("beforeend",rowHTML()); wireDel(); };
  scope.querySelector("#sExpDec").onclick=exportDecisions;
+ scope.querySelector("#sClearCache").onclick=async b=>{ const btn=b.currentTarget; btn.disabled=true; const m=scope.querySelector("#sCacheMsg"); if(m)m.textContent="Clearing…"; await clearAll(); invalidate(); if(m)m.textContent="Cleared ✓ - reopen a class to reload from GitHub."; btn.disabled=false; };
  scope.querySelector("#sImpDec").onclick=()=>scope.querySelector("#sImpFile").click();
  scope.querySelector("#sImpFile").onchange=e=>{const f=e.target.files[0];if(f)importDecisions(f,()=>dispatch());e.target.value="";};
  scope.querySelector("#sTest").onclick=async()=>{
@@ -142,7 +147,7 @@ function setTabs(key,mode,s){
 function statusLine(key){
  const bits=[];
  if(rate.remaining!=null) bits.push("<span"+(rate.remaining<500?" style='color:var(--color-danger,inherit);font-weight:var(--font-weight-semibold)'":"")+">API "+rate.remaining+"/"+rate.limit+"</span>");
- if(key){ const age=ageOf(key); if(age!=null) bits.push("<span>"+esc(key)+" · loaded "+(age<6e4?"just now":Math.round(age/6e4)+" min ago")+(age>STALE_MS?" · stale (↻ to refresh)":"")+"</span>"); }
+ if(key){ const age=ageOf(key); if(age!=null){ const reval=isRevalidating(key); bits.push("<span>"+esc(key)+" · "+(reval?"showing cached ":"loaded ")+(age<6e4?"just now":Math.round(age/6e4)+" min ago")+(reval?" · refreshing…":(age>STALE_MS?" · stale (↻ to refresh)":""))+"</span>"); } }
  bits.push("<span>"+Object.keys(DEC).length+" decisions</span>");
  bits.push("<span>writes go through intents</span>");
  $("#statusBar").innerHTML=bits.join(" · ");
@@ -157,6 +162,21 @@ function fillRail(){
    "<span class='nav-item__label'>"+esc(sc.section)+(sc.courseCode?" · "+esc(sc.courseCode):"")+"</span>"+
    "<span class='badge navheld' data-tone='held' hidden></span></a>").join("")+"</div>"
  ).join("");
+ $("#railClasses").querySelectorAll("[data-classnav]").forEach(a=>wirePrefetch(a,a.dataset.classnav));
+}
+// Warm a section on intent-to-open (rail/card hover dwell or pointer-down) so the
+// click paints from cache. getSection dedupes, so a hover then click is one load.
+// Guarded: never for an already-cached class, never when the rate budget is low.
+function prefetch(key){
+ if(sectionCached(key)) return;
+ if(rate.remaining!=null&&rate.remaining<1000) return;
+ getSection(key).then(s=>railHeld(key,heldUnreviewed(s))).catch(()=>{});
+}
+function wirePrefetch(elm,key){
+ let t=null;
+ elm.addEventListener("pointerenter",()=>{ t=setTimeout(()=>prefetch(key),150); });   // 150ms dwell = intent, not a fly-over
+ elm.addEventListener("pointerleave",()=>{ if(t){clearTimeout(t);t=null;} });
+ elm.addEventListener("pointerdown",()=>prefetch(key));
 }
 function railHeld(key,held){
  const b=document.querySelector("[data-classnav='"+key.replace(/'/g,"")+"'] .navheld");
@@ -316,7 +336,7 @@ function dashView(){
  setTabs(null); statusLine(null);
  main.innerHTML="";
  const w=el("div","wrap");
- w.innerHTML="<h1>My classes</h1><p class='lede' data-size='sm'>Live from GitHub. A class's gradebook loads when you open it; nothing is stored outside this browser.</p>";
+ w.innerHTML="<h1>My classes</h1><p class='lede' data-size='sm'>Live from GitHub. A class's gradebook loads when you open it and is cached in this browser for fast reloads; nothing leaves this machine. Clear it anytime in <a href='#/settings'>Settings</a>.</p>";
  // Discovery drops a repo it cannot read (typo'd URL, expired/under-scoped PAT)
  // instead of failing the whole load; without this banner that section just is
  // not there, silently.
@@ -339,6 +359,7 @@ function dashView(){
   c.innerHTML="<h2>"+esc(sc.subject)+" · "+esc(sc.section)+(sc.courseCode?" <span class='mut'>("+esc(sc.courseCode)+")</span>":"")+"</h2><div class='mut'>"+esc(sc.org)+"</div>"+
    (s?"<div class='stats stats--mini'>"+[["Students",s.stats.students],["To review",heldUnreviewed(s)],["Activities",s.stats.activities]].map(([l,n])=>"<div class='stat'><span class='stat__value'>"+n+"</span><span class='stat__label'>"+l+"</span></div>").join("")+"</div>"
      :"<div class='mut'>"+sc.pol.length+" activities · open to load</div>");
+  wirePrefetch(c,sc.key);
   return c;
  };
  sections().forEach(sc=>grid.append(cardFor(sc)));
@@ -428,6 +449,7 @@ beforeEach(()=>{ setNav(); if(detailKey){document.removeEventListener("keydown",
 
 let started=false;
 async function boot(){
+ sweep();   // one-shot: drop cache entries past their age budget (fire-and-forget)
  const c=loadConfig();
  if(!c){ main.innerHTML="<div class='boot'><h1>Course Console</h1>Live from GitHub - nothing loads until you connect your teacher repos and their tokens.</div>"; openSettings(true); return; }
  main.innerHTML="<div class='boot'>Discovering classes…</div>";
@@ -438,6 +460,12 @@ async function boot(){
    return;
   }
   if(errors.length) console.warn("course-console: skipped repos",errors);
+  // Paint a stale-while-revalidate repaint onto the current view when a background
+  // refresh lands (only if we're still looking at that class or the dashboard).
+  setRevalidateHook(key=>{ const k=curKey(); if(k===key||!k){ if(k===key)railHeld(key,heldUnreviewed(sectionCached(key)||undefined)); dispatch(); } });
+  // Hydrate persisted snapshots so the dashboard + a first class-open paint from
+  // cache instantly (each still revalidates when actually opened).
+  await hydrateSnapshots().catch(()=>0);
   fillRail();
   if(started) dispatch(); else { started=true; start(); }
   // first-run CRUMB tour: once per browser, only after a working setup exists
@@ -557,6 +585,10 @@ async function runOp(sc,op,inputs,executing,preConfirmed){
   const stat=line.querySelector(".opstat");
   const done=await pollRun(sc.org,sc.repo,run.id,r=>{ stat.textContent=r.status==="completed"?(r.conclusion||"done"):r.status; });
   if(done) stat.innerHTML="<span class='badge' data-tone='"+(done.conclusion==="success"?"good":"bad")+"'>"+esc(done.conclusion||"done")+"</span>";
+  // A real (execute) write that finished likely changed the gradebook/attendance/
+  // assignments this section reads - drop its cached snapshot so the next open is
+  // fresh. Dry runs change nothing, so leave the cache alone.
+  if(executing&&done&&done.conclusion==="success") invalidate(sc.key);
   return done?(done.conclusion||"done"):"dispatched";
  }catch(e){ line.innerHTML+=" <span class='badge' data-tone='bad'>failed</span> "+esc(e.message); return "error"; }
 }
@@ -688,13 +720,13 @@ function renderActivities(s,w){
   tr.querySelector(".tglLock").onclick=async()=>{
    const a=s.assignments.find(x=>x.id===aid);
    const ok=await editAssignments(sc,es=>{const e=es.find(x=>x.id===aid);if(!e)return null;e.locked=!a.locked;return (a.locked?"Unlock ":"Lock ")+aid;},(a.locked?"Unlock ":"Lock ")+aid+" - "+s.key).catch(err=>{alert(err.message);return false;});
-   if(ok){ invalidate(s.key); dispatch(); }
+   if(ok){ afterAssignmentsEdit(s.key,ok); }
   };
   tr.querySelector(".tglPub").onclick=async()=>{
    const a=s.assignments.find(x=>x.id===aid);
    const warn=a.aiGraded&&!a.publish?" (AI-graded: finalize its reviews first)":"";
    const ok=await editAssignments(sc,es=>{const e=es.find(x=>x.id===aid);if(!e)return null;e.publish=!a.publish;return (a.publish?"Hold back ":"Publish ")+aid+warn;},(a.publish?"Hold back ":"Publish ")+aid+" - "+s.key).catch(err=>{alert(err.message);return false;});
-   if(ok){ invalidate(s.key); dispatch(); }
+   if(ok){ afterAssignmentsEdit(s.key,ok); }
   };
   tr.querySelector(".actSweep").onclick=()=>{
    const op=OPS.find(o=>o.file==="grade.yml");
@@ -796,6 +828,7 @@ function renderActivityNew(s,w){
   if(err){ msg.textContent=err; return; }
   const ok=await editAssignments(sc,es=>{ if(es.find(x=>x.id===e.id))return null; es.push(e); return "Add activity "+e.id; },"Add "+e.id+" - "+s.key).catch(x=>{msg.textContent=x.message;return false;});
   if(!ok){ if(!msg.textContent)msg.textContent="Not committed."; return; }
+  const scp=findSc(s.key); if(scp&&Array.isArray(ok))scp.pol=ok;
   invalidate(s.key);
   msg.textContent="Committed ✓";
   const nxt=card.querySelector("#naNext");
@@ -815,6 +848,11 @@ function renderActivityNew(s,w){
 // Legacy shim: views call render() after a decision write or theme flip; it
 // re-dispatches the current route (cached section -> instant repaint).
 function render(){ if(started) dispatch(); }
+
+// After an assignments.json commit: PATCH the discovery-cached sc.pol in memory
+// (the trap - loadSection prefers sc.pol, so a stale one would mask the edit),
+// invalidate the section (drops the snapshot + in-memory value), and repaint.
+function afterAssignmentsEdit(key,after){ const scp=findSc(key); if(scp&&Array.isArray(after))scp.pol=after; invalidate(key); dispatch(); }
 
 // Class OVERVIEW (the landing tab, #/c/:key): the at-a-glance read. Tiles,
 // at-risk, Canvas preview, engine flags, recent runs, Reports. The full-width

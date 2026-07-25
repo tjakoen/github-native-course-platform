@@ -3,6 +3,8 @@
 // token can't take down every section. Review decisions live under their own
 // long-standing key (hau-grade-decisions-v1) in app.mjs, byte-compatible with the
 // retired local dashboard so exported backups import cleanly.
+import { clearAll } from "./cache.mjs";
+
 const CKEY = "grader-ui-config-v1"; // legacy key name kept on purpose: same-origin carry-over from the old grader-ui Pages path
 
 // Old shape was { repos: ["url", ...], githubToken: "one token for all" }.
@@ -28,6 +30,9 @@ export function saveConfig(c) {
   localStorage.setItem(CKEY, JSON.stringify({ repos, labels: c.labels || {} }));
 }
 
+// Sign-out: drop the repos+tokens AND wipe the persistent cache, so no gradebook
+// bodies (PII) linger at rest once the repos are gone.
 export function clearConfig() {
   localStorage.removeItem(CKEY);
+  clearAll();
 }

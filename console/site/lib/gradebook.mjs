@@ -35,7 +35,12 @@ export async function loadSection(sc) {
   const repoInfo = await ghJSON(base);
   const branch = repoInfo?.default_branch || "main";
   const tree = await ghJSON(`${base}/git/trees/${branch}?recursive=1`);
-  const noteSet = new Set((tree?.tree || []).filter(x => x.type === "blob" && x.path.startsWith("gradebook/notes/")).map(x => x.path));
+  // path -> blob sha for every note. Fetching a note by its blob SHA (below)
+  // instead of by path is the request-count win: a /git/blobs/<sha> URL is
+  // immutable, so an UNCHANGED note is served straight from cache with no network
+  // call; only notes whose sha moved (edited drafts) actually refetch.
+  const noteSha = new Map();
+  for (const x of (tree?.tree || [])) if (x.type === "blob" && x.path.startsWith("gradebook/notes/")) noteSha.set(x.path, x.sha);
   const notePath = (id, repo) => `gradebook/notes/${id}/${repo}.md`;
 
   const wanted = [];
@@ -43,11 +48,12 @@ export async function loadSection(sc) {
     const f = parse(csv[i]); if (!f[gi("repo")]) continue;
     const id = f[gi("assignment")]; if (!policy.get(id)) continue;
     const np = notePath(id, f[gi("repo")]);
-    if (noteSet.has(np)) wanted.push(np);
+    if (noteSha.has(np)) wanted.push(np);
   }
   const noteContents = new Map();
   await pool([...new Set(wanted)], 8, async np => {
-    const t = await ghText(`${base}/contents/${encodeURI(np)}`);
+    const sha = noteSha.get(np); if (!sha) return;
+    const t = await ghText(`${base}/git/blobs/${sha}`);
     if (t != null) noteContents.set(np, t);
   });
 

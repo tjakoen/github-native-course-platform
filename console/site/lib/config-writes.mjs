@@ -96,7 +96,7 @@ export async function editAssignments(sc, mutator, title) {
 
     try {
       await putFile(sc.org, sc.repo, "grader/assignments.json", afterText, ":wrench: " + summary + " (via Course Console)", j.sha);
-      return true;
+      return after;   // the committed array (truthy) so the caller can patch the cached sc.pol
     } catch (e) {
       if (/409|does not match/i.test(e.message)) continue;   // sha race: refetch, re-diff, re-ask
       throw e;
