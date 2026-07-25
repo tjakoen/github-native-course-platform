@@ -127,9 +127,10 @@ await page.waitForTimeout(400); await page.evaluate(() => { const m = document.g
 // (for a held/AI cell) links into the review detail. Click the m3a1 held cell.
 await page.evaluate(() => { const td = [...document.querySelectorAll("td.cell[data-a='m3a1']")].find(x => x.textContent.trim() && x.textContent.includes("/")); if (td) td.click(); });
 await page.waitForTimeout(500);
-console.log("openNote halves:", await page.evaluate(() => document.querySelectorAll(".drawer .notehalf").length), "· review link:", await page.evaluate(() => !!document.querySelector(".drawer .dp a[href*='/review/']")));
+// Phase E5: drawers are native <dialog class="drawer-modal"> now (focus-trapped).
+console.log("openNote halves:", await page.evaluate(() => document.querySelectorAll(".drawer-modal .notehalf").length), "· review link:", await page.evaluate(() => !!document.querySelector(".drawer-modal .dp a[href*='/review/']")), "· is a dialog:", await page.evaluate(() => !!document.querySelector("dialog.drawer-modal[open]")));
 await shot("02d-opennote");
-await page.evaluate(() => document.querySelectorAll(".drawer").forEach(d => d.remove()));
+await page.evaluate(() => document.querySelectorAll(".drawer,.drawer-modal").forEach(d => d.remove()));
 // Handoff button: open the apply-grades prompt drawer (the #prompt button lives
 // on the Gradebook tab now), verify the "Open in Claude" trigger renders, its
 // source resolves to the live prompt, encoding survives nasty input, and flag if
@@ -154,11 +155,25 @@ const handoff = await page.evaluate(() => {
 });
 console.log("handoff:", JSON.stringify(handoff));
 await shot("02c-handoff-drawer");
-await page.evaluate(() => document.querySelectorAll(".drawer").forEach(d => d.remove()));
+await page.evaluate(() => document.querySelectorAll(".drawer,.drawer-modal").forEach(d => d.remove()));
+// Phase E1: Activities lock/deliver are b-switch STATES (not verb buttons), each
+// row carries a lifecycle Stage chip, and a per-row scaffold button resumes the
+// New-activity wizard after a refresh.
 await page.goto("http://localhost:8931/#/c/6APSI-2240/activities"); await shot("03-activities");
+console.log("activities switches:", await page.evaluate(() => document.querySelectorAll("table.matrix .switch").length), "· stage col:", await page.evaluate(() => [...document.querySelectorAll("table.matrix th")].some(h => h.textContent === "Stage")), "· delivered col:", await page.evaluate(() => [...document.querySelectorAll("table.matrix th")].some(h => h.textContent === "Delivered")), "· scaffold btn:", await page.evaluate(() => !!document.querySelector(".actScaffold")), "· materialCard reuse:", await page.evaluate(() => !!document.querySelector(".unitpick")));
 await page.goto("http://localhost:8931/#/c/6APSI-2240/activities/new"); await shot("03b-activity-new");
+// Phase E2: Students name is a real link (keyboard), headers sort, at-risk +
+// delivered columns from loaded data.
 await page.goto("http://localhost:8931/#/c/6APSI-2240/students"); await shot("04-students");
+console.log("students name link:", await page.evaluate(() => !!document.querySelector("table.matrix td.stu a")), "· sortable headers:", await page.evaluate(() => document.querySelectorAll("th.sortable").length), "· at-risk col:", await page.evaluate(() => [...document.querySelectorAll("table.matrix th")].some(h => h.textContent === "At risk")));
 await page.goto("http://localhost:8931/#/c/6APSI-2240/students/20250001"); await shot("05-profile");
+console.log("profile review link:", await page.evaluate(() => !!document.querySelector(".wrap table.matrix a[href*='/review/']")));
+// 20250003 is at-risk (1/3 sessions): the profile shows the alert strip.
+await page.goto("http://localhost:8931/#/c/6APSI-2240/students/20250003"); await page.waitForTimeout(400);
+console.log("profile alert strip (at-risk student):", await page.evaluate(() => [...document.querySelectorAll(".wrap h2")].some(h => h.textContent.includes("At risk"))));
+// Phase E3: attendance emphasizes at-risk rows (warn badge, not muted) + row links.
+await page.goto("http://localhost:8931/#/c/6APSI-2240/attendance"); await page.waitForTimeout(500);
+console.log("attendance warn emphasis:", await page.evaluate(() => !!document.querySelector("#attmatrix .badge[data-tone='warn']")), "· row profile link:", await page.evaluate(() => !!document.querySelector("#attmatrix td.stu a")));
 // Phase D1: AI Review stage header (stepper + one contextual primary + overflow).
 await page.goto("http://localhost:8931/#/c/6APSI-2240/review"); await shot("06-review");
 console.log("review stepper steps:", await page.evaluate(() => document.querySelectorAll(".stepper__step").length), "(want 4)");
@@ -178,6 +193,8 @@ await page.goto("http://localhost:8931/#/c/6APSI-2240/ops"); await shot("08-ops"
 await page.locator(".opcard .opform .btn").first().click().catch(() => {});
 await page.waitForTimeout(900);
 console.log("app-shell data-console-open:", await page.evaluate(() => document.querySelector(".app-shell")?.hasAttribute("data-console-open")));
+// Phase E6: bool gate rides a labelled switch; RUN is pinned (margin-left:auto).
+console.log("E6 ops bool-as-switch:", await page.evaluate(() => !!document.querySelector(".opform .switch")), "· RUN pinned:", await page.evaluate(() => !!document.querySelector(".opform .oprunbtn")));
 await shot("08b-ops-feed");
 // Phase C redirects: retired global #/flags and #/reports fold into the Dashboard;
 // #/ops/:key redirects into the class tab. Assert each lands where expected.
@@ -190,6 +207,13 @@ await page.goto("http://localhost:8931/#/reports/6APSI-2240/" + encodeURICompone
 // Real Settings page (no longer a drawer over a blank page).
 await page.goto("http://localhost:8931/#/settings"); await shot("09-settings");
 await page.goto("http://localhost:8931/#/"); await page.click("#loadAll").catch(() => {}); await page.waitForTimeout(1500); await shot("13-dashboard-loaded");
+// Phase E3: the Dashboard at-risk alert deep-links into Students with the facet
+// pre-applied (one-shot stuFacet). Click it and confirm the checkbox is checked.
+const atriskLink = await page.$("[data-atrisk]");
+if (atriskLink) { await atriskLink.click(); await page.waitForTimeout(700);
+  console.log("E3 at-risk deep-link -> Students facet applied:", await page.evaluate(() => document.querySelector("#stuFacets input[value='atrisk']")?.checked));
+} else console.log("E3 at-risk deep-link: (no at-risk alert in loaded fixture)");
+await page.goto("http://localhost:8931/#/");
 await page.click("[data-crumb-start]"); await page.waitForTimeout(600); await shot("14-tour-intro");
 await page.click('[data-crumb="next"]'); await page.waitForTimeout(600); await shot("15-tour-step1");
 await page.keyboard.press("Escape"); await page.waitForTimeout(300);

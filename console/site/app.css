@@ -35,7 +35,11 @@ button.tab:disabled{opacity:.4;cursor:not-allowed}
 .matrix td.stu,.matrix th.stu{position:sticky;left:0;background:var(--paper);z-index:1;max-width:230px;overflow:hidden;text-overflow:ellipsis}
 .matrix th.stu{z-index:3;background:var(--paper-2)}
 .cell{cursor:pointer;text-align:center;font-variant-numeric:tabular-nums}
-.cell:hover{outline:2px solid var(--color-accent);outline-offset:-2px}
+.cell:hover,.cell:focus-visible{outline:2px solid var(--color-accent);outline-offset:-2px}
+/* sortable column headers (Students) — keyboard-operable, so show the affordance */
+.matrix th.sortable{cursor:pointer;user-select:none}
+.matrix th.sortable:hover{color:var(--color-accent)}
+.matrix th.sortable:focus-visible{outline:2px solid var(--color-accent);outline-offset:-2px}
 tr[data-s]{cursor:pointer}
 /* status hues on grain's badge — tone is a data-attribute, hue is the documented exception */
 .badge[data-tone]{white-space:nowrap}
@@ -45,6 +49,8 @@ tr[data-s]{cursor:pointer}
 .badge[data-tone=held]{color:var(--held);border-color:var(--held)}
 .badge[data-tone=quiz]{color:var(--tk);border-color:var(--tk)}
 .badge[data-tone=muted]{color:var(--color-muted)}
+/* override decision — accent hue, distinct from the AI-lane "held" purple */
+.badge[data-tone=ov]{color:var(--color-accent);border-color:var(--color-accent)}
 .mut{color:var(--color-muted)}.rt{text-align:right}.center{text-align:center}
 .pill{font-size:var(--text-xs);color:var(--color-muted);font-weight:var(--font-weight-regular)}
 .tot{font-weight:var(--font-weight-bold);font-variant-numeric:tabular-nums}
@@ -59,6 +65,12 @@ input.num{width:4.5rem;flex:none}
 .drawer{position:fixed;inset:0;background:color-mix(in srgb,var(--ink) 45%,transparent);display:none;z-index:50}
 .drawer.on{display:block}
 .dp{position:absolute;right:0;top:0;height:100%;width:min(720px,94vw);background:var(--paper);border-left:1px solid var(--color-line);overflow:auto;padding:var(--space-5)}
+/* the same side-sheet as a native <dialog> (showModal traps focus, Escape fires
+   cancel, ::backdrop dims): the dialog element IS the right sheet, so the inner
+   .dp drops its absolute positioning and just carries the padding. */
+dialog.drawer-modal{position:fixed;margin:0;inset:0 0 0 auto;height:100dvh;max-height:100dvh;width:min(720px,94vw);max-width:96vw;border:0;border-left:1px solid var(--color-line);background:var(--paper);color:inherit;padding:0;overflow:auto;z-index:50}
+dialog.drawer-modal::backdrop{background:color-mix(in srgb,var(--ink) 45%,transparent)}
+dialog.drawer-modal .dp{position:static;right:auto;top:auto;width:auto;height:auto;min-height:100%;border-left:0;box-sizing:border-box}
 .dp h3{margin:0 0 var(--space-1)}
 .dp .x{float:right;cursor:pointer;color:var(--color-muted);font-size:var(--text-xl);border:0;background:none}
 .dp.wide{width:min(1600px,90vw)}
@@ -151,7 +163,13 @@ textarea.fta.mono{font-family:var(--font-mono);font-size:var(--text-xs);line-hei
 .ophead .oprun{margin-left:auto}
 .opdesc{margin:var(--space-1) 0}
 .opform{display:flex;gap:var(--space-2);align-items:flex-end;flex-wrap:wrap}
-.opform .opf{margin:0;min-width:140px}
+/* cap field widths so a lone text/choice input does not flex to an absurd width */
+.opform .opf{margin:0;min-width:140px;max-width:24rem}
+.opform .opf[style*="width:100%"]{flex:1 1 100%;max-width:none}
+/* the bool gate rides a switch; align it to the field baselines */
+.opform .opsw{align-self:center}
+/* pin RUN to the end of its line instead of letting it wander after the inputs */
+.opform .oprunbtn{margin-left:auto;align-self:flex-end}
 .confirm-dialog{border:1px solid var(--color-line);border-radius:var(--radius-md);background:var(--paper);color:inherit;padding:var(--space-4);max-width:min(640px,92vw);max-height:85vh;display:flex;flex-direction:column}
 .confirm-dialog::backdrop{background:rgb(0 0 0/.35)}
 .confirm-dialog h3{margin:0 0 var(--space-2)}

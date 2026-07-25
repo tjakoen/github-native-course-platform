@@ -98,17 +98,22 @@ prompt** and **Deliver to Canvas + workspaces** buttons. See
 
 ## Activities
 
-A management table: lock/publish toggles that commit a one-line diff to
-`grader/assignments.json` (the diff is shown before you confirm), a
-per-activity dry-run grade sweep, and an **activate** button (the Activate
-wizard: Canvas-sync execute for that activity, polled to green, then
-publish-material for its content unit, polled to green - it always leaves
-the Canvas assignment unpublished; due date and publish stay manual in
-Canvas). A separate card runs publish-material with a unit multiselect
-(units dispatch **sequentially**, each polled green before the next starts)
+A management table. **Locked** and **Delivered** are on/off switches (a state
+you set, not a verb button), each flip committing a one-line diff to
+`grader/assignments.json` (shown before you confirm; cancel reverts the
+switch). "Delivered" is the `publish` flag's word; "held" is reserved for the
+AI-review lane. A **Stage** chip shows where each activity sits (Draft ->
+Graded / In review / Reviewed -> Delivered). Each row also has a dry-run grade
+**sweep**, a **scaffold** button (re-file the scaffold intent - the resume
+path if you committed the entry then refreshed), and **Set up in Canvas**
+(canvas-sync execute for that activity, polled green, then publish-material
+for its content unit, polled green - it always leaves the Canvas assignment
+unpublished; due date and publish stay manual in Canvas). Below the table, the
+Content & Canvas card reuses the Ops **publish-material** control (unit
+multiselect, dispatched **sequentially**, each polled green before the next)
 plus Canvas sync/push dry-run buttons.
 
-**+ New activity** opens a 3-step wizard:
+**+ New activity** opens a 3-step wizard (the steps are shown up front):
 
 1. Build the `assignments.json` entry - pick one of the three families
    (auto-graded tests, AI-graded held-for-review, manual/badge link
@@ -119,13 +124,24 @@ plus Canvas sync/push dry-run buttons.
    activities), and the activity template repo scaffolds.
 3. Optionally dry-run the Canvas sync for the new activity.
 
+If you refresh after step 1, the wizard would refuse the id as already
+existing - resume from the **scaffold** button on that activity's row.
+
 ## Students
 
 Facets for missing work, blank `student.json`, and sub-50% attendance, plus
-a filter box. Click a row for the student's profile: identity cross-check
-against the workspace's own `student.json`, delivery checks (GRADES.md /
-FEEDBACK.md / attendance receipt), the missing-work list, and their
-attendance record.
+a filter box. The table sorts on any column header (keyboard-operable) and
+carries **At risk** (the reason: missing work and/or low attendance) and
+**Delivered** (published activities this student has a grade for, from the
+gradebook) columns. The student name is a real link, so the profile is
+reachable by keyboard, not just a row click. The Dashboard's attendance alert
+deep-links here with the sub-50% facet already applied.
+
+The profile: an **at-risk alert strip** when the student is flagged, an
+identity cross-check against the workspace's own `student.json`, delivery
+checks (GRADES.md / FEEDBACK.md / attendance receipt), the missing-work list,
+their attendance record, and a per-activity table where held/AI rows link
+straight into the review detail (with the current decision shown).
 
 ## AI Review
 
@@ -158,13 +174,20 @@ Every prompt drawer opens with a one-line **consequence** note (Send files an
 intent that a Claude Code session runs; Copy pastes it into a chat; neither
 writes anything until you run it), and after a successful **Send** the drawer
 shows a **next-step card** naming the filed intent and reminding you to run it
-then Refresh. See [commands.md](commands.md) for what each prompt actually does.
+then Refresh. Every drawer is a focus-trapped modal dialog: Tab stays inside
+it, **Esc** closes it, and it closes on its own if you navigate away. See
+[commands.md](commands.md) for what each prompt actually does.
 
 ## Attendance
 
 A students x sessions matrix read from each teacher repo's
 `attendance/summary.json` (produced by `verify-attendance`), with per-student
-present counts and a below-50% flag. **Manual attendance → prompt** lets you
+present counts and a below-50% flag; at-risk rows are emphasized (a warn
+badge), not muted, and each name links into the student profile. One shared
+rate policy is used everywhere the console mentions attendance (the Students
+facet, this tile/matrix, the at-risk strips, the Dashboard inbox): a roster
+student on record for the section but never scanned counts as a genuine 0%,
+not "unknown". **Manual attendance → prompt** lets you
 pick students and a date and generates an intent for teacher-attested
 attendance (no QR needed) - see commands.md. The tab is always available; the
 summary matrix is simply empty for sections with no scans yet (Manual

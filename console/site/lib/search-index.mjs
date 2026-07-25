@@ -38,14 +38,22 @@ export function initSearch(refreshView) {
       const s = sectionCached(sc.key);
       if (!s) continue;
       for (const a of s.assignments) {
+        // deep-link to where the activity actually lives: AI activities open the
+        // review detail for that id (not the bare /review), others the gradebook.
         push(a.id + (a.title ? " · " + a.title : ""), label + (a.aiGraded ? " · AI review" : ""), "Activity",
-          "#/c/" + encodeURIComponent(sc.key) + (a.aiGraded ? "/review" : ""));
+          "#/c/" + encodeURIComponent(sc.key) + (a.aiGraded ? "/review/" + encodeURIComponent(a.id) : "/gradebook"));
       }
       for (const st of s.students) {
         const sk = st.number || st.name;
         push(st.name || "(blank)", "#" + (st.number || "?") + " · " + label, "Student",
           "#/c/" + encodeURIComponent(sc.key) + "/students/" + encodeURIComponent(sk));
       }
+    }
+    // activities + students only exist for LOADED classes; without a hint, an
+    // unloaded class's roster is silently absent from search. Surface a visible row.
+    if (q) {
+      const unloaded = sections().filter(sc => !sectionCached(sc.key)).length;
+      if (unloaded) items.push({ title: "Load classes to search activities & students", subtitle: unloaded + " class(es) not loaded yet", kind: "Hint", url: "#/" });
     }
     return items.slice(0, 20);
   });

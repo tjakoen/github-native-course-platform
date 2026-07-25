@@ -17,12 +17,20 @@ import { initSearch } from "./lib/search-index.mjs";
 import { OPS } from "./lib/ops-catalog.mjs";
 import { listRuns, dispatch as dispatchWf, findDispatchedRun, pollRun } from "./lib/actions.mjs";
 import { editAssignments } from "./lib/config-writes.mjs";
-import { $, el, esc, confirmExecute } from "./lib/ui.mjs";
+import { $, el, esc, confirmExecute, openDrawer } from "./lib/ui.mjs";
 import { DEC, getDec, setDec, skeyOf, isDecided, finalScore, exportDecisions, importDecisions } from "./lib/decisions.mjs";
 import { hl } from "./lib/hl.mjs";
 import { wireSend, buildGenFeedback, buildApplyAI, buildFinalize, buildApplyGrades, buildDeliver, buildManualAttendance, buildNewActivity } from "./lib/intents.mjs";
 
 let q="", revAct=null;
+// The student filter box (q) is shared state; reset it when the view SCOPE
+// changes (different class or different tab) so a filter never leaks across
+// views/classes or survives a reload into the wrong list. Same-view repaints
+// (after a decision save) keep the signature, so typing is never wiped.
+let qScope="";
+function scopeQ(sig){ if(sig!==qScope){ q=""; qScope=sig; } }
+let stuFacet=null;   // one-shot: a deep link (Dashboard at-risk alert) pre-applies a Students facet
+let stuSort={key:"name",dir:1};   // Students table sort column + direction
 let DATA={generatedAt:new Date().toISOString()};   // prompt builders stamp "graded as of"
 const main=$("#main");
 // Fast path beside every "Copy": grain's handoff button (0.1.11+) opens claude.ai
@@ -99,6 +107,7 @@ function wireSettingsForm(scope,c,close,firstRun){
 // Real Settings PAGE (drawer only survives for interrupts, below). Landing here
 // no longer strands a blank page behind a modal.
 function settingsView(){
+ scopeQ("settings");
  setTabs(null); statusLine(null);
  const c=loadConfig()||{repos:[],labels:{}};
  main.innerHTML="";
@@ -112,12 +121,9 @@ function settingsView(){
 // Interrupt drawer: only for first run (no config yet) and auth errors.
 function openSettings(firstRun){
  const c=loadConfig()||{repos:[],labels:{}};
- const d=el("div","drawer on"); const p=el("div","dp"); d.append(p); document.body.append(d);
- p.innerHTML="<button class='x'>×</button><h3>Settings</h3>"+settingsFormHTML(c);
- const close=()=>d.remove();
+ const guard=()=>{ if(firstRun&&!loadConfig()){const m=p.querySelector("#sMsg");if(m)m.textContent="Add at least one repo (URL + PAT), then Save.";return false;} return true; };
+ const {panel:p,close}=openDrawer("<h3>Settings</h3>"+settingsFormHTML(c),guard);
  wireSettingsForm(p,c,close,firstRun);
- p.querySelector(".x").onclick=()=>{ if(firstRun&&!loadConfig()){const m=p.querySelector("#sMsg");if(m)m.textContent="Add at least one repo (URL + PAT), then Save.";return;} close(); };
- d.onclick=e=>{if(e.target===d)p.querySelector(".x").onclick()};
 }
 
 // ---- shell wiring + routes ----
@@ -196,6 +202,19 @@ function heldUnreviewed(s){
  return n;
 }
 
+// ONE attendance-rate policy, shared by every surface (Students facet, the
+// Attendance tile/matrix, the at-risk strips, the Dashboard inbox, the profile)
+// so "below 50%" means the same thing everywhere. A roster student (has a
+// number) with sessions on record but no scan is a genuine 0% - they attended
+// none of the tracked sessions - not "unknown"; a student with no number cannot
+// be matched to attendance at all, so their rate is null (excluded, never
+// counted as at-risk). Returns a per-student rate function bound to the section.
+function attRateFn(s){
+ const att=s.attendance, dates=(att&&att.sessionDates)||[];
+ return st=>{ if(!dates.length||!st.number)return null; const a=att.students[st.number]; return (a?a.count:0)/dates.length; };
+}
+const isAtRisk=r=>r!=null&&r<0.5;
+
 async function withSection(key,fn){
  const sc=findSc(key);
  if(!sc){ main.innerHTML="<div class='boot'>Unknown class "+esc(key)+". <a href='#/'>Dashboard</a></div>"; return; }
@@ -213,6 +232,7 @@ async function withSection(key,fn){
 }
 
 function classView(key,mode,extra){
+ scopeQ("c:"+key+":"+(String(mode).startsWith("profile:")?"profile":mode));
  withSection(key,s=>{
   setTabs(key,mode,s); statusLine(key);
   main.innerHTML="";
@@ -235,41 +255,62 @@ const profileHref=(key,sk)=>classHref(key,"students")+"/"+encodeURIComponent(sk)
 
 // ---- Students list ----
 function renderStudents(s,w){
+ const preAtrisk=stuFacet==="atrisk"; stuFacet=null;   // one-shot deep link (Dashboard alert)
  const facets=el("div","ctl");
  facets.innerHTML='<input class="field__input search" id="q" placeholder="Filter students…" value="'+esc(q)+'">'+
   '<fieldset class="chips" data-select="multi" id="stuFacets" style="border:0;padding:0;margin:0">'+
    '<label class="chips__chip"><input type="checkbox" value="missing"><span>Missing work</span></label>'+
    '<label class="chips__chip"><input type="checkbox" value="blank"><span>Blank student.json</span></label>'+
-   '<label class="chips__chip"><input type="checkbox" value="atrisk"><span>Attendance &lt;50%</span></label>'+
+   '<label class="chips__chip"><input type="checkbox" value="atrisk"'+(preAtrisk?" checked":"")+'><span>Attendance &lt;50%</span></label>'+
   '</fieldset>';
  w.append(facets);
  const holder=el("div"); w.append(holder);
- const dates=(s.attendance&&s.attendance.sessionDates)||[];
- const attOf=st=>{const a=s.attendance&&s.attendance.students[st.number];return a&&dates.length?a.count/dates.length:null};
+ const rate=attRateFn(s);
+ const pubActs=s.assignments.filter(a=>a.publish);
+ const missOf=st=>missingWork(s,st).length;
+ const delivOf=st=>pubActs.filter(a=>st.activities[a.id]).length;
+ // one comparable value per sort key (nulls sink so "?" attendance/no-tally rows
+ // do not float to the top of a "worst first" sort)
+ const sortVals={ name:st=>(st.name||"~").toLowerCase(), number:st=>st.number||"", github:st=>(st.github||"~").toLowerCase(),
+  auto:st=>st.tally.pushMax?st.tally.push/st.tally.pushMax:-1, held:st=>st.tally.heldMax?st.tally.held/st.tally.heldMax:-1,
+  att:st=>{const r=rate(st);return r==null?-1:r;}, missing:st=>missOf(st), delivered:st=>delivOf(st) };
+ const arrow=k=>stuSort.key===k?(stuSort.dir>0?" ▲":" ▼"):"";
+ const th=(k,label,cls)=>"<th"+(cls?" class='"+cls+"'":"")+" data-sort='"+k+"' tabindex='0' role='button' aria-sort='"+(stuSort.key===k?(stuSort.dir>0?"ascending":"descending"):"none")+"'>"+esc(label)+arrow(k)+"</th>";
  const paint=()=>{
   const on=[...w.querySelectorAll("#stuFacets input:checked")].map(c=>c.value);
-  const rows=s.students.filter(st=>{
+  let rows=s.students.filter(st=>{
    if(q&&!((st.name||"").toLowerCase().includes(q)||(st.number||"").includes(q)||(st.github||"").toLowerCase().includes(q)))return false;
-   if(on.includes("missing")&&!missingWork(s,st).length)return false;
+   if(on.includes("missing")&&!missOf(st))return false;
    if(on.includes("blank")&&st.number)return false;
-   if(on.includes("atrisk")){const r=attOf(st);if(!(r!=null&&r<0.5))return false;}
+   if(on.includes("atrisk")&&!isAtRisk(rate(st)))return false;
    return true;
   });
+  const sv=sortVals[stuSort.key]||sortVals.name;
+  rows=rows.slice().sort((a,b)=>{const va=sv(a),vb=sv(b);return va<vb?-1*stuSort.dir:va>vb?1*stuSort.dir:0;});
   holder.innerHTML="";
   const card=el("div","card"); card.append(el("h2",null,"Students <span class='mut' style='font-weight:400'>("+rows.length+" of "+s.students.length+")</span>"));
   const sc2=el("div","table-scroll"); const t=el("table","matrix");
-  t.innerHTML="<tr><th class='stu'>Student</th><th>#</th><th>@github</th><th class='center'>Auto</th><th class='center'>Held</th><th class='center'>Attendance</th><th class='center'>Missing</th></tr>"+
+  t.innerHTML="<tr>"+th("name","Student","stu sortable")+th("number","#","sortable")+th("github","@github","sortable")+th("auto","Auto","center sortable")+th("held","Held","center sortable")+th("att","Attendance","center sortable")+th("missing","Missing","center sortable")+"<th class='center'>At risk</th>"+th("delivered","Delivered","center sortable")+"</tr>"+
    rows.map(st=>{
-    const miss=missingWork(s,st).length; const r=attOf(st);
+    const miss=missOf(st), r=rate(st), atrisk=isAtRisk(r), why=[];
+    if(miss>=2)why.push("<span class='badge' data-tone='warn'>"+miss+" missing</span>");
+    if(atrisk)why.push("<span class='badge' data-tone='warn'>"+Math.round(r*100)+"% att</span>");
     return "<tr class='rowlink' data-sk='"+esc(skeyOf(st))+"'>"+
-     "<td class='stu'>"+esc(st.name||"(blank)")+"</td><td class='mut'>"+esc(st.number||"-")+"</td><td class='mut'>"+esc(st.github||"-")+"</td>"+
+     "<td class='stu'><a href='"+profileHref(s.key,skeyOf(st))+"'>"+esc(st.name||"(blank)")+"</a></td><td class='mut'>"+esc(st.number||"-")+"</td><td class='mut'>"+esc(st.github||"-")+"</td>"+
      "<td class='center'>"+(st.tally.pushMax?st.tally.push+"/"+st.tally.pushMax:"-")+"</td>"+
      "<td class='center'>"+(st.tally.heldMax?st.tally.held+"/"+st.tally.heldMax:"-")+"</td>"+
-     "<td class='center"+(r!=null&&r<0.5?" mut":"")+"'>"+(r==null?"-":Math.round(r*100)+"%")+"</td>"+
-     "<td class='center'>"+(miss?"<span class='badge' data-tone='warn'>"+miss+"</span>":"·")+"</td></tr>";
+     "<td class='center'>"+(r==null?"<span class='mut'>-</span>":atrisk?"<span class='badge' data-tone='warn'>"+Math.round(r*100)+"%</span>":Math.round(r*100)+"%")+"</td>"+
+     "<td class='center'>"+(miss?"<span class='badge' data-tone='warn'>"+miss+"</span>":"·")+"</td>"+
+     "<td>"+(why.length?why.join(" "):"<span class='mut'>·</span>")+"</td>"+
+     "<td class='center' title='published activities this student has a grade for (from the gradebook, not a workspace check)'>"+(pubActs.length?delivOf(st)+"/"+pubActs.length:"<span class='mut'>·</span>")+"</td></tr>";
    }).join("");
   sc2.append(t); card.append(sc2); holder.append(card);
-  t.querySelectorAll(".rowlink").forEach(tr=>tr.onclick=()=>{ location.hash=profileHref(s.key,tr.dataset.sk); });
+  // whole-row click for the mouse; the name is a real link so the keyboard reaches
+  // the profile too. A click on the link navigates on its own (do not double-fire).
+  t.querySelectorAll(".rowlink").forEach(tr=>tr.onclick=e=>{ if(e.target.closest("a"))return; location.hash=profileHref(s.key,tr.dataset.sk); });
+  t.querySelectorAll("th[data-sort]").forEach(h=>{ const k=h.dataset.sort;
+   const go2=()=>{ if(stuSort.key===k)stuSort.dir*=-1; else stuSort={key:k,dir:k==="name"||k==="number"||k==="github"?1:-1}; paint(); };
+   h.onclick=go2; h.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); go2(); } }; });
  };
  paint();
  $("#q").oninput=e=>{q=e.target.value.toLowerCase();paint();};
@@ -287,6 +328,12 @@ function renderStudentProfile(s,w,sk){
  head.innerHTML="<a class='mut' href='"+classHref(s.key,"students")+"'>← Students</a><h1 style='margin-top:4px'>"+esc(st.name||"(blank)")+"</h1>"+
   "<div class='muted'>#"+esc(st.number||"?")+" · @"+esc(st.github||"?")+" · "+esc(s.subject)+" · "+esc(s.section)+"</div>";
  w.append(head);
+ // at-risk alert strip (same rate policy as the rest of the app)
+ const r0=attRateFn(s)(st), alerts=[];
+ if(miss.length>=2)alerts.push(miss.length+" missing activities");
+ if(isAtRisk(r0))alerts.push(Math.round(r0*100)+"% attendance (below 50%)");
+ if(alerts.length){ const al=el("div","card"); al.dataset.pad="sm"; al.setAttribute("style","border-left:3px solid var(--warn)");
+  al.innerHTML="<h2>⚑ At risk</h2><ul class='status-list'>"+alerts.map(a=>"<li class='status-list__item'><span class='status-list__mark'>⚑</span><span class='status-list__title'>"+esc(a)+"</span></li>").join("")+"</ul>"; w.append(al); }
  // identity + delivery card (workspace half upgrades async)
  const idc=el("div","card"); idc.dataset.pad="sm";
  idc.innerHTML="<h2>Identity & workspace</h2><div id='wsInfo' class='mut'>Checking workspace…</div>";
@@ -309,13 +356,18 @@ function renderStudentProfile(s,w,sk){
  // activities
  const ac=el("div","card"); ac.append(el("h2",null,"Activities"));
  const asc=el("div","table-scroll"); const t=el("table","matrix");
- t.innerHTML="<tr><th>Activity</th><th>Kind</th><th class='center'>Score</th><th class='center'>Late</th><th>Repo</th></tr>"+
+ t.innerHTML="<tr><th>Activity</th><th>Kind</th><th class='center'>Score</th><th class='center'>Late</th><th>Review</th><th>Repo</th></tr>"+
   s.assignments.map(a=>{
    const r=st.activities[a.id];
-   if(!r) return (a.namePrefix&&!a.manual&&!a.quiz)?"<tr><td>"+esc(a.id)+"</td><td><span class='badge' data-tone='"+KTONE[a.kind]+"'>"+a.kind+"</span></td><td class='center'><span class='badge' data-tone='warn'>missing</span></td><td class='center'>·</td><td class='mut'>no submission</td></tr>":"";
+   if(!r) return (a.namePrefix&&!a.manual&&!a.quiz)?"<tr><td>"+esc(a.id)+"</td><td><span class='badge' data-tone='"+KTONE[a.kind]+"'>"+a.kind+"</span></td><td class='center'><span class='badge' data-tone='warn'>missing</span></td><td class='center'>·</td><td>·</td><td class='mut'>no submission</td></tr>":"";
    const score=r.kind==="held"?(r.proposed!=null?r.proposed+"/"+r.proposedMax+" (held)":"held"):(r.canvasPts!=null?r.canvasPts:r.raw);
+   // held/AI rows link into the review detail and show the decision state (no
+   // longer a dead end); everything else has no review lane.
+   let review="<span class='mut'>·</span>";
+   if(a.aiGraded){ const stt=decStatus({dec:getDec(s.section,a.id,skeyOf(st))}); review="<a href='"+detailHref(s.key,a.id,skeyOf(st))+"'><span class='badge' data-tone='"+TONE[stt.k]+"'>"+stt.l+"</span> →</a>"; }
    return "<tr><td>"+esc(a.id)+"</td><td><span class='badge' data-tone='"+KTONE[r.kind]+"'>"+r.kind+"</span></td>"+
     "<td class='center'>"+esc(String(score))+"</td><td class='center'>"+(r.late?"LATE":"·")+"</td>"+
+    "<td>"+review+"</td>"+
     "<td class='mut'><a href='https://github.com/"+esc(s.org)+"/"+esc(r.repo)+"' target='_blank' rel='noopener'>"+esc(r.repo)+"</a></td></tr>";
   }).join("");
  asc.append(t); ac.append(asc); w.append(ac);
@@ -333,6 +385,7 @@ function renderStudentProfile(s,w,sk){
 }
 
 function dashView(){
+ scopeQ("dash");
  setTabs(null); statusLine(null);
  main.innerHTML="";
  const w=el("div","wrap");
@@ -381,14 +434,17 @@ function dashView(){
    if(s.stats.blankStudentJson>0)rows.push({mark:"⚑",html:"<a href='"+classHref(sc.key,"students")+"'>"+s.stats.blankStudentJson+" blank student.json</a> · "+esc(sc.key)});
    const att=s.attendance;
    if(att&&att.sessionDates&&att.sessionDates.length){
-    const n=s.students.filter(st=>{const a=att.students[st.number];const r=a?a.count/att.sessionDates.length:0;return st.number&&r<0.5}).length;
-    if(n)rows.push({mark:"⚑",html:"<a href='"+classHref(sc.key,"attendance")+"'>"+n+" student(s) below 50% attendance</a> · "+esc(sc.key)});
+    const rate=attRateFn(s);
+    const n=s.students.filter(st=>isAtRisk(rate(st))).length;
+    if(n)rows.push({mark:"⚑",html:"<a href='"+classHref(sc.key,"students")+"' data-atrisk='1'>"+n+" student(s) below 50% attendance</a> · "+esc(sc.key)});
    }
    (flagsByKey[sc.key]||[]).forEach(line=>rows.push({mark:"⚑",html:esc(line)+" · <a href='"+classHref(sc.key)+"'>"+esc(sc.key)+"</a>"}));
   });
   const loaded=scs.filter(sc=>sectionCached(sc.key)).length;
   inbox.innerHTML=scs.length?"<div class='card' data-pad='sm'><h2>Needs attention <span class='mut' style='font-weight:400'>("+loaded+" of "+scs.length+" classes loaded)</span></h2><ul class='status-list'>"+rows.map(r=>"<li class='status-list__item'><span class='status-list__mark'>"+r.mark+"</span><span class='status-list__title'>"+r.html+"</span></li>").join("")+"</ul></div>":"";
   inbox.querySelectorAll("[data-loadkey]").forEach(a=>a.onclick=e=>{e.preventDefault();loadOne(a.dataset.loadkey);});
+  // pre-apply the at-risk facet on the Students view the alert links to (one-shot)
+  inbox.querySelectorAll("[data-atrisk]").forEach(a=>a.onclick=()=>{ stuFacet="atrisk"; });
  };
  const loadOne=async key=>{
   try{ const s=await getSection(key); railHeld(key,heldUnreviewed(s)); const sc=findSc(key); const old=grid.querySelector("[data-dash='"+key.replace(/'/g,"")+"']"); if(sc&&old)old.replaceWith(cardFor(sc)); }
@@ -445,7 +501,7 @@ route("#/c/:key/review/:aid", p=>classView(p.key,"ai",{aid:p.aid}));
 route("#/c/:key/review/:aid/:skey", p=>classView(p.key,"revdetail",{aid:p.aid,skey:p.skey}));
 route("#/c/:key/attendance", p=>classView(p.key,"att"));
 fallback(()=>go("#/"));
-beforeEach(()=>{ setNav(); if(detailKey){document.removeEventListener("keydown",detailKey);detailKey=null;} document.querySelectorAll(".drawer").forEach(d=>d.remove()); });
+beforeEach(()=>{ setNav(); if(detailKey){document.removeEventListener("keydown",detailKey);detailKey=null;} document.querySelectorAll(".drawer,.drawer-modal").forEach(d=>d.remove()); });
 
 let started=false;
 async function boot(){
@@ -531,6 +587,7 @@ function reportsCard(s){
  return card;
 }
 function reportViewer(key,path){
+ scopeQ("report");
  setTabs(null); statusLine(null);
  main.innerHTML=""; const w=el("div","wrap"); main.append(w);
  const sc=findSc(key);
@@ -619,14 +676,16 @@ function opCard(sc,op){
  (op.inputs||[]).forEach(inp=>{
   const id=idOf(inp.name);
   let ctl;
-  if(inp.type==="bool") ctl="<label class='chips__chip'><input type='checkbox' id='"+id+"'"+(inp.def==="true"?" checked":"")+"><span>"+esc(inp.name)+"</span></label>";
+  // a bool is a STATE (the gate: dry_run / execute), so it rides the b-switch atom
+  // with a real label instead of a chip that read like a button.
+  if(inp.type==="bool") ctl="<label class='switch opsw'><input type='checkbox' class='switch__input' id='"+id+"'"+(inp.def==="true"?" checked":"")+"><span class='switch__track'><span class='switch__thumb'></span></span><span class='switch__label'>"+esc(inp.name)+(inp.hint?" <span class='mut'>"+esc(inp.hint)+"</span>":"")+"</span></label>";
   else if(inp.type==="choice") ctl="<label class='field opf'><span class='field__label'>"+esc(inp.name)+"</span><select class='field__select' id='"+id+"'>"+inp.options.map(o=>"<option"+(o===inp.def?" selected":"")+">"+esc(o)+"</option>").join("")+"</select></label>";
   else if(inp.type==="text") ctl="<label class='field opf' style='width:100%'><span class='field__label'>"+esc(inp.name)+"</span><textarea class='field__input fta' rows='3' id='"+id+"'></textarea></label>";
   else if(inp.activity&&sc.pol) ctl="<label class='field opf'><span class='field__label'>only <span class='mut'>(blank = all)</span></span><select class='field__select' id='"+id+"'><option value=''></option>"+sc.pol.map(a=>"<option>"+esc(a.id)+"</option>").join("")+"</select></label>";
   else ctl="<label class='field opf'><span class='field__label'>"+esc(inp.name)+(inp.hint?" <span class='mut'>"+esc(inp.hint)+"</span>":"")+"</span><input class='field__input' id='"+id+"' value='"+esc(inp.def||"")+"'></label>";
   form.insertAdjacentHTML("beforeend",ctl);
  });
- const runBtn=el("button","btn","Run"); runBtn.dataset.size="sm";
+ const runBtn=el("button","btn oprunbtn","Run"); runBtn.dataset.size="sm";
  runBtn.onclick=()=>{
   const inputs={}; let abort=false;
   (op.inputs||[]).forEach(inp=>{
@@ -702,69 +761,108 @@ function renderActivities(s,w){
  w.append(top);
  const card=el("div","card"); card.append(el("h2",null,"Activities"));
  const scr=el("div","table-scroll"); const t=el("table","matrix");
- t.innerHTML="<tr><th>Activity</th><th>Kind</th><th class='center'>Points</th><th class='center'>Graded</th><th class='center'>Locked</th><th class='center'>Published to students</th><th></th></tr>"+
+ // Lock/Deliver are STATES the teacher sets, not one-shot verbs, so they ride the
+ // b-switch atom (a real focusable checkbox) instead of a button that read
+ // "PUBLISHING" and un-published on click. "Delivered / Not delivered" is the
+ // publish flag's product word (E4 glossary); "held" is reserved for the AI lane.
+ const swi=(cls,on,onL,offL)=>"<label class='switch'><input type='checkbox' class='switch__input "+cls+"'"+(on?" checked":"")+"><span class='switch__track'><span class='switch__thumb'></span></span><span class='switch__label"+(on?"":" switch__label--off")+"'>"+esc(on?onL:offL)+"</span></label>";
+ // Lifecycle stage chip: where each activity sits on the draft -> graded/review ->
+ // delivered arc, from loaded data only (no extra calls).
+ const stageOf=a=>{
+  const graded=s.students.filter(st=>st.activities[a.id]).length;
+  if(a.publish)return{l:"Delivered",t:"good"};
+  if(a.aiGraded){ const pend=s.students.filter(st=>st.activities[a.id]&&!isDecided(getDec(s.section,a.id,skeyOf(st)))).length;
+   if(pend>0)return{l:"In review",t:"held"}; if(graded>0)return{l:"Reviewed",t:"ov"}; return{l:"Draft",t:"muted"}; }
+  if(graded>0)return{l:"Graded",t:"quiz"};
+  return{l:"Draft",t:"muted"};
+ };
+ t.innerHTML="<tr><th>Activity</th><th>Kind</th><th>Stage</th><th class='center'>Points</th><th class='center'>Graded</th><th class='center'>Locked</th><th class='center'>Delivered</th><th></th></tr>"+
   s.assignments.map(a=>{
-   const graded=s.students.filter(st=>st.activities[a.id]).length;
+   const graded=s.students.filter(st=>st.activities[a.id]).length; const stg=stageOf(a);
    return "<tr data-aid='"+esc(a.id)+"'>"+
     "<td><b>"+esc(a.id)+"</b>"+(a.title?" <span class='mut'>"+esc(a.title)+"</span>":"")+"</td>"+
     "<td><span class='badge' data-tone='"+KTONE[a.kind]+"'>"+a.kind+"</span></td>"+
+    "<td><span class='badge' data-tone='"+stg.t+"'>"+stg.l+"</span></td>"+
     "<td class='center'>"+(a.totalPoints??a.autoPoints??"-")+"</td>"+
     "<td class='center'>"+graded+"</td>"+
-    "<td class='center'><button class='btn tglLock' data-size='sm' data-variant='soft'>"+(a.locked?"🔒 locked":"open")+"</button></td>"+
-    "<td class='center'><button class='btn tglPub' data-size='sm' data-variant='soft'>"+(a.publish?"publishing":"held back")+"</button></td>"+
-    "<td><button class='btn actSweep' data-size='sm' data-variant='soft' title='Grade sweep, dry-run, just this activity'>sweep</button> <button class='btn actActivate' data-size='sm' data-variant='soft' title='Author the Canvas shell (canvas-sync execute), then publish its content unit - each step polled green'>activate</button></td></tr>";
+    "<td class='center'>"+swi("tglLock",a.locked,"Locked","Open")+"</td>"+
+    "<td class='center'>"+swi("tglPub",a.publish,"Delivered","Not delivered")+"</td>"+
+    "<td><button class='btn actSweep' data-size='sm' data-variant='soft' title='Grade sweep, dry-run, just this activity'>sweep</button> <button class='btn actScaffold' data-size='sm' data-variant='soft' title='Re-file the scaffold intent for this activity (resume the New-activity wizard after a refresh)'>scaffold</button> <button class='btn actActivate' data-size='sm' data-variant='soft' title='Author the Canvas shell (canvas-sync execute), then publish its content unit - each step polled green'>Set up in Canvas</button></td></tr>";
   }).join("");
  scr.append(t); card.append(scr); w.append(card);
  t.querySelectorAll("tr[data-aid]").forEach(tr=>{
   const aid=tr.dataset.aid;
-  tr.querySelector(".tglLock").onclick=async()=>{
-   const a=s.assignments.find(x=>x.id===aid);
-   const ok=await editAssignments(sc,es=>{const e=es.find(x=>x.id===aid);if(!e)return null;e.locked=!a.locked;return (a.locked?"Unlock ":"Lock ")+aid;},(a.locked?"Unlock ":"Lock ")+aid+" - "+s.key).catch(err=>{alert(err.message);return false;});
-   if(ok){ afterAssignmentsEdit(s.key,ok); }
+  // A cancelled/failed toggle must revert the switch to the actual state (the
+  // checkbox already flipped visually on click; a committed edit re-renders).
+  tr.querySelector(".tglLock").onchange=async e=>{
+   const inp=e.currentTarget, want=inp.checked, a=s.assignments.find(x=>x.id===aid);
+   const ok=await editAssignments(sc,es=>{const en=es.find(x=>x.id===aid);if(!en)return null;en.locked=want;return (want?"Lock ":"Unlock ")+aid;},(want?"Lock ":"Unlock ")+aid+" - "+s.key).catch(err=>{alert(err.message);return false;});
+   if(ok)afterAssignmentsEdit(s.key,ok); else inp.checked=!!a.locked;
   };
-  tr.querySelector(".tglPub").onclick=async()=>{
-   const a=s.assignments.find(x=>x.id===aid);
-   const warn=a.aiGraded&&!a.publish?" (AI-graded: finalize its reviews first)":"";
-   const ok=await editAssignments(sc,es=>{const e=es.find(x=>x.id===aid);if(!e)return null;e.publish=!a.publish;return (a.publish?"Hold back ":"Publish ")+aid+warn;},(a.publish?"Hold back ":"Publish ")+aid+" - "+s.key).catch(err=>{alert(err.message);return false;});
-   if(ok){ afterAssignmentsEdit(s.key,ok); }
+  tr.querySelector(".tglPub").onchange=async e=>{
+   const inp=e.currentTarget, want=inp.checked, a=s.assignments.find(x=>x.id===aid);
+   const warn=a.aiGraded&&want?" (AI-graded: finalize its reviews first)":"";
+   const ok=await editAssignments(sc,es=>{const en=es.find(x=>x.id===aid);if(!en)return null;en.publish=want;return (want?"Deliver ":"Hold back ")+aid+warn;},(want?"Deliver ":"Hold back ")+aid+" - "+s.key).catch(err=>{alert(err.message);return false;});
+   if(ok)afterAssignmentsEdit(s.key,ok); else inp.checked=!!a.publish;
   };
   tr.querySelector(".actSweep").onclick=()=>{
    const op=OPS.find(o=>o.file==="grade.yml");
    runOp(sc,{...op,execDanger:"write the gradebook"},{dry_run:"true",only:aid,force:"false"},false);
   };
+  tr.querySelector(".actScaffold").onclick=()=>showScaffold(s,s.assignments.find(x=>x.id===aid));
   tr.querySelector(".actActivate").onclick=()=>activateActivity(s,sc,s.assignments.find(x=>x.id===aid));
  });
- const ops2=el("div","card"); ops2.dataset.pad="sm";
- ops2.innerHTML="<h2>Content & Canvas</h2><div class='opform'>"+
-  "<label class='field opf'><span class='field__label'>content unit <span class='mut'>(folder under content/)</span></span><input class='field__input' id='pmUnit' placeholder='m4-backend'></label>"+
-  "<button class='btn' data-size='sm' id='pmRun'>Publish material</button>"+
-  "<span style='flex:1'></span>"+
-  "<button class='btn' data-size='sm' data-variant='soft' id='csDry'>Canvas sync (dry-run)</button>"+
-  "<button class='btn' data-size='sm' data-variant='soft' id='cpDry'>Canvas push (dry-run)</button></div>"+
-  "<p class='mut' style='margin:6px 0 0'>Execute variants live in <a href='"+classHref(s.key,"ops")+"'>Ops</a>, behind the typed confirm.</p>";
- w.append(ops2);
- $("#pmRun").onclick=()=>{const u=$("#pmUnit").value.trim();if(!u)return $("#pmUnit").focus();const op=OPS.find(o=>o.file==="publish-material.yml");runOp(sc,{...op,execDanger:"push unit "+u+" to every workspace"},{unit:u},true);};
+ // Content & Canvas: reuse the Ops materialCard (multi-select + SEQUENTIAL publish
+ // behind the typed confirm) instead of the old free-text single-unit box that
+ // dropped that safety. Canvas dry-runs sit beside it; execute lives in Ops.
+ const ch=el("div"); ch.innerHTML="<h2 class='opgroup'>Content & Canvas</h2><p class='mut'>Publish content units to every workspace (multi-select, sequential - the safe path) or dry-run the Canvas tools. Execute variants live in <a href='"+classHref(s.key,"ops")+"'>Ops</a>, behind the typed confirm.</p>";
+ w.append(ch);
+ w.append(materialCard(sc,OPS.find(o=>o.file==="publish-material.yml")));
+ const cv=el("div","card"); cv.dataset.pad="sm";
+ cv.innerHTML="<div class='opform'><button class='btn' data-size='sm' data-variant='soft' id='csDry'>Canvas sync (dry-run)</button><button class='btn' data-size='sm' data-variant='soft' id='cpDry'>Canvas push (dry-run)</button></div>";
+ w.append(cv);
  $("#csDry").onclick=()=>{const op=OPS.find(o=>o.file==="canvas-sync-assignments.yml");runOp(sc,op,{mode:"dry-run",desc:"false",submit:"false",rename:"false"},false);};
  $("#cpDry").onclick=()=>{const op=OPS.find(o=>o.file==="canvas-push.yml");runOp(sc,op,{mode:"dry-run",comment:"false"},false);};
 }
 
-// ---- Activate wizard: canvas-sync (execute, only=<id>) -> poll green ->
+// Re-file the scaffold intent for an EXISTING activity (the resumable path: if you
+// committed the entry then refreshed, the wizard's step 2 is otherwise stranded -
+// re-entering it hits "id already exists"). Reconstructs the raw assignments.json
+// entry from the parsed policy so buildNewActivity emits the same prompt.
+function rawEntryOf(a){
+ const e={id:a.id}; if(a.type)e.type=a.type; if(a.manual)e.manual=true;
+ if(a.namePrefix)e.namePrefix=a.namePrefix; if(a.title)e.title=a.title;
+ if(a.totalPoints!=null)e.totalPoints=a.totalPoints; else if(a.autoPoints!=null)e.autoPoints=a.autoPoints;
+ if(a.aiGraded){e["ai-grading"]=true; if(a.feedback)e.feedback=a.feedback;}
+ if(a.locked)e.locked=true; if(a.publish)e.publish=true;
+ return e;
+}
+function showScaffold(s,a){
+ if(!a)return;
+ const txt=buildNewActivity(s,rawEntryOf(a));
+ openDrawer("<h3>Scaffold "+esc(a.id)+" - "+esc(s.section)+"</h3><div class='muted'>Files the scaffold intent (starter, tests, RUBRIC, Canvas description) for Claude Code. Use this to resume after committing the entry - it does not touch the gradebook or publish anything.</div>"+CONSEQUENCE+
+  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>");
+ $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
+ wireSend(s,"new-activity",a.id,txt,path=>drawerSent(s,path,"new-activity",a.id));
+}
+
+// ---- "Set up in Canvas" wizard: canvas-sync (execute, only=<id>) -> poll green ->
 // publish-material for the activity's content unit -> poll green. Every step
 // streams to the docked console feed; a non-green step stops the chain.
 async function activateActivity(s,sc,a){
  if(!a)return;
  const steps="author its Canvas assignment shell (canvas-sync execute, only="+a.id+")"+(a.content?", then publish content unit "+a.content+" to every workspace":"");
- const ok=await confirmExecute("activate "+a.id+" on "+s.key+": "+steps,s.section);
+ const ok=await confirmExecute("set up "+a.id+" in Canvas on "+s.key+": "+steps,s.section);
  if(!ok)return;
  const cs=OPS.find(o=>o.file==="canvas-sync-assignments.yml");
  const c1=await runOp(sc,{...cs,execDanger:""},{mode:"execute",only:a.id,desc:"false",submit:"false",rename:"false"},true,true);
- if(c1!=="success"){ opFeed("Activate "+esc(a.id)+" STOPPED: canvas-sync came back "+esc(String(c1))+"."); return; }
+ if(c1!=="success"){ opFeed("Set up "+esc(a.id)+" in Canvas STOPPED: canvas-sync came back "+esc(String(c1))+"."); return; }
  if(a.content){
   const pm=OPS.find(o=>o.file==="publish-material.yml");
   const c2=await runOp(sc,{...pm,execDanger:""},{unit:a.content},true,true);
-  if(c2!=="success"){ opFeed("Activate "+esc(a.id)+" STOPPED: publish-material("+esc(a.content)+") came back "+esc(String(c2))+"."); return; }
+  if(c2!=="success"){ opFeed("Set up "+esc(a.id)+" in Canvas STOPPED: publish-material("+esc(a.content)+") came back "+esc(String(c2))+"."); return; }
  } else opFeed("No content unit on "+esc(a.id)+" (assignments.json \"content\") - skipped publish-material.");
- opFeed("Activate "+esc(a.id)+" done ✓ - set the due date and PUBLISH it in Canvas (the sync always leaves it unpublished).");
+ opFeed("Set up "+esc(a.id)+" in Canvas done ✓ - set the due date and PUBLISH it in Canvas (the sync always leaves it unpublished).");
 }
 
 // ---- New-activity wizard (#/c/:key/activities/new): entry via diff-commit,
@@ -774,7 +872,12 @@ function renderActivityNew(s,w){
  const back=classHref(s.key,"activities");
  const head=el("div");
  head.innerHTML="<a class='mut' href='"+back+"'>← Activities</a><h1 style='margin-top:4px'>New activity - "+esc(s.section)+"</h1>"+
-  "<p class='lede' data-size='sm'>Three steps: commit the assignments.json entry (diff shown first), file the scaffold intent for Claude Code, then dry-run the Canvas sync. Nothing publishes to students from here.</p>";
+  "<p class='lede' data-size='sm'>Nothing publishes to students from here. If you commit the entry then refresh, resume from the <b>scaffold</b> button on the activity's Activities row.</p>"+
+  "<ol class='stepper' style='margin-bottom:0'>"+
+   "<li class='stepper__step' data-state='active' aria-current='step'><span class='stepper__dot'>1</span><span class='stepper__label'>Commit entry</span></li>"+
+   "<li class='stepper__step' data-state='todo'><span class='stepper__dot'>2</span><span class='stepper__label'>File scaffold intent</span></li>"+
+   "<li class='stepper__step' data-state='todo'><span class='stepper__dot'>3</span><span class='stepper__label'>Set up in Canvas (dry-run)</span></li>"+
+  "</ol>";
  w.append(head);
  const card=el("div","card"); card.dataset.pad="sm";
  card.innerHTML=
@@ -836,7 +939,7 @@ function renderActivityNew(s,w){
   nxt.innerHTML="<h2 style='margin-top:16px'>2 · Scaffolds (intent for Claude Code)</h2>"+
    "<div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='naCp'>Copy</button>"+openInClaude("#naPrompt",txt)+"</div>"+
    "<pre class='code-block prompt' id='naPrompt'>"+esc(txt)+"</pre>"+
-   "<h2>3 · Canvas shell</h2><p class='mut'>Author the Canvas assignment from the new entry (dry-run; execute lives behind Activate / Ops).</p>"+
+   "<h2>3 · Set up in Canvas</h2><p class='mut'>Author the Canvas assignment from the new entry (dry-run; execute lives behind Set up in Canvas / Ops).</p>"+
    "<button class='btn' data-size='sm' data-variant='soft' id='naCs'>Canvas sync dry-run (only="+esc(e.id)+")</button>";
   nxt.querySelector("#naCp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>{nxt.querySelector("#naCp").textContent="Copied ✓"});
   wireSend(s,"new-activity",e.id,txt);
@@ -917,14 +1020,13 @@ function renderBook(s,w){
 // At-risk strip on the class overview: low attendance and/or piling-up missing
 // work, linking straight into the student profile.
 function atRiskCard(s){
- const att=s.attendance, dates=(att&&att.sessionDates)||[];
+ const rate=attRateFn(s);
  const rows=s.students.map(st=>{
   const miss=missingWork(s,st).length;
-  const a=att&&att.students[st.number];
-  const r=(a&&dates.length)?a.count/dates.length:null;
+  const r=rate(st);
   const why=[];
   if(miss>=2)why.push(miss+" missing activities");
-  if(r!=null&&r<0.5)why.push(Math.round(r*100)+"% attendance");
+  if(isAtRisk(r))why.push(Math.round(r*100)+"% attendance");
   return why.length?{st,why}:null;
  }).filter(Boolean);
  if(!rows.length)return null;
@@ -979,10 +1081,10 @@ function renderAttendance(s,w){
   return;
  }
  const dates=att.sessionDates.slice().sort();
- const rate=st=>{const a=att.students[st.number];return a?a.count/dates.length:null};
+ const rate=attRateFn(s);   // the one shared policy: a roster student never scanned = 0%
  const tiles=el("div","stats");
  const avgRate=avg(s.students.map(rate));
- const atRisk=s.students.filter(st=>{const r=rate(st);return r!=null&&r<0.5}).length;
+ const atRisk=s.students.filter(st=>isAtRisk(rate(st))).length;
  tiles.innerHTML=[
   ["Sessions",dates.length],["Last session",att.lastSession||dates[dates.length-1]],
   ["Students tracked",Object.keys(att.students).length],
@@ -1004,17 +1106,14 @@ function renderAttendance(s,w){
 // verify-attendance counts them as present (MANUAL), never FLAGGED.
 function showManualAttendance(s){
  const today=new Date().toISOString().slice(0,10);
- const d=el("div","drawer on"); const p=el("div","dp");
- const stuRow=st=>'<label class="status-list__item" style="cursor:pointer"><input type="checkbox" class="mAttStu" value="'+esc(st.number)+'" data-name="'+esc(st.name||"")+'"> <span class="status-list__title">'+esc(st.name||"(blank)")+' <span class="badge" data-status="archived">'+esc(st.number||"-")+'</span></span></label>';
+ const stuRow=st=>'<label class="status-list__item" style="cursor:pointer"><input type="checkbox" class="mAttStu" value="'+esc(st.number)+'" data-name="'+esc(st.name||"")+'"> <span class="status-list__title">'+esc(st.name||"(blank)")+' <span class="badge" data-tone="muted">'+esc(st.number||"-")+'</span></span></label>';
  const students=s.students.filter(st=>st.number);
- p.innerHTML="<button class='x'>×</button><h3>Manual attendance - "+esc(s.section)+"</h3>"+
+ const {panel:p}=openDrawer("<h3>Manual attendance - "+esc(s.section)+"</h3>"+
   "<div class='muted'>Pick the students and the date; the generated intent tells the AI to record them as present with the teacher-attested \"manual\" signature. Verify + receipts run automatically on push.</div>"+
   "<div class='field' style='margin-top:10px'><span class='field__label'>Date</span><input class='field__input' id='mAttDate' type='date' value='"+today+"'></div>"+
   "<div class='field'><span class='field__label'>Filter</span><input class='field__input' id='mAttQ' placeholder='Filter students…'></div>"+
   "<ul class='status-list' id='mAttList' style='max-height:40vh;overflow:auto'>"+students.map(stuRow).join("")+"</ul>"+
-  "<div style='margin:10px 0'><button class='btn' data-size='sm' id='mAttGen'>Generate prompt</button></div><div id='mAttOut'></div>";
- d.append(p); document.body.append(d);
- const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
+  "<div style='margin:10px 0'><button class='btn' data-size='sm' id='mAttGen'>Generate prompt</button></div><div id='mAttOut'></div>");
  $("#mAttQ").oninput=e=>{const f=e.target.value.toLowerCase();p.querySelectorAll("#mAttList .status-list__item").forEach(li=>{li.style.display=li.textContent.toLowerCase().includes(f)?"":"none";});};
  $("#mAttGen").onclick=()=>{
   const picked=[...p.querySelectorAll(".mAttStu:checked")].map(c=>({num:c.value,name:c.dataset.name}));
@@ -1038,10 +1137,15 @@ function attMatrix(s,dates){
  const thead="<tr><th class='stu'>Student</th><th>#</th>"+dates.map(d=>"<th class='center'>"+esc(d.slice(5))+"</th>").join("")+"<th class='center'>Present</th></tr>";
  const rows=all.filter(st=>!q||(st.name||"").toLowerCase().includes(q)||(st.number||"").includes(q)||(st.github||"").toLowerCase().includes(q)).map(st=>{
   const a=att.students[st.number]; const present=new Set(a?a.present:[]);
-  let tds="<td class='stu'>"+esc(st.name||(st.attOnly?"(attendance only)":"(blank)"))+(st.github?" <span class='pill'>@"+esc(st.github)+"</span>":"")+"</td><td class='mut'>"+esc(st.number||"-")+"</td>";
+  // roster students link into their profile; attendance-only extras have no profile
+  const nm=esc(st.name||(st.attOnly?"(attendance only)":"(blank)"));
+  const nameCell=st.attOnly?nm:"<a href='"+profileHref(s.key,skeyOf(st))+"'>"+nm+"</a>";
+  let tds="<td class='stu'>"+nameCell+(st.github?" <span class='pill'>@"+esc(st.github)+"</span>":"")+"</td><td class='mut'>"+esc(st.number||"-")+"</td>";
   dates.forEach(d=>{tds+=present.has(d)?"<td class='cell'><b>✓</b></td>":"<td class='cell mut'>·</td>";});
   const cnt=a?a.count:0, pct=Math.round((cnt/dates.length)*100);
-  tds+="<td class='center"+(pct<50?" mut":"")+"'>"+cnt+"/"+dates.length+" <span class='pill'>"+pct+"%</span></td>";
+  // emphasize the at-risk students (warn), do NOT mute them - the muted cell was
+  // inverted emphasis, dimming exactly the rows that need a look.
+  tds+="<td class='center'>"+(pct<50?"<span class='badge' data-tone='warn'>"+cnt+"/"+dates.length+" · "+pct+"%</span>":cnt+"/"+dates.length+" <span class='pill'>"+pct+"%</span>")+"</td>";
   return "<tr>"+tds+"</tr>";
  }).join("");
  t.innerHTML=thead+rows; sc.append(t); card.append(sc); return card;
@@ -1094,8 +1198,10 @@ function drawerSent(s,path,kind,aid){ markSent(s.section,kind,aid); invalidateIn
 // ================= AI REVIEW =================
 function heldActs(s){return s.assignments.filter(a=>a.aiGraded)}
 function reviewRows(s,aid){return s.students.filter(st=>st.activities[aid]).map(st=>({st,r:st.activities[aid],dec:getDec(s.section,aid,skeyOf(st))}))}
-// decision-state -> product badge tone (hue is the documented monochrome exception)
-const TONE={todo:"muted",ok:"good",ov:"held",fl:"warn"};
+// decision-state -> product badge tone (hue is the documented monochrome exception).
+// "override" gets its own tone (accent), NOT held: "held" is reserved for the AI
+// lane (an activity kind), so a review decision must never wear that same purple.
+const TONE={todo:"muted",ok:"good",ov:"ov",fl:"warn"};
 // activity kind -> product badge tone
 const KTONE={push:"good",held:"held",quiz:"quiz",manual:"muted"};
 function decStatus(row){ const d=row.dec; if(!isDecided(d))return{k:"todo",l:d&&(d.studentText||d.instructorText||d.comment)?"edited":"unreviewed"}; if(d.status==="approve")return{k:"ok",l:"approved"}; if(d.status==="override")return{k:"ov",l:"override "+d.score}; return{k:"fl",l:"flagged"}; }
@@ -1171,7 +1277,7 @@ function renderAI(s,w){
    const stt=decStatus(row), fin=finalScore(row);
    const flag=row.r.aiFlag||"-"; const fl=/high/i.test(flag)?"bad":/medium/i.test(flag)?"warn":"good";
    const skey=esc(skeyOf(row.st));
-   return "<tr data-s='"+skey+"'><td>"+esc(row.st.name||"(blank)")+(row.r.triage?" <span class='badge' data-tone='warn' title='"+esc(row.r.triage)+"'>flag</span>":"")+"</td><td class='mut'>"+esc(row.st.number||"-")+"</td>"+
+   return "<tr data-s='"+skey+"'><td><a href='"+detailHref(s.key,revAct,skeyOf(row.st))+"'>"+esc(row.st.name||"(blank)")+"</a>"+(row.r.triage?" <span class='badge' data-tone='warn' title='"+esc(row.r.triage)+"'>triage</span>":"")+"</td><td class='mut'>"+esc(row.st.number||"-")+"</td>"+
      "<td class='center'>"+(row.r.proposed!=null?row.r.proposed+"/"+max:"<span class='badge' data-tone='warn'>no score</span>")+"</td>"+
      "<td class='center'><span class='badge' data-tone='"+fl+"'>"+esc(flag.split(" - ")[0])+"</span></td>"+
      "<td class='center'><span class='badge' data-tone='"+TONE[stt.k]+"'>"+stt.l+"</span></td>"+
@@ -1179,7 +1285,7 @@ function renderAI(s,w){
  }).join("");
  scr.append(t); card.append(scr); w.append(card);
  setTimeout(()=>{
-   t.querySelectorAll("tr[data-s]").forEach(tr=>tr.onclick=()=>go(detailHref(s.key,revAct,tr.dataset.s)));
+   t.querySelectorAll("tr[data-s]").forEach(tr=>tr.onclick=e=>{ if(e.target.closest("a"))return; go(detailHref(s.key,revAct,tr.dataset.s)); });
    if(primary)$("#rvPrimary").onclick=primary.act;
    $("#apprAll").onclick=()=>{const t=rows.filter(row=>!isDecided(row.dec)&&row.r.proposed!=null);if(!t.length){alert("No unreviewed submissions with a proposed score to approve.");return;}if(!confirm("Approve "+t.length+" unreviewed submission(s) at the AI's proposed score for "+revAct+"? This records an approve decision for each - review them individually to catch a bad proposal."))return;t.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),Object.assign({},row.dec,{status:"approve"})));render()};
    $("#reset").onclick=()=>{if(confirm("Clear all decisions for "+revAct+"? This also clears the filed-step memory so the stage header restarts at Generate.")){rows.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),null));clearSent(s.section,revAct);render()}};
@@ -1321,13 +1427,10 @@ function showGenFeedback(s,aid){
  const pending=rows.filter(x=>!x.r.note);
  const noop=pending.length===0;   // nothing to draft (the prompt skips notes that exist)
  const txt=buildGenFeedback(s,aid);
- const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Generate AI feedback drafts - "+esc(aid)+"</h3><div class='muted'>"+pending.length+" submission(s) without a note yet · runs in a Claude Code session on your subscription (no GitHub Models)</div>"+
+ openDrawer("<h3>Generate AI feedback drafts - "+esc(aid)+"</h3><div class='muted'>"+pending.length+" submission(s) without a note yet · runs in a Claude Code session on your subscription (no GitHub Models)</div>"+
   (noop?"<p class='warnline'>Every submission already has a note draft, so this intent would do nothing (it skips repos that already have a note). Hit Refresh, or edit a draft from the review detail.</p>":"")+
   CONSEQUENCE+
-  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
- d.append(p); document.body.append(d);
- const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
+  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>");
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
  if(!noop)wireSend(s,"gen-feedback",aid,txt,path=>drawerSent(s,path,"gen-feedback",aid));
 }
@@ -1336,13 +1439,10 @@ function showApplyAI(s,aid){
  const rows=reviewRows(s,aid); const max=s.assignments.find(a=>a.id===aid).totalPoints;
  const {txt,decided,flagged,undone}=buildApplyAI(s,aid,rows);
  const noop=decided.length===0&&flagged.length===0;   // no approve/override/flag yet
- const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Apply reviewed AI grades - "+esc(aid)+"</h3><div class='muted'>"+decided.length+" to apply · "+flagged.length+" flagged · "+undone.length+" not reviewed</div>"+
+ openDrawer("<h3>Apply reviewed AI grades - "+esc(aid)+"</h3><div class='muted'>"+decided.length+" to apply · "+flagged.length+" flagged · "+undone.length+" not reviewed</div>"+
   (noop?"<p class='warnline'>No decisions recorded yet. Approve, override, or flag at least one submission before applying (an empty apply would just blank every aiScore).</p>":"")+
   CONSEQUENCE+
-  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+" <button class='btn' data-size='sm' data-variant='soft' id='csv'>Download CSV</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
- d.append(p); document.body.append(d);
- const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
+  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+" <button class='btn' data-size='sm' data-variant='soft' id='csv'>Download CSV</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>");
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
  if(!noop)wireSend(s,"apply-ai",aid,txt,path=>drawerSent(s,path,"apply-ai",aid));
  $("#csv").onclick=()=>{
@@ -1356,13 +1456,10 @@ function showFinalize(s,aid){
  const rows=reviewRows(s,aid);
  const {txt,delivered,heldOut}=buildFinalize(s,aid,rows);
  const noop=delivered.length===0;   // nothing cleared to deliver
- const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Finalize and deliver - "+esc(aid)+"</h3><div class='muted'>"+delivered.length+" cleared to deliver · "+heldOut.length+" held out</div>"+
+ openDrawer("<h3>Finalize and deliver - "+esc(aid)+"</h3><div class='muted'>"+delivered.length+" cleared to deliver · "+heldOut.length+" held out</div>"+
   (noop?"<p class='warnline'>No cleared students yet. Approve or override at least one submission (and apply those grades) before delivering.</p>":"")+
   CONSEQUENCE+
-  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
- d.append(p); document.body.append(d);
- const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
+  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>");
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
  if(!noop)wireSend(s,"finalize",aid,txt,path=>drawerSent(s,path,"finalize",aid));
 }
@@ -1377,7 +1474,7 @@ function matrix(s){
  const cols=s.assignments;
  let thead="<tr><th class='stu'>Student</th><th>#</th>"+cols.map(a=>"<th class='center'>"+esc(a.id)+"<br><span class='pill'>"+(a.totalPoints!=null?a.totalPoints+"pt":a.autoPoints!=null?a.autoPoints+"pt":"tests")+"</span><br><span class='b "+a.kind+"'>"+a.kind+"</span></th>").join("")+"<th class='center'>Push total</th><th class='center'>+Held</th></tr>";
  const rows=s.students.filter(st=>!q||(st.name||"").toLowerCase().includes(q)||(st.number||"").includes(q)||(st.github||"").toLowerCase().includes(q)).map(st=>{
-   let tds="<td class='stu' title='"+esc(st.name)+"'>"+esc(st.name||"(blank)")+(st.github?" <span class='pill'>@"+esc(st.github)+"</span>":"")+"</td><td class='mut'>"+esc(st.number||"-")+"</td>";
+   let tds="<td class='stu' title='"+esc(st.name)+"'><a href='"+profileHref(s.key,skeyOf(st))+"'>"+esc(st.name||"(blank)")+"</a>"+(st.github?" <span class='pill'>@"+esc(st.github)+"</span>":"")+"</td><td class='mut'>"+esc(st.number||"-")+"</td>";
    cols.forEach(a=>{
      const r=st.activities[a.id];
      if(!r){tds+="<td class='cell mut'>·</td>";return;}
@@ -1386,21 +1483,20 @@ function matrix(s){
      if(r.kind==="held"){disp=(r.proposed!=null?r.proposed:"?")+"/"+max;pct=r.proposed!=null&&max?r.proposed/max:null;cls="held";}
      else if(r.kind==="manual"){disp="-";cls="manual";}
      else {disp=(r.canvasPts!=null?r.canvasPts:"?")+"/"+max;pct=r.canvasPts!=null&&max?r.canvasPts/max:null;cls="push";}
-     tds+="<td class='cell "+cls+"' style='"+cellColor(pct)+"' data-s='"+esc(st.number||st.name)+"' data-a='"+a.id+"'>"+disp+(r.late?" <span class=pill>late</span>":"")+"</td>";
+     tds+="<td class='cell "+cls+"' style='"+cellColor(pct)+"' tabindex='0' role='button' aria-label='"+esc((st.name||"")+" "+a.id+" feedback")+"' data-s='"+esc(st.number||st.name)+"' data-a='"+a.id+"'>"+disp+(r.late?" <span class=pill>late</span>":"")+"</td>";
    });
    tds+="<td class='center tot'>"+st.tally.push+"<span class='pill'>/"+st.tally.pushMax+"</span></td><td class='center mut'>"+(st.tally.held?"+"+st.tally.held+"/"+st.tally.heldMax:"-")+"</td>";
    return "<tr>"+tds+"</tr>";
  }).join("");
  t.innerHTML=thead+rows;
  sc.append(t); card.append(sc);
- setTimeout(()=>t.querySelectorAll("td.cell[data-a]").forEach(td=>td.onclick=()=>openNote(s,td.dataset.s,td.dataset.a)),0);
+ setTimeout(()=>t.querySelectorAll("td.cell[data-a]").forEach(td=>{ const open=()=>openNote(s,td.dataset.s,td.dataset.a); td.onclick=open; td.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } }; }),0);
  return card;
 }
 
 function openNote(s,skey,aid){
  const st=s.students.find(x=>(x.number||x.name)===skey); if(!st)return;
  const r=st.activities[aid]; if(!r)return;
- const d=el("div","drawer on"); const p=el("div","dp");
  const a=s.assignments.find(x=>x.id===aid);
  const max=a.totalPoints ?? a.autoPoints ?? r.total;
  const val=r.kind==="held"?(r.proposed+"/"+max+" (held - review)"):r.kind==="manual"?"manual":(r.canvasPts+"/"+max);
@@ -1415,11 +1511,9 @@ function openNote(s,skey,aid){
     (!parts.student&&!parts.instructor?"<div class='noteprose'>"+esc(r.note)+"</div>":"")+
    "</div>"
    :"<p class='mut'>No written feedback for this submission"+(a.aiGraded?" yet - generate a draft from AI Review.":".")+"</p>";
- p.innerHTML="<button class='x'>×</button><h3>"+esc(st.name)+" - "+esc(aid)+"</h3><div class='muted'>"+esc(st.number||"")+" · @"+esc(st.github||"")+" · repo "+esc(r.repo)+" @"+esc(r.sha)+"</div>"+
+ openDrawer("<h3>"+esc(st.name)+" - "+esc(aid)+"</h3><div class='muted'>"+esc(st.number||"")+" · @"+esc(st.github||"")+" · repo "+esc(r.repo)+" @"+esc(r.sha)+"</div>"+
   "<div class='legend'><span>Automated: <b>"+r.raw+"</b></span><span>Canvas: <b>"+val+"</b></span></div>"+
-  reviewLink+body;
- d.append(p); document.body.append(d);
- const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
+  reviewLink+body);
 }
 
 function canvasPanel(s){
@@ -1447,10 +1541,7 @@ function canvasPanel(s){
 
 function showPrompt(s){
  const txt=buildApplyGrades(s,DATA.generatedAt);
- const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Apply-grades prompt - "+esc(s.section)+"</h3>"+CONSEQUENCE+"<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
- d.append(p); document.body.append(d);
- const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
+ openDrawer("<h3>Apply-grades prompt - "+esc(s.section)+"</h3>"+CONSEQUENCE+"<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>");
  $("#cp").onclick=()=>{navigator.clipboard.writeText(txt).then(()=>{$("#cp").textContent="Copied ✓"})};
  wireSend(s,"apply-grades",null,txt,path=>drawerSent(s,path,"apply-grades",null));
 }
@@ -1461,14 +1552,11 @@ function showPrompt(s){
 // AI/held activities are excluded on purpose (they flow through AI Review -> Finalize).
 function showDeliver(s){
  const {txt,graded,pub}=buildDeliver(s,DATA.generatedAt);
- const d=el("div","drawer on"); const p=el("div","dp");
  const noop=graded.length===0;   // nothing deterministic has graded students
- p.innerHTML="<button class='x'>×</button><h3>Deliver to Canvas + workspaces - "+esc(s.section)+"</h3><div class='muted'>"+graded.length+" deterministic activit(y/ies) to push · "+pub.length+" to publish to workspaces · AI/held + manual excluded</div>"+
+ openDrawer("<h3>Deliver to Canvas + workspaces - "+esc(s.section)+"</h3><div class='muted'>"+graded.length+" deterministic activit(y/ies) to push · "+pub.length+" to publish to workspaces · AI/held + manual excluded</div>"+
   (noop?"<p class='warnline'>No deterministic activity has graded students yet, so there is nothing to deliver from here. (AI/held activities flow through AI Review → Finalize.)</p>":"")+
   CONSEQUENCE+
-  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
- d.append(p); document.body.append(d);
- const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
+  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>");
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
  if(!noop)wireSend(s,"deliver",null,txt,path=>drawerSent(s,path,"deliver",null));
 }
