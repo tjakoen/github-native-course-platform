@@ -8,7 +8,10 @@ fetched live from `api.github.com` in your browser.
 
 ## Setup (one time)
 
-1. Open the hosted console. First open lands on **Settings**.
+1. Open the hosted console. With no repos configured yet, it shows a setup
+   drawer over the boot screen - add your teacher repos there. Once repos are
+   configured, the console opens on the **Dashboard**; **Settings** is also
+   its own page anytime (rail footer).
 2. Add one row **per teacher repo**, and everything stays in your own browser
    (localStorage), never sent anywhere but `api.github.com`:
    - The **repo URL** (e.g. `github.com/HAU-6INTROWEB/teacher-6introweb-2106-tjakoen`).
@@ -28,12 +31,14 @@ fetched live from `api.github.com` in your browser.
 
 ## The shell
 
-- **Side-rail** (left): the four global views (Dashboard, Flags, Ops,
-  Reports), then your classes grouped by subject, then a footer with
-  **Scanner**, **Tour**, and **Settings**. A short guided tour of the shell
-  runs once on your first visit; the Tour button replays it anytime.
-- **Topbar**: per-class tabs when you're inside a class (Gradebook,
-  Activities, Students, AI Review, Attendance), a global search box
+- **Side-rail** (left): the **Dashboard**, then your classes grouped by
+  subject, then a footer with **Scanner**, **Tour**, and **Settings**. Ops,
+  Flags, and Reports are no longer rail items - Ops moved into each class's
+  tabs, and Flags/Reports were folded into the Dashboard and each class's
+  Overview (see below). A short guided tour of the shell runs once on your
+  first visit; the Tour button replays it anytime.
+- **Topbar**: per-class tabs when you're inside a class (Overview, Gradebook,
+  Activities, Students, AI Review, Attendance, Ops), a global search box
   (**Cmd/Ctrl-K**), the **↻ refresh** button (re-fetches the current view's
   data from GitHub), and a light/dark toggle.
 - **Status bar** (bottom): remaining GitHub API budget, how old the current
@@ -58,16 +63,28 @@ students. Picking a result jumps straight there.
 
 Instant cards per class (stats fill in once you open one), a **Load all
 classes** button with a progress meter that refuses to start - or stops
-early - when the GitHub API budget is low, and a cross-class **Needs a
-look** inbox (held AI reviews, blank `student.json`, sub-50% attendance)
-built from whatever classes are currently loaded.
+early - when the GitHub API budget is low, and a **Needs attention** inbox
+that lists every discovered class: loaded classes show their computed
+alerts (held AI grades to review, blank `student.json`, sub-50% attendance)
+plus any folded-in engine flag lines, and classes you haven't opened yet
+show as a visible "not loaded [load]" row instead of being silently absent.
 
-## A class: Gradebook
+## A class: Overview
 
-Stat tiles, the full students x activities matrix, a Canvas-push preview,
-an **At risk** strip (missing work and/or low attendance, linking to each
-student's profile), and a **Recent engine runs** timeline for the workflows
-that matter day to day (needs a PAT with Actions: Read).
+The class landing page (opens when you click into a class): stat tiles, an
+**At risk** strip (missing work and/or low attendance, linking to each
+student's profile), a Canvas-push preview, an in-class **Flags** card (only
+appears when the engine actually flagged something for that class), a
+**Recent engine runs** timeline for the workflows that matter day to day
+(needs a PAT with Actions: Read), and a **Reports** card linking to that
+class's generated reports (markdown files open in the in-console reader,
+everything else opens on GitHub).
+
+## Gradebook
+
+The full students x activities matrix, plus the **Generate apply-grades
+prompt** and **Deliver to Canvas + workspaces** buttons. See
+[commands.md](commands.md) for what each of those prompts does.
 
 ## Activities
 
@@ -130,18 +147,13 @@ separate `scanner/` page, not this tab.
 
 ## Ops
 
-The full workflow catalog for a class: grade sweep, publish, Canvas
+A class tab (folded out of the global rail in the IA rework - the old
+`#/ops` and `#/ops/:key` hashes still work and redirect into the class's Ops
+tab): the full workflow catalog for that class, grade sweep, publish, Canvas
 push/sync/export, publish material, provisioning, prune, audits, and the
 attendance set. Every workflow defaults to a dry run; a real write needs you
 to type the class's section code back into a confirm. A live run feed shows
 dispatch and completion status inline.
-
-## Flags & Reports
-
-**Flags** is a cross-class inbox pulled from each repo's `gradebook/FLAGS.md`
-and `reports/FLAGGED.md`. **Reports** lists each class's generated reports
-plus the gradebook; markdown files open in an in-console reader, everything
-else opens on GitHub.
 
 ## The write model (read this before you file anything)
 

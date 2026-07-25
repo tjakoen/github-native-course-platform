@@ -106,11 +106,16 @@ const shot = async (name, full) => { await page.waitForTimeout(900); await page.
 
 await page.goto("http://localhost:8931/#/");
 await shot("01-dashboard");
-await page.goto("http://localhost:8931/#/c/6APSI-2240"); await shot("02-gradebook");
-await page.waitForTimeout(600); await page.evaluate(() => { const m = document.getElementById("main"); m.scrollTop = m.scrollHeight; }); await shot("02b-gradebook-bottom");
-// Handoff button: open the apply-grades prompt drawer, verify the "Open in
-// Claude" trigger renders, its source resolves to the live prompt, encoding
-// survives nasty input, and flag if real prompts routinely blow the URL budget.
+// Phase C: #/c/:key is the Overview (tiles, at-risk, Canvas preview, flags card,
+// runs, Reports card); the grade matrix is one tab deeper at /gradebook.
+await page.goto("http://localhost:8931/#/c/6APSI-2240"); await shot("02-overview");
+await page.waitForTimeout(600); await page.evaluate(() => { const m = document.getElementById("main"); m.scrollTop = m.scrollHeight; }); await shot("02a-overview-bottom");
+await page.goto("http://localhost:8931/#/c/6APSI-2240/gradebook"); await shot("02-gradebook");
+await page.waitForTimeout(400); await page.evaluate(() => { const m = document.getElementById("main"); m.scrollTop = m.scrollHeight; }); await shot("02b-gradebook-bottom");
+// Handoff button: open the apply-grades prompt drawer (the #prompt button lives
+// on the Gradebook tab now), verify the "Open in Claude" trigger renders, its
+// source resolves to the live prompt, encoding survives nasty input, and flag if
+// real prompts routinely blow the URL budget.
 await page.click("#prompt").catch(() => {});
 await page.waitForTimeout(600);
 const handoff = await page.evaluate(() => {
@@ -140,16 +145,24 @@ await page.goto("http://localhost:8931/#/c/6APSI-2240/review"); await shot("06-r
 await page.goto("http://localhost:8931/#/c/6APSI-2240/review/m3a1/20250001"); await shot("06b-review-detail");
 await page.keyboard.press("Meta+k"); await shot("07-cmdk");
 await page.keyboard.press("Escape");
-await page.goto("http://localhost:8931/#/ops/6APSI-2240"); await shot("08-ops");
+// Phase C: Ops is a per-class tab now. The old global #/ops/:key redirects here.
+await page.goto("http://localhost:8931/#/c/6APSI-2240/ops"); await shot("08-ops");
 // A1: after a dispatch the docked ops feed must be VISIBLE (data-console-open on
 // .app-shell), not rendered into display:none. Click the first dry-run Run.
 await page.locator(".opcard .opform .btn").first().click().catch(() => {});
 await page.waitForTimeout(900);
 console.log("app-shell data-console-open:", await page.evaluate(() => document.querySelector(".app-shell")?.hasAttribute("data-console-open")));
 await shot("08b-ops-feed");
-await page.goto("http://localhost:8931/#/flags"); await shot("09-flags");
-await page.goto("http://localhost:8931/#/reports"); await shot("11-reports");
+// Phase C redirects: retired global #/flags and #/reports fold into the Dashboard;
+// #/ops/:key redirects into the class tab. Assert each lands where expected.
+await page.goto("http://localhost:8931/#/flags"); await page.waitForTimeout(500);
+console.log("#/flags redirect ->", await page.evaluate(() => location.hash), "(want #/)");
+await page.goto("http://localhost:8931/#/ops/6APSI-2240"); await page.waitForTimeout(500);
+console.log("#/ops/:key redirect ->", await page.evaluate(() => location.hash), "(want #/c/6APSI-2240/ops)");
+// Reports viewer route still works (the standalone list is retired; card lives on Overview).
 await page.goto("http://localhost:8931/#/reports/6APSI-2240/" + encodeURIComponent("reports/FLAGGED.md")); await shot("12-report-viewer");
+// Real Settings page (no longer a drawer over a blank page).
+await page.goto("http://localhost:8931/#/settings"); await shot("09-settings");
 await page.goto("http://localhost:8931/#/"); await page.click("#loadAll").catch(() => {}); await page.waitForTimeout(1500); await shot("13-dashboard-loaded");
 await page.click("[data-crumb-start]"); await page.waitForTimeout(600); await shot("14-tour-intro");
 await page.click('[data-crumb="next"]'); await page.waitForTimeout(600); await shot("15-tour-step1");
@@ -161,7 +174,7 @@ await page.goto("http://localhost:8931/scanner/"); await shot("10-scanner");
 // whole page. Full-page shot so a horizontal page overflow would be obvious.
 const narrow = await ctx.newPage();
 await narrow.setViewportSize({ width: 390, height: 780 });
-await narrow.goto("http://localhost:8931/#/c/6APSI-2240");
+await narrow.goto("http://localhost:8931/#/c/6APSI-2240/gradebook");
 await narrow.waitForTimeout(1200);
 const overflow = await narrow.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
 console.log("390px gradebook page-level horizontal overflow:", overflow, "(want false)");
@@ -188,7 +201,7 @@ await dctx.addInitScript(() => {
   ], labels: { "6APSI": "Application Development", "6INTROWEB": "Intro to Web" } }));
 });
 const dpage = await dctx.newPage();
-await dpage.goto("http://localhost:8931/#/c/6APSI-2240");
+await dpage.goto("http://localhost:8931/#/c/6APSI-2240/gradebook");
 await dpage.waitForTimeout(1200);
 await dpage.screenshot({ path: `${OUT}/18-gradebook-dark.png` });
 await dpage.keyboard.press("Meta+k");

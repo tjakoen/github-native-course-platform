@@ -38,9 +38,10 @@ const openInClaude=(sel="#ptxt",txt="")=> (txt||"").length>CLAUDE_URL_CAP
  ? " <span class='mut' data-size='sm'>(prompt too long for a link - use Copy)</span>"
  : " <button class='btn' data-size='sm' data-variant='soft' type='button' data-handoff data-handoff-url='https://claude.ai/new?q={payload}' data-handoff-source='"+sel+"'>Open in Claude →</button>";
 
-function openSettings(firstRun){
- const c=loadConfig()||{repos:[],labels:{}};
- const d=el("div","drawer on"); const p=el("div","dp"); d.append(p); document.body.append(d);
+// Settings body + wiring, shared by the real page (#/settings) and the interrupt
+// drawer (first run / auth error). `scope` is the element the form lives in;
+// `close` is what "done" does (remove the drawer, or nothing for the page).
+function settingsFormHTML(c){
  // Each teacher repo gets its OWN row: URL + its own fine-grained PAT. One
  // rejected/expired token then only takes down that one section, not all.
  const rowHTML=(r={})=>"<div class='repoRow' style='display:flex;gap:8px;margin-bottom:8px;align-items:flex-start'>"+
@@ -50,38 +51,68 @@ function openSettings(firstRun){
    "</div>"+
    "<button class='btn rDel' data-size='sm' data-variant='soft' title='Remove this repo' style='flex:none'>×</button>"+
   "</div>";
- p.innerHTML="<button class='x'>×</button><h3>Settings</h3>"+
-  "<div class='muted'>Stored in THIS browser's localStorage only - anyone with access to this browser profile can read the tokens. A PAT scoped to just the teacher repo loads gradebooks and lets you file Intents. To also see <b>student code and screenshots</b> (which live in the submission repos), that repo's PAT needs read access to the whole org - use a classic PAT with <code>repo</code> scope, or a fine-grained PAT with <b>All repositories</b> (Contents: Read). Short expiry recommended.</div>"+
+ return "<div class='muted'>Stored in THIS browser's localStorage only - anyone with access to this browser profile can read the tokens. A PAT scoped to just the teacher repo loads gradebooks and lets you file Intents. To also see <b>student code and screenshots</b> (which live in the submission repos), that repo's PAT needs read access to the whole org - use a classic PAT with <code>repo</code> scope, or a fine-grained PAT with <b>All repositories</b> (Contents: Read). Short expiry recommended.</div>"+
   "<div class='field__label' style='margin-top:12px'>Teacher repos <span class='mut'>- one repo + its own PAT per row</span></div>"+
   "<div id='sRepos'>"+((c.repos.length?c.repos:[{}]).map(rowHTML).join(""))+"</div>"+
   "<button class='btn' data-size='sm' data-variant='soft' id='sAdd' style='margin-top:2px'>+ Add repo</button>"+
   "<div style='display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap'><button class='btn' data-size='sm' id='sSave'>Save & load</button> <button class='btn' data-size='sm' data-variant='soft' id='sTest'>Test connection</button> <span class='mut' id='sMsg' style='font-size:12px'></span></div>"+
   "<div class='field__label' style='margin-top:16px'>Review decisions <span class='mut'>- browser-local; back them up</span></div>"+
   "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'><button class='btn' data-size='sm' data-variant='soft' id='sExpDec'>↓ Export</button> <button class='btn' data-size='sm' data-variant='soft' id='sImpDec'>↑ Import</button><input type='file' id='sImpFile' accept='application/json,.json' style='display:none'></div>";
- const read=()=>({repos:[...p.querySelectorAll(".repoRow")].map(row=>({url:row.querySelector(".rUrl").value.trim(),token:row.querySelector(".rTok").value.trim()})).filter(r=>r.url),labels:c.labels||{}});
- const wireDel=()=>p.querySelectorAll(".rDel").forEach(b=>b.onclick=()=>{const rows=p.querySelectorAll(".repoRow");if(rows.length>1)b.closest(".repoRow").remove();else{b.closest(".repoRow").querySelector(".rUrl").value="";b.closest(".repoRow").querySelector(".rTok").value="";}});
+}
+function wireSettingsForm(scope,c,close,firstRun){
+ const rowHTML=()=>"<div class='repoRow' style='display:flex;gap:8px;margin-bottom:8px;align-items:flex-start'>"+
+   "<div style='flex:1;min-width:0'>"+
+    "<input class='field__input rUrl mono' type='text' value='' placeholder='github.com/org/teacher-subject-section-name'>"+
+    "<input class='field__input rTok' type='password' value='' placeholder='github_pat_… (this repo's PAT)' style='margin-top:6px'>"+
+   "</div>"+
+   "<button class='btn rDel' data-size='sm' data-variant='soft' title='Remove this repo' style='flex:none'>×</button>"+
+  "</div>";
+ const read=()=>({repos:[...scope.querySelectorAll(".repoRow")].map(row=>({url:row.querySelector(".rUrl").value.trim(),token:row.querySelector(".rTok").value.trim()})).filter(r=>r.url),labels:c.labels||{}});
+ const msg=t=>{const m=scope.querySelector("#sMsg");if(m)m.textContent=t;};
+ const wireDel=()=>scope.querySelectorAll(".rDel").forEach(b=>b.onclick=()=>{const rows=scope.querySelectorAll(".repoRow");if(rows.length>1)b.closest(".repoRow").remove();else{b.closest(".repoRow").querySelector(".rUrl").value="";b.closest(".repoRow").querySelector(".rTok").value="";}});
  wireDel();
- $("#sAdd").onclick=()=>{ $("#sRepos").insertAdjacentHTML("beforeend",rowHTML()); wireDel(); };
- $("#sExpDec").onclick=exportDecisions;
- $("#sImpDec").onclick=()=>$("#sImpFile").click();
- $("#sImpFile").onchange=e=>{const f=e.target.files[0];if(f)importDecisions(f,()=>render());e.target.value="";};
- const close=()=>d.remove();
- p.querySelector(".x").onclick=()=>{ if(firstRun&&!loadConfig()){$("#sMsg").textContent="Add at least one repo (URL + PAT), then Save.";return;} close(); };
- d.onclick=e=>{if(e.target===d)p.querySelector(".x").onclick()};
- $("#sTest").onclick=async()=>{
-  const v=read(); if(!v.repos.length){$("#sMsg").textContent="Add at least one repo URL.";return;}
-  const noTok=v.repos.filter(r=>!r.token); if(noTok.length){$("#sMsg").textContent=noTok.length+" repo(s) have no PAT.";return;}
-  $("#sMsg").textContent="Testing…";
+ scope.querySelector("#sAdd").onclick=()=>{ scope.querySelector("#sRepos").insertAdjacentHTML("beforeend",rowHTML()); wireDel(); };
+ scope.querySelector("#sExpDec").onclick=exportDecisions;
+ scope.querySelector("#sImpDec").onclick=()=>scope.querySelector("#sImpFile").click();
+ scope.querySelector("#sImpFile").onchange=e=>{const f=e.target.files[0];if(f)importDecisions(f,()=>dispatch());e.target.value="";};
+ scope.querySelector("#sTest").onclick=async()=>{
+  const v=read(); if(!v.repos.length){msg("Add at least one repo URL.");return;}
+  const noTok=v.repos.filter(r=>!r.token); if(noTok.length){msg(noTok.length+" repo(s) have no PAT.");return;}
+  msg("Testing…");
   try{
    const {sections,errors}=await discoverSections(v.repos,v.labels);
-   $("#sMsg").textContent="✓ "+sections.length+" section(s) reachable"+(errors.length?" · "+errors.length+" problem(s): "+errors.map(e=>(parseRepoURL(e.url)?.repo||e.url)+": "+e.err).join("; "):"");
-  }catch(e){$("#sMsg").textContent="Failed: "+e.message;}
+   msg("✓ "+sections.length+" section(s) reachable"+(errors.length?" · "+errors.length+" problem(s): "+errors.map(e=>(parseRepoURL(e.url)?.repo||e.url)+": "+e.err).join("; "):""));
+  }catch(e){msg("Failed: "+e.message);}
  };
- $("#sSave").onclick=()=>{
-  const v=read(); if(!v.repos.length){$("#sMsg").textContent="Need at least one repo URL.";return;}
-  const noTok=v.repos.filter(r=>!r.token); if(noTok.length){$("#sMsg").textContent=noTok.length+" repo(s) have no PAT. Give every repo its own token.";return;}
+ scope.querySelector("#sSave").onclick=()=>{
+  const v=read(); if(!v.repos.length){msg("Need at least one repo URL.");return;}
+  const noTok=v.repos.filter(r=>!r.token); if(noTok.length){msg(noTok.length+" repo(s) have no PAT. Give every repo its own token.");return;}
   saveConfig(v); close(); boot();
  };
+}
+
+// Real Settings PAGE (drawer only survives for interrupts, below). Landing here
+// no longer strands a blank page behind a modal.
+function settingsView(){
+ setTabs(null); statusLine(null);
+ const c=loadConfig()||{repos:[],labels:{}};
+ main.innerHTML="";
+ const w=el("div","wrap");
+ w.innerHTML="<h1>Settings</h1><p class='lede' data-size='sm'>Repos, tokens, and your review-decision backups.</p><div class='card' data-pad='sm' id='setBody'></div>";
+ main.append(w);
+ w.querySelector("#setBody").innerHTML=settingsFormHTML(c);
+ wireSettingsForm(w,c,()=>{},false);
+}
+
+// Interrupt drawer: only for first run (no config yet) and auth errors.
+function openSettings(firstRun){
+ const c=loadConfig()||{repos:[],labels:{}};
+ const d=el("div","drawer on"); const p=el("div","dp"); d.append(p); document.body.append(d);
+ p.innerHTML="<button class='x'>×</button><h3>Settings</h3>"+settingsFormHTML(c);
+ const close=()=>d.remove();
+ wireSettingsForm(p,c,close,firstRun);
+ p.querySelector(".x").onclick=()=>{ if(firstRun&&!loadConfig()){const m=p.querySelector("#sMsg");if(m)m.textContent="Add at least one repo (URL + PAT), then Save.";return;} close(); };
+ d.onclick=e=>{if(e.target===d)p.querySelector(".x").onclick()};
 }
 
 // ---- shell wiring + routes ----
@@ -104,7 +135,7 @@ function setNav(){
 function setTabs(key,mode,s){
  const t=$("#ctxTabs");
  if(!key){t.innerHTML="";return;}
- const items=[["","Gradebook","book"],["activities","Activities"+(s?" ("+s.stats.activities+")":""),"act"],["students","Students"+(s?" ("+s.stats.students+")":""),"stu"],["review","AI Review"+(s?" ("+heldUnreviewed(s)+")":""),"ai"],["attendance","Attendance"+(s&&s.stats.sessions?" ("+s.stats.sessions+")":""),"att"]];
+ const items=[["","Overview","overview"],["gradebook","Gradebook","book"],["activities","Activities"+(s?" ("+s.stats.activities+")":""),"act"],["students","Students"+(s?" ("+s.stats.students+")":""),"stu"],["review","AI Review"+(s?" ("+heldUnreviewed(s)+")":""),"ai"],["attendance","Attendance"+(s&&s.stats.sessions?" ("+s.stats.sessions+")":""),"att"],["ops","Ops","ops"]];
  t.innerHTML=items.map(([sub,l,m])=>{const on=m===mode||(m==="stu"&&String(mode).startsWith("profile:"))||(m==="ai"&&mode==="revdetail")||(m==="act"&&mode==="actnew");return "<a class='tab' href='"+classHref(key,sub)+"'"+(on?" aria-current='page' data-active='true'":"")+">"+l+"</a>";}).join("");
 }
 
@@ -174,7 +205,9 @@ function classView(key,mode,extra){
   else if(mode==="actnew") renderActivityNew(s,w);
   else if(mode==="stu") renderStudents(s,w);
   else if(mode&&mode.startsWith("profile:")) renderStudentProfile(s,w,mode.slice(8));
-  else renderBook(s,w);
+  else if(mode==="ops") renderOps(s,w);
+  else if(mode==="book") renderBook(s,w);
+  else renderOverview(s,w);
  });
 }
 
@@ -310,22 +343,40 @@ function dashView(){
  };
  sections().forEach(sc=>grid.append(cardFor(sc)));
  w.append(grid);
- const alertsBox=el("div"); w.append(alertsBox);
- // cross-class alert inbox: built from whatever is LOADED (load all to fill it)
- const paintAlerts=()=>{
-  const items=[];
-  sections().forEach(sc=>{ const s=sectionCached(sc.key); if(!s)return;
-   {const hu=heldUnreviewed(s); if(hu>0)items.push("<a href='"+classHref(sc.key,"review")+"'>"+hu+" AI grade(s) to review</a> · "+esc(sc.key));}
-   if(s.stats.blankStudentJson>0)items.push("<a href='"+classHref(sc.key,"students")+"'>"+s.stats.blankStudentJson+" blank student.json</a> · "+esc(sc.key));
+ // ONE complete "Needs attention" inbox (Phase C: Flags folded in here). It lists
+ // EVERY class: loaded classes show computed alerts + engine FLAGS/FLAGGED lines
+ // (cheap 2-call cached read), and every row deep-links; unloaded classes appear
+ // as visible "not loaded [load]" rows, never silently absent.
+ const inbox=el("div"); w.append(inbox);
+ const flagsByKey={};
+ const flagLines=t=>(t||"").split("\n").map(l=>l.replace(/^[-*#>\s]+/,"").trim()).filter(l=>l&&!/^_.*_$/.test(l)).slice(0,3);
+ const paintInbox=()=>{
+  const scs=sections();
+  const rows=[];
+  scs.forEach(sc=>{
+   const s=sectionCached(sc.key);
+   if(!s){ rows.push({mark:"·",html:"<span class='mut'>"+esc(sc.key)+" - not loaded</span> <a href='#' data-loadkey='"+esc(sc.key)+"'>load</a>"}); return; }
+   const hu=heldUnreviewed(s); if(hu>0)rows.push({mark:"⚑",html:"<a href='"+classHref(sc.key,"review")+"'>"+hu+" AI grade(s) to review</a> · "+esc(sc.key)});
+   if(s.stats.blankStudentJson>0)rows.push({mark:"⚑",html:"<a href='"+classHref(sc.key,"students")+"'>"+s.stats.blankStudentJson+" blank student.json</a> · "+esc(sc.key)});
    const att=s.attendance;
    if(att&&att.sessionDates&&att.sessionDates.length){
     const n=s.students.filter(st=>{const a=att.students[st.number];const r=a?a.count/att.sessionDates.length:0;return st.number&&r<0.5}).length;
-    if(n)items.push("<a href='"+classHref(sc.key,"attendance")+"'>"+n+" student(s) below 50% attendance</a> · "+esc(sc.key));
+    if(n)rows.push({mark:"⚑",html:"<a href='"+classHref(sc.key,"attendance")+"'>"+n+" student(s) below 50% attendance</a> · "+esc(sc.key)});
    }
+   (flagsByKey[sc.key]||[]).forEach(line=>rows.push({mark:"⚑",html:esc(line)+" · <a href='"+classHref(sc.key)+"'>"+esc(sc.key)+"</a>"}));
   });
-  alertsBox.innerHTML=items.length?"<div class='card' data-pad='sm'><h2>Needs a look (loaded classes)</h2><ul class='status-list'>"+items.map(h=>"<li class='status-list__item'><span class='status-list__mark'>⚑</span><span class='status-list__title'>"+h+"</span></li>").join("")+"</ul></div>":"";
+  const loaded=scs.filter(sc=>sectionCached(sc.key)).length;
+  inbox.innerHTML=scs.length?"<div class='card' data-pad='sm'><h2>Needs attention <span class='mut' style='font-weight:400'>("+loaded+" of "+scs.length+" classes loaded)</span></h2><ul class='status-list'>"+rows.map(r=>"<li class='status-list__item'><span class='status-list__mark'>"+r.mark+"</span><span class='status-list__title'>"+r.html+"</span></li>").join("")+"</ul></div>":"";
+  inbox.querySelectorAll("[data-loadkey]").forEach(a=>a.onclick=e=>{e.preventDefault();loadOne(a.dataset.loadkey);});
  };
- paintAlerts();
+ const loadOne=async key=>{
+  try{ const s=await getSection(key); railHeld(key,heldUnreviewed(s)); const sc=findSc(key); const old=grid.querySelector("[data-dash='"+key.replace(/'/g,"")+"']"); if(sc&&old)old.replaceWith(cardFor(sc)); }
+  catch(e){}
+  paintInbox(); statusLine(null);
+ };
+ paintInbox();
+ // fold engine flags in (cached; two content calls per class, or a cache hit)
+ sections().forEach(sc=>getFlagsFiles(sc.key).then(f=>{ const lines=[...flagLines(f.flags),...flagLines(f.flagged)].slice(0,3); if(lines.length){ flagsByKey[sc.key]=lines; paintInbox(); } }).catch(()=>{}));
  main.append(w);
  const la=$("#loadAll");
  const unloaded=()=>sections().filter(sc=>!sectionCached(sc.key));
@@ -345,20 +396,25 @@ function dashView(){
    if(rate.remaining!=null&&rate.remaining<300){ $("#laMsg").textContent="Stopped early: API budget down to "+rate.remaining+"."; break; }
   }
   if(done===list.length) $("#laMsg").textContent="All classes loaded.";
-  la.hidden=true; paintAlerts(); statusLine(null);
+  la.hidden=true; paintInbox(); statusLine(null);
  };
 }
 
 route("#/", dashView);
-route("#/settings", ()=>{ setTabs(null); statusLine(null); main.innerHTML="<div class='wrap'><h1>Settings</h1><p class='lede' data-size='sm'>Repos, tokens, and your review-decision backups.</p></div>"; openSettings(false); });
+route("#/settings", settingsView);
 route("#/scan", ()=>location.replace("./scanner/"));
-route("#/flags", flagsView);
-route("#/reports", ()=>reportsView());
-route("#/reports/:key", p=>reportsView(p.key));
-route("#/reports/:key/:file", p=>reportViewer(p.key,p.file));
-route("#/ops", ()=>opsView(null));
-route("#/ops/:key", p=>opsView(p.key));
-route("#/c/:key", p=>classView(p.key,"book"));
+// Retired global views (IA rework Phase C): Flags folded into the Dashboard
+// inbox; Reports is an Overview card; Ops is a class tab. The old hashes
+// redirect so bookmarks and cmdk history keep working.
+route("#/flags", ()=>go("#/"));
+route("#/reports", ()=>go("#/"));
+route("#/reports/:key", p=>go(classHref(p.key)));
+route("#/reports/:key/:file", p=>reportViewer(p.key,p.file));   // viewer stays
+route("#/ops", ()=>{ const first=sections()[0]; go(first?classHref(first.key,"ops"):"#/"); });
+route("#/ops/:key", p=>go(classHref(p.key,"ops")));
+route("#/c/:key", p=>classView(p.key,"overview"));
+route("#/c/:key/gradebook", p=>classView(p.key,"book"));
+route("#/c/:key/ops", p=>classView(p.key,"ops"));
 route("#/c/:key/activities", p=>classView(p.key,"act"));
 route("#/c/:key/activities/new", p=>classView(p.key,"actnew"));
 route("#/c/:key/students", p=>classView(p.key,"stu"));
@@ -405,57 +461,55 @@ function curScheme(){ return document.documentElement.getAttribute("data-color-s
 function cellColor(pct){ if(pct==null)return""; const g=Math.round(pct*120); const dark=curScheme()==="dark"; return "background:hsl("+g+"deg "+(dark?"30%":"55%")+" "+(dark?"24%":"90%")+")"; }
 // review decisions now live in lib/decisions.mjs (same storage key + dkey shape)
 
-// ---- Flags (cheap cross-class inbox: FLAGS.md + reports/FLAGGED.md per class) ----
-async function flagsView(){
- setTabs(null); statusLine(null);
- main.innerHTML=""; const w=el("div","wrap"); main.append(w);
- w.innerHTML="<h1>Flags</h1><p class='lede' data-size='sm'>What the engine and audits want a human to look at, per class - from gradebook/FLAGS.md and reports/FLAGGED.md.</p>";
- for(const sc of sections()){
-  const card=el("div","card"); card.dataset.pad="sm";
-  card.innerHTML="<h2>"+esc(sc.subject)+" · "+esc(sc.section)+"</h2><div class='mut flagbody'>Loading…</div>";
-  w.append(card);
-  getFlagsFiles(sc.key).then(f=>{
-   const box=card.querySelector(".flagbody"); if(!box)return;
-   const both=[f.flags&&"## FLAGS.md\n"+f.flags, f.flagged&&"## reports/FLAGGED.md\n"+f.flagged].filter(Boolean).join("\n\n");
-   if(!both){ box.innerHTML="<span class='mut'>Nothing flagged. ✓</span>"; return; }
-   renderMd(both).then(html=>{ box.innerHTML=html; }).catch(()=>{ box.innerHTML="<pre class='code-block prompt'>"+esc(both)+"</pre>"; });
-  }).catch(()=>{const box=card.querySelector(".flagbody"); if(box)box.textContent="Unreadable (token scope?).";});
- }
+// ---- Flags card (in-class, on the Overview). Engine FLAGS.md + reports/FLAGGED.md,
+// MILL-rendered. Returns a hidden card that reveals itself only if there is
+// something flagged, and removes itself when there is nothing. (The cross-class
+// roll-up of these same files now lives in the Dashboard "Needs attention" inbox.)
+function flagsCard(s){
+ const sc=findSc(s.key)||s;
+ const card=el("div","card"); card.dataset.pad="sm"; card.hidden=true;
+ card.innerHTML="<h2>Flags</h2><div class='mut flagbody'></div>";
+ getFlagsFiles(sc.key).then(f=>{
+  const both=[f.flags&&"## FLAGS.md\n"+f.flags, f.flagged&&"## reports/FLAGGED.md\n"+f.flagged].filter(Boolean).join("\n\n");
+  if(!both){ card.remove(); return; }
+  card.hidden=false;
+  const box=card.querySelector(".flagbody"); if(!box)return;
+  renderMd(both).then(html=>{ box.classList.remove("mut"); box.innerHTML=html; }).catch(()=>{ box.innerHTML="<pre class='code-block prompt'>"+esc(both)+"</pre>"; });
+ }).catch(()=>card.remove());
+ return card;
 }
 
 // ---- Reports (in-console reader: reports/ listing -> MILL-rendered viewer) ----
 const reportHref=(key,path)=>"#/reports/"+encodeURIComponent(key)+"/"+encodeURIComponent(path);
-function reportsView(key){
- setTabs(null); statusLine(null);
- main.innerHTML=""; const w=el("div","wrap"); main.append(w);
- w.innerHTML="<h1>Reports</h1><p class='lede' data-size='sm'>Each class's generated reports and gradebook summary, read right here (markdown renders in-console; other files open on GitHub).</p>";
- const scs=key&&findSc(key)?[findSc(key)]:sections();
- for(const sc of scs){
-  const card=el("div","card"); card.dataset.pad="sm";
-  card.innerHTML="<h2>"+esc(sc.subject)+" · "+esc(sc.section)+"</h2>"+
-   "<ul class='content-index rlist'><li class='content-index__item'><span class='content-index__title'><a href='"+reportHref(sc.key,"gradebook/GRADEBOOK.md")+"'>GRADEBOOK.md</a></span><span class='content-index__meta'>the human-readable gradebook</span></li></ul>"+
-   "<div class='mut rmore'>Loading reports/…</div>";
-  w.append(card);
-  ghJSON2("/repos/"+sc.org+"/"+sc.repo+"/contents/reports").then(list=>{
-   const box=card.querySelector(".rmore"); if(!box)return;
-   const files=(list||[]).filter(x=>x.type==="file");
-   if(!files.length){ box.textContent="No reports/ files."; return; }
-   box.classList.remove("mut");
-   box.innerHTML="<ul class='content-index'>"+files.map(f=>{
-    const md=/\.(md|markdown|txt|csv)$/i.test(f.name);
-    const href=md?reportHref(sc.key,"reports/"+f.name):f.html_url;
-    return "<li class='content-index__item'><span class='content-index__title'><a href='"+esc(href)+"'"+(md?"":" target='_blank' rel='noopener'")+">"+esc(f.name)+"</a></span><span class='content-index__meta'>"+(f.size!=null?Math.max(1,Math.round(f.size/1024))+" KB":"")+(md?"":" · on GitHub")+"</span></li>";
-   }).join("")+"</ul>";
-  }).catch(()=>{ const box=card.querySelector(".rmore"); if(box)box.textContent="reports/ not readable (token scope?)."; });
- }
+// Reports card on the class Overview (the standalone global Reports list is retired;
+// the viewer route #/reports/:key/:file still works).
+function reportsCard(s){
+ const sc=findSc(s.key)||s;
+ const card=el("div","card"); card.dataset.pad="sm";
+ card.innerHTML="<h2>Reports</h2>"+
+  "<ul class='content-index rlist'><li class='content-index__item'><span class='content-index__title'><a href='"+reportHref(sc.key,"gradebook/GRADEBOOK.md")+"'>GRADEBOOK.md</a></span><span class='content-index__meta'>the human-readable gradebook</span></li></ul>"+
+  "<div class='mut rmore'>Loading reports/…</div>";
+ ghJSON2("/repos/"+sc.org+"/"+sc.repo+"/contents/reports").then(list=>{
+  const box=card.querySelector(".rmore"); if(!box)return;
+  const files=(list||[]).filter(x=>x.type==="file");
+  if(!files.length){ box.textContent="No reports/ files."; return; }
+  box.classList.remove("mut");
+  box.innerHTML="<ul class='content-index'>"+files.map(f=>{
+   const md=/\.(md|markdown|txt|csv)$/i.test(f.name);
+   const href=md?reportHref(sc.key,"reports/"+f.name):f.html_url;
+   return "<li class='content-index__item'><span class='content-index__title'><a href='"+esc(href)+"'"+(md?"":" target='_blank' rel='noopener'")+">"+esc(f.name)+"</a></span><span class='content-index__meta'>"+(f.size!=null?Math.max(1,Math.round(f.size/1024))+" KB":"")+(md?"":" · on GitHub")+"</span></li>";
+  }).join("")+"</ul>";
+ }).catch(()=>{ const box=card.querySelector(".rmore"); if(box)box.textContent="reports/ not readable (token scope?)."; });
+ return card;
 }
 function reportViewer(key,path){
  setTabs(null); statusLine(null);
  main.innerHTML=""; const w=el("div","wrap"); main.append(w);
  const sc=findSc(key);
- if(!sc){ w.innerHTML="<div class='boot'>Unknown class "+esc(key)+". <a href='#/reports'>Reports</a></div>"; return; }
- if(!/^(reports|gradebook)\/[\w][\w./ -]*$/.test(path)||path.includes("..")){ w.innerHTML="<div class='boot'>Not a report path. <a href='#/reports'>Reports</a></div>"; return; }
- w.innerHTML="<a class='mut' href='#/reports'>← Reports</a><h1 style='margin-top:4px'>"+esc(path.split("/").pop())+"</h1>"+
+ if(!sc){ w.innerHTML="<div class='boot'>Unknown class "+esc(key)+". <a href='#/'>Dashboard</a></div>"; return; }
+ const back=classHref(key);
+ if(!/^(reports|gradebook)\/[\w][\w./ -]*$/.test(path)||path.includes("..")){ w.innerHTML="<div class='boot'>Not a report path. <a href='"+back+"'>Back to "+esc(sc.section)+"</a></div>"; return; }
+ w.innerHTML="<a class='mut' href='"+back+"'>← "+esc(sc.subject)+" · "+esc(sc.section)+"</a><h1 style='margin-top:4px'>"+esc(path.split("/").pop())+"</h1>"+
   "<div class='muted'>"+esc(sc.subject)+" · "+esc(sc.section)+" · <a href='https://github.com/"+esc(sc.org)+"/"+esc(sc.repo)+"/blob/main/"+esc(path)+"' target='_blank' rel='noopener'>open on GitHub</a></div>"+
   "<div class='card' data-pad='sm'><div class='rbody mut'>Loading…</div></div>";
  ghText("/repos/"+sc.org+"/"+sc.repo+"/contents/"+path.split("/").map(encodeURIComponent).join("/")).then(md=>{
@@ -558,17 +612,12 @@ function opCard(sc,op){
  return c;
 }
 
-function opsView(key){
- setTabs(null); statusLine(null);
- main.innerHTML=""; const w=el("div","wrap"); main.append(w);
- const scs=sections();
- if(!scs.length){ w.innerHTML="<div class='boot'>No classes discovered yet.</div>"; return; }
- const k=key&&findSc(key)?key:scs[0].key;
- const sc=findSc(k);
- w.innerHTML="<h1>Ops</h1><p class='lede' data-size='sm'>Run the engine for a class. Everything defaults to a dry run; a real write needs the class code typed back. A red audit run means the audit FOUND something.</p>";
- const picker=el("nav","tab-bar");
- scs.forEach(x=>{const a=el("a","tab",esc(x.subject)+" · "+esc(x.section));a.href="#/ops/"+encodeURIComponent(x.key);if(x.key===k)a.dataset.active="true";picker.append(a)});
- w.append(picker);
+// Ops is a per-class tab now (#/c/:key/ops): the class is already named by the
+// active tab, so there is no in-content class picker to scroll away. Renders into
+// the class wrap; classView has already set the tabs and status line.
+function renderOps(s,w){
+ const sc=findSc(s.key)||s;
+ w.innerHTML="<h1>Ops · "+esc(sc.subject)+" · "+esc(sc.section)+"</h1><p class='lede' data-size='sm'>Run the engine for this class. Everything defaults to a dry run; a real write needs the class code typed back. A red audit run means the audit FOUND something.</p>";
  [...new Set(OPS.map(o=>o.group))].forEach(g=>{
   w.append(el("h2","opgroup",esc(g)));
   OPS.filter(o=>o.group===g).forEach(op=>w.append(op.file==="publish-material.yml"?materialCard(sc,op):opCard(sc,op)));
@@ -660,7 +709,7 @@ function renderActivities(s,w){
   "<span style='flex:1'></span>"+
   "<button class='btn' data-size='sm' data-variant='soft' id='csDry'>Canvas sync (dry-run)</button>"+
   "<button class='btn' data-size='sm' data-variant='soft' id='cpDry'>Canvas push (dry-run)</button></div>"+
-  "<p class='mut' style='margin:6px 0 0'>Execute variants live in <a href='#/ops/"+encodeURIComponent(s.key)+"'>Ops</a>, behind the typed confirm.</p>";
+  "<p class='mut' style='margin:6px 0 0'>Execute variants live in <a href='"+classHref(s.key,"ops")+"'>Ops</a>, behind the typed confirm.</p>";
  w.append(ops2);
  $("#pmRun").onclick=()=>{const u=$("#pmUnit").value.trim();if(!u)return $("#pmUnit").focus();const op=OPS.find(o=>o.file==="publish-material.yml");runOp(sc,{...op,execDanger:"push unit "+u+" to every workspace"},{unit:u},true);};
  $("#csDry").onclick=()=>{const op=OPS.find(o=>o.file==="canvas-sync-assignments.yml");runOp(sc,op,{mode:"dry-run",desc:"false",submit:"false",rename:"false"},false);};
@@ -767,7 +816,11 @@ function renderActivityNew(s,w){
 // re-dispatches the current route (cached section -> instant repaint).
 function render(){ if(started) dispatch(); }
 
-function renderBook(s,w){
+// Class OVERVIEW (the landing tab, #/c/:key): the at-a-glance read. Tiles,
+// at-risk, Canvas preview, engine flags, recent runs, Reports. The full-width
+// matrix and the delivery prompts live one tab deeper in Gradebook, so nothing
+// pushes the overview off the first screen.
+function renderOverview(s,w){
  const tiles=el("div","stats");
  const avgP=avg(s.students.map(x=>x.tally.pushMax?x.tally.push/x.tally.pushMax:null));
  tiles.innerHTML=[
@@ -778,12 +831,24 @@ function renderBook(s,w){
  ].map(([l,n,sub])=>'<div class="stat"><span class="stat__value">'+n+'</span><span class="stat__label">'+l+'</span>'+(sub?'<span class="stat__sub">'+sub+'</span>':'')+'</div>').join("");
  w.append(tiles);
  const ctl=el("div","ctl");
+ ctl.innerHTML='<a class="btn" data-size="sm" href="'+classHref(s.key,"gradebook")+'">Open gradebook →</a> <button class="btn" data-size="sm" data-variant="soft" id="ovPrompt">Generate apply-grades prompt →</button> <button class="btn" data-size="sm" data-variant="soft" id="ovDeliver">Deliver to Canvas + workspaces →</button>';
+ w.append(ctl);
+ const risk=atRiskCard(s); if(risk)w.append(risk);
+ w.append(canvasPanel(s));
+ w.append(flagsCard(s));
+ w.append(runsCard(s));
+ w.append(reportsCard(s));
+ $("#ovPrompt").onclick=()=>showPrompt(s);
+ $("#ovDeliver").onclick=()=>showDeliver(s);
+}
+
+// GRADEBOOK tab (#/c/:key/gradebook): the full-width matrix and the delivery
+// prompts, nothing stacked below it.
+function renderBook(s,w){
+ const ctl=el("div","ctl");
  ctl.innerHTML='<input class="field__input search" id="q" placeholder="Filter students…" value="'+esc(q)+'"> <button class="btn" data-size="sm" data-variant="soft" id="prompt">Generate apply-grades prompt →</button> <button class="btn" data-size="sm" id="deliver">Deliver to Canvas + workspaces →</button>';
  w.append(ctl);
  w.append(matrix(s));
- w.append(canvasPanel(s));
- const risk=atRiskCard(s); if(risk)w.append(risk);
- w.append(runsCard(s));
  $("#q").oninput=e=>{q=e.target.value.toLowerCase();renderMatrixOnly(s)};
  $("#prompt").onclick=()=>showPrompt(s);
  $("#deliver").onclick=()=>showDeliver(s);
@@ -811,22 +876,37 @@ function atRiskCard(s){
 
 // Recent engine runs (grain timeline): the last few runs of the workflows that
 // matter day to day, newest first. Needs the PAT's Actions read scope.
+// The five Actions calls are TTL-memoized per section (RUNS_TTL) so re-entering
+// the Overview - or the status bar's ↻, which re-dispatches - does not re-fire
+// them on every paint. `invalidate(key)` clears the section, not this memo; the
+// memo just ages out. A hard refresh of the runs list waits out RUNS_TTL.
+const RUNS_TTL=90*1000;
+const runsMemo=new Map();   // key -> { at, promise }
+function runsFor(sc){
+ const hit=runsMemo.get(sc.key);
+ if(hit && Date.now()-hit.at<RUNS_TTL) return hit.promise;
+ const FILES=[["grade.yml","Grade sweep"],["publish.yml","Publish grades"],["canvas-push.yml","Canvas push"],["publish-material.yml","Publish material"],["verify-attendance.yml","Verify attendance"]];
+ const promise=Promise.all(FILES.map(([f,l])=>listRuns(sc.org,sc.repo,f,3).then(rs=>(rs||[]).map(r=>({r,label:l}))).catch(()=>[])))
+  .then(all=>all.flat().sort((a,b)=>new Date(b.r.created_at)-new Date(a.r.created_at)).slice(0,8))
+  .catch(err=>{ runsMemo.delete(sc.key); throw err; });
+ runsMemo.set(sc.key,{at:Date.now(),promise});
+ return promise;
+}
 function runsCard(s){
  const sc=findSc(s.key)||s;
  const card=el("div","card"); card.dataset.pad="sm";
  card.innerHTML="<h2>Recent engine runs</h2><div class='mut runsbox'>Loading runs…</div>";
- const FILES=[["grade.yml","Grade sweep"],["publish.yml","Publish grades"],["canvas-push.yml","Canvas push"],["publish-material.yml","Publish material"],["verify-attendance.yml","Verify attendance"]];
- Promise.all(FILES.map(([f,l])=>listRuns(sc.org,sc.repo,f,3).then(rs=>(rs||[]).map(r=>({r,label:l}))).catch(()=>[])))
- .then(all=>{
+ runsFor(sc)
+ .then(runs=>{
   const box=card.querySelector(".runsbox"); if(!box)return;
-  const runs=all.flat().sort((a,b)=>new Date(b.r.created_at)-new Date(a.r.created_at)).slice(0,8);
   if(!runs.length){ box.textContent="No runs visible (never run, or this repo's PAT lacks Actions: Read)."; return; }
   box.classList.remove("mut");
   box.innerHTML="<div class='timeline'><div class='timeline__feed'>"+runs.map(({r,label})=>{
    const tone=r.status!=="completed"?"held":r.conclusion==="success"?"good":"bad";
    return "<div class='timeline__entry'><span class='timeline__mark'></span><div class='timeline__head'><span class='timeline__who'>"+esc(label)+"</span> <span class='badge' data-tone='"+tone+"'>"+esc(r.status!=="completed"?r.status:(r.conclusion||"done"))+"</span> <a href='"+esc(r.html_url)+"' target='_blank' rel='noopener'>run →</a></div><div class='timeline__hint'>"+new Date(r.created_at).toLocaleString()+"</div></div>";
   }).join("")+"</div></div>";
- });
+ })
+ .catch(()=>{ const box=card.querySelector(".runsbox"); if(box)box.textContent="Runs unavailable (token scope?)."; });
  return card;
 }
 function renderMatrixOnly(s){ const old=$("#matrixcard"); if(old){const n=matrix(s);old.replaceWith(n);} }

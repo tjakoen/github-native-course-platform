@@ -26,11 +26,14 @@ export function initSearch(refreshView) {
 
     for (const sc of sections()) {
       const label = sc.subject + " · " + sc.section;
-      push(label, "gradebook", "Class", "#/c/" + encodeURIComponent(sc.key));
-      push(label + " students", "roster + profiles", "Class", "#/c/" + encodeURIComponent(sc.key) + "/students");
-      push(label + " review", "held AI grades", "Class", "#/c/" + encodeURIComponent(sc.key) + "/review");
-      push(label + " attendance", "", "Class", "#/c/" + encodeURIComponent(sc.key) + "/attendance");
-      push("Refresh " + label, "re-fetch from GitHub", "Action", () => { invalidate(sc.key); location.hash = "#/c/" + encodeURIComponent(sc.key); refreshView(); });
+      const base = "#/c/" + encodeURIComponent(sc.key);
+      push(label, "overview", "Class", base);
+      push(label + " gradebook", "the grade matrix", "Class", base + "/gradebook");
+      push(label + " students", "roster + profiles", "Class", base + "/students");
+      push(label + " review", "held AI grades", "Class", base + "/review");
+      push(label + " attendance", "", "Class", base + "/attendance");
+      push(label + " ops", "run engine workflows", "Class", base + "/ops");
+      push("Refresh " + label, "re-fetch from GitHub", "Action", () => { invalidate(sc.key); location.hash = base; refreshView(); });
 
       const s = sectionCached(sc.key);
       if (!s) continue;
