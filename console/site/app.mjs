@@ -10,9 +10,12 @@ import { discoverSections, parseRepoURL } from "./lib/config.mjs";
 import { shotsFor, shotsCached } from "./lib/shots.mjs";
 import { codeFor, codeCached } from "./lib/code.mjs";
 import { route, start, go, dispatch, beforeEach, fallback } from "./lib/router.mjs";
-import { discover, sections, findSc, getSection, sectionCached, invalidate, ageOf, STALE_MS } from "./lib/data.mjs";
+import { discover, sections, findSc, getSection, sectionCached, invalidate, ageOf, STALE_MS, getFlagsFiles } from "./lib/data.mjs";
 import { missingWork, workspaceInfo } from "./lib/students.mjs";
 import { initSearch } from "./lib/search-index.mjs";
+import { OPS } from "./lib/ops-catalog.mjs";
+import { listRuns, dispatch as dispatchWf, findDispatchedRun, pollRun } from "./lib/actions.mjs";
+import { editAssignments } from "./lib/config-writes.mjs";
 
 const $=(s,r=document)=>r.querySelector(s), el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e};
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -103,7 +106,7 @@ function setNav(){
 function setTabs(key,mode,s){
  const t=$("#ctxTabs");
  if(!key){t.innerHTML="";return;}
- const items=[["","Gradebook","book"],["students","Students"+(s?" ("+s.stats.students+")":""),"stu"],["review","AI Review"+(s?" ("+s.stats.held+")":""),"ai"],["attendance","Attendance"+(s&&s.stats.sessions?" ("+s.stats.sessions+")":""),"att"]];
+ const items=[["","Gradebook","book"],["activities","Activities"+(s?" ("+s.stats.activities+")":""),"act"],["students","Students"+(s?" ("+s.stats.students+")":""),"stu"],["review","AI Review"+(s?" ("+s.stats.held+")":""),"ai"],["attendance","Attendance"+(s&&s.stats.sessions?" ("+s.stats.sessions+")":""),"att"]];
  t.innerHTML=items.map(([sub,l,m])=>{const on=m===mode||(m==="stu"&&String(mode).startsWith("profile:"));return "<a class='tab' href='"+classHref(key,sub)+"'"+(on?" aria-current='page' data-active='true'":"")+">"+l+"</a>";}).join("");
 }
 
@@ -151,6 +154,7 @@ function classView(key,mode){
   const w=el("div","wrap");
   main.append(w);
   if(mode==="ai") renderAI(s,w); else if(mode==="att") renderAttendance(s,w);
+  else if(mode==="act") renderActivities(s,w);
   else if(mode==="stu") renderStudents(s,w);
   else if(mode&&mode.startsWith("profile:")) renderStudentProfile(s,w,mode.slice(8));
   else renderBook(s,w);
@@ -278,7 +282,12 @@ function dashView(){
 route("#/", dashView);
 route("#/settings", ()=>{ setTabs(null); statusLine(null); main.innerHTML="<div class='wrap'><h1>Settings</h1><p class='lede' data-size='sm'>Repos, tokens, and your review-decision backups.</p></div>"; openSettings(false); });
 route("#/scan", ()=>location.replace("./scanner/"));
+route("#/flags", flagsView);
+route("#/reports", reportsView);
+route("#/ops", ()=>opsView(null));
+route("#/ops/:key", p=>opsView(p.key));
 route("#/c/:key", p=>classView(p.key,"book"));
+route("#/c/:key/activities", p=>classView(p.key,"act"));
 route("#/c/:key/students", p=>classView(p.key,"stu"));
 route("#/c/:key/students/:sk", p=>classView(p.key,"profile:"+p.sk));
 route("#/c/:key/review", p=>classView(p.key,"ai"));
@@ -345,6 +354,192 @@ function importDecisions(file){
   };
   rd.readAsText(file);
 }
+
+// ---- Flags (cheap cross-class inbox: FLAGS.md + reports/FLAGGED.md per class) ----
+async function flagsView(){
+ setTabs(null); statusLine(null);
+ main.innerHTML=""; const w=el("div","wrap"); main.append(w);
+ w.innerHTML="<h1>Flags</h1><p class='lede' data-size='sm'>What the engine and audits want a human to look at, per class - from gradebook/FLAGS.md and reports/FLAGGED.md.</p>";
+ for(const sc of sections()){
+  const card=el("div","card"); card.dataset.pad="sm";
+  card.innerHTML="<h2>"+esc(sc.subject)+" · "+esc(sc.section)+"</h2><div class='mut flagbody'>Loading…</div>";
+  w.append(card);
+  getFlagsFiles(sc.key).then(f=>{
+   const box=card.querySelector(".flagbody"); if(!box)return;
+   const both=[f.flags&&"## FLAGS.md\n"+f.flags, f.flagged&&"## reports/FLAGGED.md\n"+f.flagged].filter(Boolean).join("\n\n");
+   box.innerHTML=both?"<pre class='code-block prompt'>"+esc(both)+"</pre>":"<span class='mut'>Nothing flagged. ✓</span>";
+  }).catch(()=>{const box=card.querySelector(".flagbody"); if(box)box.textContent="Unreadable (token scope?).";});
+ }
+}
+
+// ---- Reports (per-class links into the repo's reports/) ----
+function reportsView(){
+ setTabs(null); statusLine(null);
+ main.innerHTML=""; const w=el("div","wrap"); main.append(w);
+ w.innerHTML="<h1>Reports</h1><p class='lede' data-size='sm'>Each class's generated reports, read on GitHub (a richer in-console reader is coming).</p>"+
+  "<ul class='content-index'>"+sections().map(sc=>"<li class='content-index__item'><span class='content-index__title'><a href='https://github.com/"+esc(sc.org)+"/"+esc(sc.repo)+"/tree/main/reports' target='_blank' rel='noopener'>"+esc(sc.subject)+" · "+esc(sc.section)+" reports/</a></span><span class='content-index__meta'>GRADEBOOK: <a href='https://github.com/"+esc(sc.org)+"/"+esc(sc.repo)+"/blob/main/gradebook/GRADEBOOK.md' target='_blank' rel='noopener'>GRADEBOOK.md</a></span></li>").join("")+"</ul>";
+}
+
+// ---- typed execute confirm (native dialog) ----
+function confirmExecute(action, word){
+ return new Promise(resolve=>{
+  const d=document.createElement("dialog"); d.className="confirm-dialog";
+  d.innerHTML="<h3>Execute: are you sure?</h3><p class='muted'>This will "+esc(action)+". Type <b>"+esc(word)+"</b> to confirm.</p>"+
+   "<input class='field__input' id='ceWord' autocomplete='off'>"+
+   "<div style='display:flex;gap:8px;margin-top:10px'><button class='btn' data-size='sm' id='ceOk' disabled>Execute</button><button class='btn' data-size='sm' data-variant='soft' id='ceNo'>Cancel</button></div>";
+  document.body.append(d); d.showModal();
+  const inp=d.querySelector("#ceWord"), ok=d.querySelector("#ceOk");
+  inp.oninput=()=>{ ok.disabled=inp.value.trim()!==word; };
+  ok.onclick=()=>{d.close();d.remove();resolve(true);};
+  d.querySelector("#ceNo").onclick=()=>{d.close();d.remove();resolve(false);};
+  d.addEventListener("cancel",()=>{d.remove();resolve(false);});
+  inp.focus();
+ });
+}
+
+// ---- docked op feed (grain console organism) ----
+function opFeed(line, link){
+ const box=$("#opConsole"); box.hidden=false;
+ if(!box.firstChild){ box.innerHTML="<div class='console__box'><div class='console__bar'><span class='mut mono'>ops</span><span style='flex:1'></span><button class='btn' data-size='sm' data-variant='soft' id='opHide'>×</button></div><div class='console__feed' id='opLines'></div></div>"; $("#opHide").onclick=()=>{box.hidden=true;}; }
+ const l=el("div","opline"); l.innerHTML="<span class='mut mono'>"+new Date().toLocaleTimeString()+"</span> "+line+(link?" <a href='"+esc(link)+"' target='_blank' rel='noopener'>run →</a>":"");
+ $("#opLines").append(l); $("#opLines").scrollTop=1e9;
+ return l;
+}
+
+async function runOp(sc,op,inputs,executing){
+ if(executing){ const okc=await confirmExecute(op.execDanger||("write for real on "+sc.key),sc.section); if(!okc)return; }
+ const line=opFeed((executing?"EXECUTE ":"dry-run ")+esc(op.label)+" on "+esc(sc.key)+" · dispatching…");
+ try{
+  const {dispatchedAt}=await dispatchWf(sc.org,sc.repo,op.file,inputs);
+  const run=await findDispatchedRun(sc.org,sc.repo,op.file,dispatchedAt);
+  if(!run){ line.innerHTML+=" dispatched ✓ (find it in the repo's Actions tab)"; return; }
+  line.innerHTML="<span class='mut mono'>"+new Date().toLocaleTimeString()+"</span> "+(executing?"EXECUTE ":"dry-run ")+esc(op.label)+" on "+esc(sc.key)+" · <span class='opstat'>queued</span> <a href='"+esc(run.html_url)+"' target='_blank' rel='noopener'>run →</a>";
+  const stat=line.querySelector(".opstat");
+  const done=await pollRun(sc.org,sc.repo,run.id,r=>{ stat.textContent=r.status==="completed"?(r.conclusion||"done"):r.status; });
+  if(done) stat.innerHTML="<span class='badge' data-tone='"+(done.conclusion==="success"?"good":"bad")+"'>"+esc(done.conclusion||"done")+"</span>";
+ }catch(e){ line.innerHTML+=" <span class='badge' data-tone='bad'>failed</span> "+esc(e.message); }
+}
+
+// Is this input-set an execute (real write)? Uses the catalog gate metadata.
+function isExecuting(op,inputs){
+ if(op.inputs&&op.inputs.some(i=>i.gateAlways)) return true;
+ for(const i of (op.inputs||[])){
+  if(i.gate===true){ const v=inputs[i.name]; if(i.invert?v==="false":v==="true") return true; }
+  else if(typeof i.gate==="string"&&inputs[i.name]===i.gate) return true;
+ }
+ return false;
+}
+function dangerOf(op){ const g=(op.inputs||[]).find(i=>i.gate||i.gateAlways); return (g&&g.danger)||"write for real"; }
+
+function opCard(sc,op){
+ const c=el("div","card opcard"); c.dataset.pad="sm";
+ c.innerHTML="<div class='ophead'><b>"+esc(op.label)+"</b> <span class='mut mono'>"+esc(op.file)+"</span> <span class='oprun mut'>checking…</span></div><p class='mut opdesc'>"+esc(op.desc)+"</p>";
+ listRuns(sc.org,sc.repo,op.file,1).then(runs=>{
+  const slot=c.querySelector(".oprun"); if(!slot)return;
+  if(runs===null){ slot.textContent="no runs (or PAT lacks Actions scope)"; return; }
+  const r=runs[0]; if(!r){ slot.textContent="never run"; return; }
+  slot.innerHTML="<a href='"+esc(r.html_url)+"' target='_blank' rel='noopener'><span class='badge' data-tone='"+(r.status!=="completed"?"held":r.conclusion==="success"?"good":"bad")+"'>"+esc(r.status!=="completed"?r.status:(r.conclusion||"done"))+"</span></a> <span class='mut'>"+new Date(r.created_at).toLocaleString()+"</span>";
+ }).catch(()=>{});
+ if(op.dispatch===false) return c;
+ const form=el("div","opform");
+ const idOf=n=>"op_"+op.file.replace(/\W/g,"_")+"_"+n;
+ (op.inputs||[]).forEach(inp=>{
+  const id=idOf(inp.name);
+  let ctl;
+  if(inp.type==="bool") ctl="<label class='chips__chip'><input type='checkbox' id='"+id+"'"+(inp.def==="true"?" checked":"")+"><span>"+esc(inp.name)+"</span></label>";
+  else if(inp.type==="choice") ctl="<label class='field opf'><span class='field__label'>"+esc(inp.name)+"</span><select class='field__select' id='"+id+"'>"+inp.options.map(o=>"<option"+(o===inp.def?" selected":"")+">"+esc(o)+"</option>").join("")+"</select></label>";
+  else if(inp.type==="text") ctl="<label class='field opf' style='width:100%'><span class='field__label'>"+esc(inp.name)+"</span><textarea class='field__input fta' rows='3' id='"+id+"'></textarea></label>";
+  else ctl="<label class='field opf'><span class='field__label'>"+esc(inp.name)+(inp.hint?" <span class='mut'>"+esc(inp.hint)+"</span>":"")+"</span><input class='field__input' id='"+id+"' value='"+esc(inp.def||"")+"'></label>";
+  form.insertAdjacentHTML("beforeend",ctl);
+ });
+ const runBtn=el("button","btn","Run"); runBtn.dataset.size="sm";
+ runBtn.onclick=()=>{
+  const inputs={}; let abort=false;
+  (op.inputs||[]).forEach(inp=>{
+   if(abort) return;
+   const n=c.querySelector("#"+idOf(inp.name));
+   const v=inp.type==="bool"?(n.checked?"true":"false"):String(n.value||"").trim();
+   if(inp.required&&!v){ n.focus(); abort=true; return; }
+   if(v!==""||inp.type==="bool") inputs[inp.name]=v;
+  });
+  if(abort) return;
+  runOp(sc,{...op,execDanger:dangerOf(op)+" on "+sc.key},inputs,isExecuting(op,inputs));
+ };
+ form.append(runBtn);
+ c.append(form);
+ return c;
+}
+
+function opsView(key){
+ setTabs(null); statusLine(null);
+ main.innerHTML=""; const w=el("div","wrap"); main.append(w);
+ const scs=sections();
+ if(!scs.length){ w.innerHTML="<div class='boot'>No classes discovered yet.</div>"; return; }
+ const k=key&&findSc(key)?key:scs[0].key;
+ const sc=findSc(k);
+ w.innerHTML="<h1>Ops</h1><p class='lede' data-size='sm'>Run the engine for a class. Everything defaults to a dry run; a real write needs the class code typed back. A red audit run means the audit FOUND something.</p>";
+ const picker=el("nav","tab-bar");
+ scs.forEach(x=>{const a=el("a","tab",esc(x.subject)+" · "+esc(x.section));a.href="#/ops/"+encodeURIComponent(x.key);if(x.key===k)a.dataset.active="true";picker.append(a)});
+ w.append(picker);
+ [...new Set(OPS.map(o=>o.group))].forEach(g=>{
+  w.append(el("h2","opgroup",esc(g)));
+  OPS.filter(o=>o.group===g).forEach(op=>w.append(opCard(sc,op)));
+ });
+}
+
+// ---- Activities management ----
+function renderActivities(s,w){
+ const sc=findSc(s.key)||s;
+ const top=el("div","ctl");
+ top.innerHTML="<span class='mut'>Toggles commit a one-line change to grader/assignments.json (diff shown first). Content and Canvas run the repo's own dry-run-gated workflows.</span>";
+ w.append(top);
+ const card=el("div","card"); card.append(el("h2",null,"Activities"));
+ const scr=el("div","scroll"); const t=el("table","matrix");
+ t.innerHTML="<tr><th>Activity</th><th>Kind</th><th class='center'>Points</th><th class='center'>Graded</th><th class='center'>Locked</th><th class='center'>Published to students</th><th></th></tr>"+
+  s.assignments.map(a=>{
+   const graded=s.students.filter(st=>st.activities[a.id]).length;
+   return "<tr data-aid='"+esc(a.id)+"'>"+
+    "<td><b>"+esc(a.id)+"</b>"+(a.title?" <span class='mut'>"+esc(a.title)+"</span>":"")+"</td>"+
+    "<td><span class='badge' data-tone='"+KTONE[a.kind]+"'>"+a.kind+"</span></td>"+
+    "<td class='center'>"+(a.totalPoints??a.autoPoints??"-")+"</td>"+
+    "<td class='center'>"+graded+"</td>"+
+    "<td class='center'><button class='btn tglLock' data-size='sm' data-variant='soft'>"+(a.locked?"🔒 locked":"open")+"</button></td>"+
+    "<td class='center'><button class='btn tglPub' data-size='sm' data-variant='soft'>"+(a.publish?"publishing":"held back")+"</button></td>"+
+    "<td><button class='btn actSweep' data-size='sm' data-variant='soft' title='Grade sweep, dry-run, just this activity'>sweep</button></td></tr>";
+  }).join("");
+ scr.append(t); card.append(scr); w.append(card);
+ t.querySelectorAll("tr[data-aid]").forEach(tr=>{
+  const aid=tr.dataset.aid;
+  tr.querySelector(".tglLock").onclick=async()=>{
+   const a=s.assignments.find(x=>x.id===aid);
+   const ok=await editAssignments(sc,es=>{const e=es.find(x=>x.id===aid);if(!e)return null;e.locked=!a.locked;return (a.locked?"Unlock ":"Lock ")+aid;},(a.locked?"Unlock ":"Lock ")+aid+" - "+s.key).catch(err=>{alert(err.message);return false;});
+   if(ok){ invalidate(s.key); dispatch(); }
+  };
+  tr.querySelector(".tglPub").onclick=async()=>{
+   const a=s.assignments.find(x=>x.id===aid);
+   const warn=a.aiGraded&&!a.publish?" (AI-graded: finalize its reviews first)":"";
+   const ok=await editAssignments(sc,es=>{const e=es.find(x=>x.id===aid);if(!e)return null;e.publish=!a.publish;return (a.publish?"Hold back ":"Publish ")+aid+warn;},(a.publish?"Hold back ":"Publish ")+aid+" - "+s.key).catch(err=>{alert(err.message);return false;});
+   if(ok){ invalidate(s.key); dispatch(); }
+  };
+  tr.querySelector(".actSweep").onclick=()=>{
+   const op=OPS.find(o=>o.file==="grade.yml");
+   runOp(sc,{...op,execDanger:"write the gradebook"},{dry_run:"true",only:aid,force:"false"},false);
+  };
+ });
+ const ops2=el("div","card"); ops2.dataset.pad="sm";
+ ops2.innerHTML="<h2>Content & Canvas</h2><div class='opform'>"+
+  "<label class='field opf'><span class='field__label'>content unit <span class='mut'>(folder under content/)</span></span><input class='field__input' id='pmUnit' placeholder='m4-backend'></label>"+
+  "<button class='btn' data-size='sm' id='pmRun'>Publish material</button>"+
+  "<span style='flex:1'></span>"+
+  "<button class='btn' data-size='sm' data-variant='soft' id='csDry'>Canvas sync (dry-run)</button>"+
+  "<button class='btn' data-size='sm' data-variant='soft' id='cpDry'>Canvas push (dry-run)</button></div>"+
+  "<p class='mut' style='margin:6px 0 0'>Execute variants live in <a href='#/ops/"+encodeURIComponent(s.key)+"'>Ops</a>, behind the typed confirm.</p>";
+ w.append(ops2);
+ $("#pmRun").onclick=()=>{const u=$("#pmUnit").value.trim();if(!u)return $("#pmUnit").focus();const op=OPS.find(o=>o.file==="publish-material.yml");runOp(sc,{...op,execDanger:"push unit "+u+" to every workspace"},{unit:u},true);};
+ $("#csDry").onclick=()=>{const op=OPS.find(o=>o.file==="canvas-sync-assignments.yml");runOp(sc,op,{mode:"dry-run",desc:"false",submit:"false",rename:"false"},false);};
+ $("#cpDry").onclick=()=>{const op=OPS.find(o=>o.file==="canvas-push.yml");runOp(sc,op,{mode:"dry-run",comment:"false"},false);};
+}
+
 
 // Legacy shim: views call render() after a decision write or theme flip; it
 // re-dispatches the current route (cached section -> instant repaint).

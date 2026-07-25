@@ -139,3 +139,17 @@ textarea.fta.mono{font-family:var(--font-mono);font-size:var(--text-xs);line-hei
 .rowlink{cursor:pointer}
 .rowlink:hover td{background:var(--paper-2)}
 .ctl .chips{display:inline-flex;gap:var(--space-2);align-items:center}
+/* ops + confirm dialogs + docked feed */
+.opgroup{margin:var(--space-5) 0 var(--space-2)}
+.opcard{margin-bottom:var(--space-3)}
+.ophead{display:flex;gap:var(--space-2);align-items:baseline;flex-wrap:wrap}
+.ophead .oprun{margin-left:auto}
+.opdesc{margin:var(--space-1) 0}
+.opform{display:flex;gap:var(--space-2);align-items:flex-end;flex-wrap:wrap}
+.opform .opf{margin:0;min-width:140px}
+.confirm-dialog{border:1px solid var(--color-line);border-radius:var(--radius-md);background:var(--paper);color:inherit;padding:var(--space-4);max-width:min(640px,92vw)}
+.confirm-dialog::backdrop{background:rgb(0 0 0/.35)}
+.confirm-dialog h3{margin:0 0 var(--space-2)}
+#opConsole .console__feed{max-height:180px;overflow:auto;font-family:var(--font-mono);font-size:var(--text-xs);padding:var(--space-2) var(--space-3)}
+#opConsole .console__bar{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-1) var(--space-3);border-top:1px solid var(--color-line)}
+.opline{padding:2px 0}
