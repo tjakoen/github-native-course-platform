@@ -1,0 +1,17 @@
+{
+  "name": "grader-ui",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Hosted review surface for the GitHub-native course platform: a data-free GitHub Pages shell that reads teacher-repo gradebooks live from the GitHub API in the browser and generates the prompts the AI runs to apply decisions. Uses the GRAIN design system.",
+  "dependencies": {
+    "@tjakoen/grain": "^0.1.8"
+  },
+  "scripts": {
+    "bake": "node scripts/bake-theme.mjs",
+    "dev": "node scripts/bake-theme.mjs && npx serve site",
+    "audit": "node src/audit-students.mjs",
+    "fix": "node src/apply-fixes.mjs",
+    "blanks": "node src/check-blanks.mjs"
+  }
+}

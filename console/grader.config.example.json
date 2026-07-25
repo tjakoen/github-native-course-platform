@@ -1,0 +1,11 @@
+{
+  "//": "OPTIONAL. Sections are auto-discovered by scanning classes/ for teacher-<code>-<section>-<name> clones. This file only carries overrides. Copy to grader.config.json to use; delete any key you do not need.",
+  "classesDir": "classes",
+  "outDir": "out",
+  "labels": {
+    "6APSI": "6APSI JavaScript / React",
+    "6ADET": "6ADET Flutter / Dart",
+    "6INTROWEB": "6INTROWEB HTML / CSS / JS"
+  },
+  "exclude": []
+}

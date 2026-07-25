@@ -1,0 +1,91 @@
+/* ================================================================================
+   grader-ui PRODUCT CSS (everything here is grader-ui's own, on grain's tokens).
+   The GRAIN theme + every component class comes from theme.css (baked from
+   @tjakoen/grain by scripts/bake-theme.mjs). Mirror of the product-owned block in
+   src/build-dashboard.mjs. Two kinds of rules live here, nothing else:
+   1. Layout/composition grain leaves to the parent (the wide page column, the stats
+      grid, card spacing, the review drawer, the matrix's sticky column).
+   2. The documented monochrome exceptions (docs/grain-for-ai.md): a grading matrix
+      genuinely needs status hues, heat cells, and syntax tint — grain is monochrome
+      by doctrine, so these stay product-owned and never go upstream.
+   ================================================================================ */
+:root{--wrap-max:1500px;
+  --good:#3f6d3a;--warn:#8a6410;--bad:#a12f22;--held:#5a3fa0;--tc:#6a7a52;--ts:#9a5b2a;--tn:#4a7a4a;--tk:#3a5a8a;--tg:#5a7a6a}
+@media(prefers-color-scheme:dark){:root:not([data-color-scheme=light]){--good:#7fae70;--warn:#d0a24a;--bad:#e08a7a;--held:#b79af0;--tc:#9ab07a;--ts:#d0a07a;--tn:#a0c090;--tk:#8aa0d0;--tg:#8ab0a0}}
+:root[data-color-scheme=dark]{--good:#7fae70;--warn:#d0a24a;--bad:#e08a7a;--held:#b79af0;--tc:#9ab07a;--ts:#d0a07a;--tn:#a0c090;--tk:#8aa0d0;--tg:#8ab0a0}
+/* page column — a review matrix needs the full window, not grain's 768px reading column */
+.wrap{max-width:var(--wrap-max);margin:0 auto;padding:var(--space-5) var(--space-4)}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-1)}
+/* tab strips (grain tab/tab-bar) — parent chrome: a quiet band so the active tab's
+   merge-into-the-page read works outside an app-shell topbar */
+.wrap .tab-bar,.dp .tab-bar{flex:0 1 auto;background:var(--paper-2);border-bottom:1px solid var(--color-line);margin-top:var(--space-4)}
+.tab-bar .tab{cursor:pointer}
+.dp .tab-bar{display:inline-flex;margin:0 0 var(--space-3)}
+/* the review drawer's Screenshots/Code switch renders its tabs as real <button>s */
+button.tab{background:none;border:0;border-right:1px solid var(--color-line)}
+button.tab:disabled{opacity:.4;cursor:not-allowed}
+/* stats strip — parent layout for grain stat tiles */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:var(--space-3);margin:var(--space-4) 0}
+/* cards — page-level spacing (parent-owned) */
+.wrap>.card,#matrixcard{margin:var(--space-4) 0}
+.card>.table-scroll:last-child,.card>.table-scroll:last-child .table{margin-bottom:0}
+/* matrix — sticky student column + dense numeric cells */
+.matrix th,.matrix td{white-space:nowrap}
+.matrix th:first-child,.matrix td:first-child{padding-left:var(--space-2)}
+.matrix td.stu,.matrix th.stu{position:sticky;left:0;background:var(--paper);z-index:1;max-width:230px;overflow:hidden;text-overflow:ellipsis}
+.matrix th.stu{z-index:3;background:var(--paper-2)}
+.cell{cursor:pointer;text-align:center;font-variant-numeric:tabular-nums}
+.cell:hover{outline:2px solid var(--color-accent);outline-offset:-2px}
+tr[data-s]{cursor:pointer}
+/* status hues on grain's badge — tone is a data-attribute, hue is the documented exception */
+.badge[data-tone]{white-space:nowrap}
+.badge[data-tone=good]{color:var(--good);border-color:var(--good)}
+.badge[data-tone=warn]{color:var(--warn);border-color:var(--warn)}
+.badge[data-tone=bad]{color:var(--bad);border-color:var(--bad)}
+.badge[data-tone=held]{color:var(--held);border-color:var(--held)}
+.badge[data-tone=quiz]{color:var(--tk);border-color:var(--tk)}
+.badge[data-tone=muted]{color:var(--color-muted)}
+.mut{color:var(--color-muted)}.rt{text-align:right}.center{text-align:center}
+.pill{font-size:var(--text-xs);color:var(--color-muted);font-weight:var(--font-weight-regular)}
+.tot{font-weight:var(--font-weight-bold);font-variant-numeric:tabular-nums}
+.legend{display:flex;gap:var(--space-4);flex-wrap:wrap;color:var(--color-muted);font-size:var(--text-xs);margin:var(--space-2) 0}
+/* control row widths — the field atoms are flex:1 by default; pin the loose ones */
+input.search{width:15rem;flex:none}
+input.num{width:4.5rem;flex:none}
+.ctl{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;margin-top:var(--space-2)}
+.hdr-actions{float:right;display:flex;gap:var(--space-2);align-items:center}
+.meter{margin-top:var(--space-3)}
+/* review drawer — product-owned (grain has no side-sheet organism) */
+.drawer{position:fixed;inset:0;background:color-mix(in srgb,var(--ink) 45%,transparent);display:none;z-index:50}
+.drawer.on{display:block}
+.dp{position:absolute;right:0;top:0;height:100%;width:min(720px,94vw);background:var(--paper);border-left:1px solid var(--color-line);overflow:auto;padding:var(--space-5)}
+.dp h3{margin:0 0 var(--space-1)}
+.dp .x{float:right;cursor:pointer;color:var(--color-muted);font-size:var(--text-xl);border:0;background:none}
+.dp.wide{width:min(1240px,97vw)}
+.rvhead{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;margin-bottom:var(--space-1)}
+.rvnav{margin-left:auto;display:flex;align-items:center;gap:var(--space-2)}
+.rvnav .cnt{color:var(--color-muted);font-size:var(--text-xs);font-variant-numeric:tabular-nums;min-width:52px;text-align:center}
+.rev2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-4);margin-top:var(--space-3)}
+@media(max-width:900px){.rev2{grid-template-columns:1fr}}
+.rvcol{min-width:0}
+.decision{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
+/* screenshot panes */
+.shots{display:flex;flex-direction:column;gap:var(--space-3)}
+.shot{border:1px solid var(--color-line);border-radius:var(--radius-md);overflow:hidden;background:var(--paper-2)}
+.shot .cap{font-size:var(--text-xs);color:var(--color-muted);padding:var(--space-1) var(--space-2);border-bottom:1px solid var(--color-line);text-transform:uppercase;letter-spacing:.04em}
+.shot img{display:block;width:100%;height:auto;cursor:zoom-in}
+.noshot{border:1px dashed var(--color-line);border-radius:var(--radius-md);padding:var(--space-6);text-align:center;color:var(--color-muted);font-size:var(--text-sm)}
+/* prompt/note blocks ride grain's code-block; prompts are prose-ish, so they wrap */
+.prompt{white-space:pre-wrap;word-wrap:break-word;font-size:var(--text-xs)}
+/* source viewer — code-block + a cap height and the syntax tint (documented exception) */
+.codepre{white-space:pre;max-height:74vh;font-size:var(--text-xs);tab-size:2}
+.codepre .tc{color:var(--tc);font-style:italic}.codepre .ts{color:var(--ts)}.codepre .tn{color:var(--tn)}.codepre .tk{color:var(--tk)}.codepre .tg{color:var(--tg)}
+select.cfile{margin-bottom:var(--space-2);font-family:var(--font-mono);font-size:var(--text-xs)}
+/* feedback editors — grain fields; product owns only sizing and the mono variant */
+.dp .field{margin-top:var(--space-3)}
+textarea.fta{resize:vertical;line-height:var(--leading-relaxed)}
+textarea.fta.mono{font-family:var(--font-mono);font-size:var(--text-xs);line-height:1.5}
+
+/* ---- hosted-shell additions (boot + settings, product-owned to the Pages build) ---- */
+.boot{padding:var(--space-6);text-align:center;color:var(--color-muted);font-size:var(--text-base)}
+#bootmsg a{color:var(--color-accent)}

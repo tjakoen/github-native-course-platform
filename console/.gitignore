@@ -1,0 +1,15 @@
+# Live instance data (PII) — never commit
+classes/
+out/
+grader.config.json
+site/test-seed.html
+
+# Node
+node_modules/
+
+# macOS
+.DS_Store
+
+# baked at build/deploy time from @tjakoen/grain
+site/theme.css
+dist/
