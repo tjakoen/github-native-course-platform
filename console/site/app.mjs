@@ -106,7 +106,7 @@ async function boot(){
 function renderScanPage(scs){
  app.innerHTML="";
  const w=el("div","wrap");
- const head=el("div"); head.innerHTML='<div class="hdr-actions"><button class="btn" data-size="sm" data-variant="soft" id="full">Full console</button><button class="btn" data-size="sm" data-variant="soft" id="cfg">⚙ Settings</button></div><h1>Course Console · Scan</h1><div class="muted">attendance scanner · commits batch CSVs to the teacher repo · signatures verified server-side</div>';
+ const head=el("div"); head.innerHTML='<div class="hdr-actions"><button class="btn" data-size="sm" data-variant="soft" id="full">Full console</button><button class="btn" data-size="sm" data-variant="soft" id="cfg">⚙ Settings</button></div><h1 data-grade="accent">Course Console · Scan</h1><div class="muted">attendance scanner · commits batch CSVs to the teacher repo · signatures verified server-side</div>';
  w.append(head);
  const mountEl=el("div"); w.append(mountEl); app.append(w);
  renderScanView(mountEl,scs,null);
@@ -219,10 +219,57 @@ function renderAttendance(s,w){
  ].map(([l,n])=>'<div class="stat"><span class="stat__value">'+n+'</span><span class="stat__label">'+l+'</span></div>').join("");
  w.append(tiles);
  const ctl=el("div","ctl");
- ctl.innerHTML='<input class="field__input search" id="q" placeholder="Filter students…" value="'+esc(q)+'">';
+ ctl.innerHTML='<input class="field__input search" id="q" placeholder="Filter students…" value="'+esc(q)+'"><button class="btn" data-size="sm" id="manualAtt">Manual attendance → prompt</button>';
  w.append(ctl);
  w.append(attMatrix(s,dates));
  $("#q").oninput=e=>{q=e.target.value.toLowerCase();const old=$("#attmatrix");if(old)old.replaceWith(attMatrix(s,dates));};
+ $("#manualAtt").onclick=()=>showManualAttendance(s);
+}
+
+// Manual attendance intent: like the grading prompts, the console writes
+// nothing itself - it emits an intent Claude Code executes in the teacher repo.
+// Manual rows carry the literal signature "manual" (teacher-attested):
+// verify-attendance counts them as present (MANUAL), never FLAGGED.
+function showManualAttendance(s){
+ const att=s.attendance||{students:{},sessionDates:[]};
+ const today=new Date().toISOString().slice(0,10);
+ const d=el("div","drawer on"); const p=el("div","dp");
+ const stuRow=st=>'<label class="status-list__item" style="cursor:pointer"><input type="checkbox" class="mAttStu" value="'+esc(st.number)+'" data-name="'+esc(st.name||"")+'"> <span class="status-list__title">'+esc(st.name||"(blank)")+' <span class="badge" data-status="archived">'+esc(st.number||"-")+'</span></span></label>';
+ const students=s.students.filter(st=>st.number);
+ p.innerHTML="<button class='x'>×</button><h3>Manual attendance - "+esc(s.section)+"</h3>"+
+  "<div class='muted'>Pick the students and the date; the generated intent tells the AI to record them as present with the teacher-attested \"manual\" signature. Verify + receipts run automatically on push.</div>"+
+  "<div class='field' style='margin-top:10px'><span class='field__label'>Date</span><input class='field__input' id='mAttDate' type='date' value='"+today+"'></div>"+
+  "<div class='field'><span class='field__label'>Filter</span><input class='field__input' id='mAttQ' placeholder='Filter students…'></div>"+
+  "<ul class='status-list' id='mAttList' style='max-height:40vh;overflow:auto'>"+students.map(stuRow).join("")+"</ul>"+
+  "<div style='margin:10px 0'><button class='btn' data-size='sm' id='mAttGen'>Generate prompt</button></div><div id='mAttOut'></div>";
+ d.append(p); document.body.append(d);
+ const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
+ $("#mAttQ").oninput=e=>{const f=e.target.value.toLowerCase();p.querySelectorAll("#mAttList .status-list__item").forEach(li=>{li.style.display=li.textContent.toLowerCase().includes(f)?"":"none";});};
+ $("#mAttGen").onclick=()=>{
+  const picked=[...p.querySelectorAll(".mAttStu:checked")].map(c=>({num:c.value,name:c.dataset.name}));
+  const date=$("#mAttDate").value;
+  if(!picked.length||!date){$("#mAttOut").innerHTML="<p class='mut'>Pick at least one student and a date.</p>";return;}
+  const already=picked.filter(x=>{const a=att.students[x.num];return a&&a.present&&a.present.includes(date)});
+  const txt=
+"# Manual attendance - "+s.subject+" (section "+s.section+") - "+date+"\n\n"+
+"You are my course assistant for the HAU platform. Record teacher-attested manual attendance for this section. Work from the teacher repo:\n"+
+workFrom(s)+" - pull it first.\n\n"+
+"## Rules (do not violate)\n"+
+"- Attendance session CSVs (attendance/sessions/<date>/*.csv) are the record; never edit the generated .md/summary.json by hand (verify-attendance rebuilds them).\n"+
+"- Manual rows use the literal word manual in the signature column - verify-attendance counts them as present (MANUAL). Never fabricate a real HMAC signature.\n"+
+"- MERGE, never overwrite: union by studentNumber; keep every existing row and timestamp.\n\n"+
+"## Mark these students present on "+date+"\n"+
+picked.map(x=>"- "+x.num+(x.name?" ("+x.name+")":"")).join("\n")+"\n\n"+
+(already.length?"NOTE: already verified present on "+date+" per the current summary (skip them): "+already.map(x=>x.num).join(", ")+"\n\n":"")+
+"## Steps\n"+
+"1. In attendance/sessions/"+date+"/manual.csv (create the folder/file if needed, header timestamp,studentNumber,signature), append one row per listed student NOT already in any of that date's CSVs: \""+date+" 00:00:00,<studentNumber>,manual\".\n"+
+"2. Commit as \":memo: Manual attendance "+date+" ("+picked.length+")\" and push.\n"+
+"3. The push triggers the Verify attendance workflow (rebuilds the day summary, ATTENDANCE.md, summary.json; publish-attendance then delivers receipts automatically). Wait for it and confirm it is green.\n"+
+"4. VERIFY: the listed students show as MANUAL in attendance/sessions/"+date+"/"+date+".md and appear with "+date+" in attendance/summary.json. Nothing may be FLAGGED by this change.\n";
+  $("#mAttOut").innerHTML="<div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='mAttCp'>Copy</button></div><pre class='code-block prompt'>"+esc(txt)+"</pre>";
+  $("#mAttCp").onclick=()=>{navigator.clipboard.writeText(txt).then(()=>{$("#mAttCp").textContent="Copied ✓"})};
+  wireSend(s,"manual-attendance",null,txt);
+ };
 }
 function attMatrix(s,dates){
  const att=s.attendance;

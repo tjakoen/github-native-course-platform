@@ -103,3 +103,14 @@ textarea.fta.mono{font-family:var(--font-mono);font-size:var(--text-xs);line-hei
 .scan-status.ok{background:var(--scan-ok-soft);color:var(--scan-ok)}
 .scan-status.dup{background:var(--paper-2);color:var(--color-muted)}
 .scan-status.bad{background:var(--scan-bad-soft);color:var(--scan-bad)}
+/* layout/composition only (grain owns the components): tokens, no raw values */
+.scan-stack{display:flex;flex-direction:column;gap:var(--space-3)}
+.scan-stack p,.scan-stack .status-list{margin:0}
+.scan-stack[hidden]{display:none}
+.scan-status[hidden]{display:none}
+.scan-row{display:flex;gap:var(--space-2);align-items:flex-end;flex-wrap:wrap}
+.scan-row>.field{flex:1;min-width:0}
+.scan-row>.field .field__input,.scan-row>.field .field__select{width:100%;min-width:0}
+.scan-row>.field__input{flex:1;min-width:0}
+.scan-fixed{flex:0 0 auto}
+.scan-row--center{align-items:center}

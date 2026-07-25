@@ -36,30 +36,34 @@ export function renderScanView(mount, sections, initialKey) {
   const box = document.createElement("div");
   box.className = "scanview";
   box.innerHTML =
-    '<div class="card" data-pad="sm" style="display:flex;flex-direction:column;gap:10px">' +
-      '<div class="row" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">' +
-        '<label class="field" style="flex:1;min-width:180px"><span class="field__label">Section</span>' +
+    '<div class="card scan-stack" data-pad="sm">' +
+      '<div class="scan-row">' +
+        '<label class="field"><span class="field__label">Section</span>' +
           '<select class="field__select" id="scSec">' +
           sections.map(s => `<option value="${esc(s.key)}"${s === sec ? " selected" : ""}>${esc(s.subject)} · ${esc(s.section)} (${esc(s.org)})</option>`).join("") +
           "</select></label>" +
-        '<button class="btn" id="scStart" type="button">Start camera</button>' +
+        '<button class="btn scan-fixed" id="scStart" type="button">Start camera</button>' +
       "</div>" +
-      '<p class="muted" id="scRoster" style="margin:0"></p>' +
+      '<p class="muted" id="scRoster"></p>' +
     "</div>" +
-    '<div class="card hide" data-pad="sm" id="scBatchBox" style="display:none;flex-direction:column;gap:10px">' +
+    '<div class="card scan-stack" data-pad="sm" id="scBatchBox">' +
       '<div class="field"><span class="field__label">Batch label (e.g. on-time, late, class-A)</span>' +
-        '<div style="display:flex;gap:8px"><input class="field__input" id="scLabel" value="on-time" style="flex:1;min-width:0">' +
-        '<button class="btn" data-variant="soft" id="scNew" type="button" style="flex:0 0 auto">New batch</button></div></div>' +
-      '<p class="muted" id="scBatchInfo" style="margin:0"></p>' +
+        '<div class="scan-row"><input class="field__input" id="scLabel" value="on-time">' +
+        '<button class="btn scan-fixed" data-variant="soft" id="scNew" type="button">New batch</button></div></div>' +
+      '<p class="muted" id="scBatchInfo"></p>' +
     "</div>" +
-    '<div class="card" data-pad="sm" id="scCamBox" style="display:none;flex-direction:column;gap:10px">' +
+    '<div class="card scan-stack" data-pad="sm" id="scCamBox" hidden>' +
       '<video id="scVideo" class="scan-video"></video>' +
-      '<div id="scStatus" class="scan-status" style="display:none"></div>' +
+      '<div id="scStatus" class="scan-status" hidden></div>' +
     "</div>" +
-    '<div class="card" data-pad="sm" id="scListBox" style="display:none;flex-direction:column;gap:10px">' +
-      '<p style="margin:0">Scanned this batch: <span class="badge" data-status="active" id="scCount">0</span></p>' +
+    '<div class="card scan-stack" data-pad="sm" id="scListBox">' +
+      '<p>Scanned this batch: <span class="badge" data-status="active" id="scCount">0</span></p>' +
       '<ul class="status-list" id="scList" data-grade="smooth"></ul>' +
-      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+      '<div class="field"><span class="field__label">Add manually (no QR at hand) - recorded with signature "manual", teacher-attested</span>' +
+        '<div class="scan-row"><input class="field__input" id="scManualNum" list="scRosterList" placeholder="student number">' +
+        '<datalist id="scRosterList"></datalist>' +
+        '<button class="btn scan-fixed" data-variant="soft" id="scManualAdd" type="button">Add</button></div></div>' +
+      '<div class="scan-row scan-row--center">' +
         '<button class="btn" id="scCommit" type="button">Commit batch</button>' +
         '<span class="muted" id="scMsg"></span></div>' +
     "</div>";
@@ -74,6 +78,7 @@ export function renderScanView(mount, sections, initialKey) {
       if (j && j.content) roster = JSON.parse(unb64(j.content));
       const n = Object.keys(roster).length;
       $("scRoster").textContent = n ? `Roster loaded (${n} students).` : "No roster.json yet - scanning still works, names blank.";
+      $("scRosterList").innerHTML = Object.entries(roster).map(([num, name]) => `<option value="${esc(num)}">${esc(name)}</option>`).join("");
     } catch (e) { $("scRoster").textContent = "Roster load failed: " + e.message; }
   }
 
@@ -90,7 +95,7 @@ export function renderScanView(mount, sections, initialKey) {
 
   function showStatus(cls, text) {
     const s = $("scStatus");
-    s.className = "scan-status " + cls; s.textContent = text; s.style.display = "";
+    s.className = "scan-status " + cls; s.textContent = text; s.hidden = false;
     if (navigator.vibrate) navigator.vibrate(cls === "ok" ? 60 : 30);
   }
 
@@ -124,7 +129,7 @@ export function renderScanView(mount, sections, initialKey) {
   $("scSec").onchange = () => {
     sec = sections.find(s => s.key === $("scSec").value) || sec;
     stopScanner();
-    ["scBatchBox", "scCamBox", "scListBox"].forEach(id => { $(id).style.display = "none"; });
+    $("scCamBox").hidden = true;
     $("scStart").disabled = false; $("scStart").textContent = "Start camera";
     loadRoster();
   };
@@ -132,17 +137,31 @@ export function renderScanView(mount, sections, initialKey) {
   $("scStart").onclick = async () => {
     $("scStart").disabled = true; $("scStart").textContent = "Starting…";
     try {
-      ["scBatchBox", "scCamBox", "scListBox"].forEach(id => { $(id).style.display = "flex"; });
+      $("scCamBox").hidden = false;
       startBatch();
       ctl = await startScan($("scVideo"), onScan);
       $("scStart").textContent = "Camera on";
     } catch (e) {
       $("scStart").disabled = false; $("scStart").textContent = "Start camera";
       showStatus("bad", "Camera failed: " + e.message);
-      $("scCamBox").style.display = "flex";
+      $("scCamBox").hidden = false;
     }
   };
   $("scNew").onclick = startBatch;
+
+  // Manual add: for a student with no QR at hand. Recorded with the literal
+  // signature "manual" - verify-attendance counts it as present (MANUAL), never
+  // FLAGGED; the teacher's ability to commit the batch is the attestation.
+  $("scManualAdd").onclick = () => {
+    const num = $("scManualNum").value.trim();
+    if (!num) return;
+    if (!batch) startBatch();
+    if (batch.rows.has(num)) { showStatus("dup", `Already scanned: ${roster[num] || num}`); return; }
+    batch.rows.set(num, { num, name: roster[num] || "", sig: "manual", ts: localStamp(new Date()) });
+    showStatus("ok", `${roster[num] || "#" + num} recorded (manual)`);
+    $("scManualNum").value = "";
+    renderList();
+  };
 
   $("scCommit").onclick = async () => {
     if (!batch || !batch.rows.size) { $("scMsg").textContent = "Nothing to commit yet."; return; }
