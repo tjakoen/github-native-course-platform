@@ -44,7 +44,7 @@ function openSettings(firstRun){
   "<button class='btn' data-size='sm' data-variant='soft' id='sAdd' style='margin-top:2px'>+ Add repo</button>"+
   "<div style='display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap'><button class='btn' data-size='sm' id='sSave'>Save & load</button> <button class='btn' data-size='sm' data-variant='soft' id='sTest'>Test connection</button> <span class='mut' id='sMsg' style='font-size:12px'></span></div>"+
   "<div class='field__label' style='margin-top:16px'>Review decisions <span class='mut'>- browser-local; back them up</span></div>"+
-  "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'><button class='btn' data-size='sm' data-variant='soft' id='sExpDec'>⭳ Export</button> <button class='btn' data-size='sm' data-variant='soft' id='sImpDec'>⭱ Import</button><input type='file' id='sImpFile' accept='application/json,.json' style='display:none'></div>";
+  "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'><button class='btn' data-size='sm' data-variant='soft' id='sExpDec'>↓ Export</button> <button class='btn' data-size='sm' data-variant='soft' id='sImpDec'>↑ Import</button><input type='file' id='sImpFile' accept='application/json,.json' style='display:none'></div>";
  const read=()=>({repos:[...p.querySelectorAll(".repoRow")].map(row=>({url:row.querySelector(".rUrl").value.trim(),token:row.querySelector(".rTok").value.trim()})).filter(r=>r.url),labels:c.labels||{}});
  const wireDel=()=>p.querySelectorAll(".rDel").forEach(b=>b.onclick=()=>{const rows=p.querySelectorAll(".repoRow");if(rows.length>1)b.closest(".repoRow").remove();else{b.closest(".repoRow").querySelector(".rUrl").value="";b.closest(".repoRow").querySelector(".rTok").value="";}});
  wireDel();
