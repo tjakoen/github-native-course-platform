@@ -123,6 +123,12 @@ one for your stack. The example below adds a hypothetical new activity `m2a4`.
 That is a complete activity. Stop here unless it needs points, AI feedback, or
 delivery.
 
+> Authoring the Canvas side (the assignment shell: name, description, points,
+> submission type, and its `SUBMISSIONS` module placement) is generated from this
+> same `assignments.json` by `canvas-sync-assignments.mjs` - see [Canvas
+> activities](canvas-activities.md). That page also covers **manual/badge**
+> activities (a link submission graded by hand), which live only in Canvas.
+
 ## Step 2 - add Canvas points
 
 Add `"totalPoints": <n>` to the entry. The sweep reconciles this against Canvas

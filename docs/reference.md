@@ -69,9 +69,13 @@ Each activity is one object in `grader/assignments.json`. Only `id`, `type`, and
 | `locked` | Prevents overwriting an already-synced Canvas grade. |
 | `manual` | Never auto-pushed/exported; you enter it by hand (AI rubric projects use this). |
 | `autoPoints` | Legacy split (push only the objective part); superseded by `totalPoints` + `manual`. |
+| `submit` | Canvas submission type for the sync tool: `"repo"` (default), `"url"` (manual/badge), `"canvas"` (quiz). Grading-neutral. |
+| `content` | The `content/` unit folder that teaches the activity; renders the workspace-relative lesson pointer in the Canvas description. |
+| `title` | Human title; the Canvas assignment name becomes `<ID>: <title>`. |
 
-See [Authoring activities](authoring-activities.md) and [Grading and
-feedback](grading-and-feedback.md).
+See [Authoring activities](authoring-activities.md), [Canvas
+activities](canvas-activities.md) (the Canvas-shell authoring standard), and
+[Grading and feedback](grading-and-feedback.md).
 
 ## Workflows (the Actions tab)
 
@@ -86,6 +90,7 @@ acting only on an explicit `execute` / `publish=true`.
 | `canvas-push.yml` | Pushes gradebook scores to Canvas (modes: `check`, `dry-run`, `execute`, `comment`). |
 | `canvas-export.yml` | Emits an offline Canvas-import CSV. |
 | `canvas-quiz-import.yml` | Builds a quiz's QTI package from `quiz.json` and imports it into Canvas via Content Migrations. Dry-run by default; imports unpublished. See [LMS and Canvas](lms-canvas.md). |
+| `canvas-sync-assignments.yml` | Authors Canvas assignments from `assignments.json` (name, description, points, submission type) and places them in the `SUBMISSIONS` module. Dry-run by default; creates unpublished; never sets due date or publishes. See [Canvas activities](canvas-activities.md). |
 | `provision-workspaces.yml` | Creates a workspace for a student who has activities but none, adding the student as an admin collaborator on it; backfills a blank `student.json`. Never deletes or renames. |
 | `prune-gradebook.yml` | Drops gradebook rows whose submission repo 404s (deleted/renamed). |
 | `audit-names.yml` | Flags misnamed repos and blank `student.json`. Weekly plus manual. |
@@ -110,6 +115,8 @@ The shared tools are **byte-identical across all teacher repos**; only
 | `org-audit.mjs` | Read-only cross-org hygiene plus an access audit. |
 | `canvas-push.mjs`, `canvas-export.mjs`, `canvas-pull-points.mjs` | Canvas sync and points reconcile. |
 | `build-quiz-qti.mjs`, `canvas-quiz-import.mjs`, `canvas-pull-quiz-grades.mjs` | Quiz-to-Canvas: build the QTI package (offline, deterministic) from `quiz.json`, import it via Content Migrations, and pull Canvas quiz grades back into the gradebook. See [LMS and Canvas](lms-canvas.md). |
+| `canvas-sync-assignments.mjs` | Authors the Canvas assignment shell from `assignments.json` (name, description, points, submission type) and places it in the `SUBMISSIONS` module. Dry-run by default. See [Canvas activities](canvas-activities.md). |
+| `canvas-pull-grades.mjs` | Pulls any activity's Canvas grades back into `gradebook/grades.csv` (the general form of `canvas-pull-quiz-grades`; use for manual/badge activities graded in Canvas). Dry-run by default. |
 | `list-section-repos.mjs`, `sync-unit.mjs` | Section listing and content sync helpers. |
 | `generate-attendance-qrs.mjs`, `verify-attendance.mjs`, `publish-attendance.mjs` | Attendance: sign/commit per-student QRs and refresh the roster; verify scanned batches and build the summaries; deliver each student their own receipt. See [Attendance](attendance.md). |
 

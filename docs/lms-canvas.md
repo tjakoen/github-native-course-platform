@@ -4,6 +4,11 @@ Canvas is the **reference LMS integration and the single external coupling** in
 the whole system. Because grades live in GitHub as the source of truth, the LMS is
 only ever a final export target, touched at one isolated seam.
 
+> The reverse direction - authoring each Canvas assignment (name, description,
+> points, submission type, module) from `assignments.json` so you only set the due
+> date and publish by hand - is the [Canvas activities](canvas-activities.md)
+> standard.
+
 ## The model
 
 At the end of a unit, the gradebook is pushed to the LMS (honoring per-activity

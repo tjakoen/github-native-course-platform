@@ -48,6 +48,7 @@ to build one? Jump to [Getting started](getting-started.md).
 | [Grading and feedback](grading-and-feedback.md) | The off-repo grading model, receipts, and held-for-review AI feedback. |
 | [Attendance (QR scan)](attendance.md) | Paperless attendance: signed per-student QRs, a Pages scanner, per-batch CSVs, and auto-built per-date summaries. |
 | [Operating with an AI assistant](operating-with-ai.md) | The jobs catalogue and the guardrails that keep grades safe. |
+| [Canvas activities](canvas-activities.md) | The Canvas-shell authoring standard: define an activity once in GitHub and sync its Canvas assignment (name, description, points, submission type, module); you set only due date and publish. |
 | [LMS and Canvas](lms-canvas.md) | The single external coupling, and how to swap in another LMS. |
 | [Student guide](student-guide.md) | The student experience: workspace zones, submitting, seeing grades. |
 | [Reference](reference.md) | Naming, `course.config.json`, `assignments.json` flags, workflows, conventions. |
