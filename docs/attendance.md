@@ -13,12 +13,15 @@ instructor can record attendance.
    any student workspace that lacks one, and refreshes the teacher-side
    `attendance/roster.json` (number to name) the scanner uses to show names.
    Students save the image to their phone's Photos.
-2. **Scan.** The instructor opens the **Scan tab of the hosted Course Console**
-   (bookmark its `#/scan` hash on a phone home screen - it boots straight into
-   the scanner), picks the section, and the phone camera becomes a QR reader
-   showing roster names. Each scan is recorded with a timestamp. (The old
-   per-teacher-repo Pages scanner is retired in favor of this tab; the CSV
-   format below is unchanged.)
+2. **Scan.** The instructor opens the scanner at
+   **https://tjakoen.github.io/github-native-course-platform/scanner/** (bookmark
+   that URL on a phone home screen; it boots straight into the scanner - the
+   console's old `#/scan` hash just redirects there), picks the section, and the
+   phone camera becomes a QR reader showing roster names. Each scan is recorded
+   with a timestamp. (The per-repo Pages scanner in each teacher repo still
+   exists and works the same way; it is slated for retirement once the console
+   scanner has proved itself in a couple of real sessions. The CSV format is
+   unchanged either way.)
 3. **Commit batches.** Scans are grouped into a *batch* (one scanning period).
    The instructor commits a batch at any time - safe against a dead phone - and
    starts a new batch for latecomers or a second class the same day. Each batch
@@ -54,7 +57,7 @@ them **MANUAL** (never FLAGGED). The trust model is the commit itself: these
 CSVs live in the private teacher repo, so the ability to commit one is the
 instructor's authority, the same trust the gradebook rests on.
 
-- **At the door:** the Scan tab has an "Add manually" field (with roster
+- **At the door:** the scanner page has an "Add manually" field (with roster
   autocomplete) that drops a student into the current batch without a QR.
 - **Retroactively:** the Attendance tab's **Manual attendance -> prompt** picks
   students and a date and generates an intent; the AI appends the rows to that
