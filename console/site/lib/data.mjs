@@ -5,11 +5,12 @@
 // cheap, but the notes pool is not free, so nothing refetches on its own.
 import { discoverSections } from "./config.mjs";
 import { loadSection } from "./gradebook.mjs";
-import { ghText } from "./gh.mjs";
+import { ghText, ghJSON } from "./gh.mjs";
 
 let disc = null;                 // { sections: [light sc], errors }
 const cache = new Map();         // key -> { promise, value, loadedAt }
 const flagsCache = new Map();    // key -> { value, at }
+const intentsCache = new Map();  // key -> { value, at }
 
 export async function discover(cfg) {
   disc = await discoverSections(cfg.repos, cfg.labels || {});
@@ -38,8 +39,8 @@ export function getSection(key) {
 }
 
 export function invalidate(key) {
-  if (key) { cache.delete(key); flagsCache.delete(key); }
-  else { cache.clear(); flagsCache.clear(); }
+  if (key) { cache.delete(key); flagsCache.delete(key); intentsCache.delete(key); }
+  else { cache.clear(); flagsCache.clear(); intentsCache.clear(); }
 }
 
 export function ageOf(key) {
@@ -62,4 +63,42 @@ export async function getFlagsFiles(key) {
   const value = { flags: flags || "", flagged: flagged || "" };
   flagsCache.set(key, { value, at: Date.now() });
   return value;
+}
+
+// Pending intents: the machine-readable trail of what the console has filed but
+// Claude Code has not yet run. A pending intent is a *.md file sitting in
+// gradebook/intents/ (executed intents move to gradebook/intents/done/ in the
+// same commit as their changes, so they drop off this list). One contents call,
+// short-TTL memoized so a strip that repaints does not re-fire it; the ETag
+// cache in gh.mjs keeps the revalidation a free 304. invalidateIntents(key) after
+// a Send makes the newly filed intent show up immediately.
+const INTENTS_TTL = 60 * 1000;
+// filename shape from wireSend: <YYYYMMDD-HHMMSS>-<kind>[-<aid>].md. Kinds can
+// contain hyphens, so match the longest known kind, then the rest is the aid.
+export const INTENT_KINDS = ["gen-feedback", "apply-ai", "finalize", "apply-grades", "deliver", "new-activity", "manual-attendance"];
+export function parseIntentName(name) {
+  const m = String(name).match(/^(\d{8}-\d{6})-(.+)\.md$/);
+  if (!m) return null;
+  const ts = m[1], rest = m[2];
+  const kind = INTENT_KINDS.find(k => rest === k || rest.startsWith(k + "-"));
+  const aid = kind && rest.length > kind.length ? rest.slice(kind.length + 1) : null;
+  // ts YYYYMMDD-HHMMSS -> Date (local); NaN-safe (callers guard)
+  const at = ts.replace(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/, "$1-$2-$3T$4:$5:$6");
+  return { name, ts, kind: kind || rest, aid, at };
+}
+export async function getPendingIntents(key) {
+  const hit = intentsCache.get(key);
+  if (hit && Date.now() - hit.at < INTENTS_TTL) return hit.value;
+  const sc = findSc(key);
+  if (!sc) return [];
+  const list = await ghJSON(`/repos/${sc.org}/${sc.repo}/contents/gradebook/intents`).catch(() => null);
+  const value = (Array.isArray(list) ? list : [])
+    .filter(x => x.type === "file" && /\.md$/i.test(x.name))
+    .map(x => parseIntentName(x.name)).filter(Boolean)
+    .sort((a, b) => (a.ts < b.ts ? 1 : -1));
+  intentsCache.set(key, { value, at: Date.now() });
+  return value;
+}
+export function invalidateIntents(key) {
+  if (key) intentsCache.delete(key); else intentsCache.clear();
 }

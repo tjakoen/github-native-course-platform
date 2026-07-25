@@ -10,7 +10,7 @@ import { discoverSections, parseRepoURL } from "./lib/config.mjs";
 import { shotsFor, shotsCached } from "./lib/shots.mjs";
 import { codeFor, codeCached } from "./lib/code.mjs";
 import { route, start, go, dispatch, beforeEach, fallback } from "./lib/router.mjs";
-import { discover, sections, findSc, getSection, sectionCached, invalidate, ageOf, STALE_MS, getFlagsFiles, discoErrors } from "./lib/data.mjs";
+import { discover, sections, findSc, getSection, sectionCached, invalidate, ageOf, STALE_MS, getFlagsFiles, discoErrors, getPendingIntents, invalidateIntents } from "./lib/data.mjs";
 import { missingWork, workspaceInfo } from "./lib/students.mjs";
 import { initSearch } from "./lib/search-index.mjs";
 import { OPS } from "./lib/ops-catalog.mjs";
@@ -833,6 +833,7 @@ function renderOverview(s,w){
  const ctl=el("div","ctl");
  ctl.innerHTML='<a class="btn" data-size="sm" href="'+classHref(s.key,"gradebook")+'">Open gradebook →</a> <button class="btn" data-size="sm" data-variant="soft" id="ovPrompt">Generate apply-grades prompt →</button> <button class="btn" data-size="sm" data-variant="soft" id="ovDeliver">Deliver to Canvas + workspaces →</button>';
  w.append(ctl);
+ w.append(pendingIntentsCard(s));
  const risk=atRiskCard(s); if(risk)w.append(risk);
  w.append(canvasPanel(s));
  w.append(flagsCard(s));
@@ -840,6 +841,27 @@ function renderOverview(s,w){
  w.append(reportsCard(s));
  $("#ovPrompt").onclick=()=>showPrompt(s);
  $("#ovDeliver").onclick=()=>showDeliver(s);
+}
+
+// Pending intents strip: what the console has filed into gradebook/intents/ but a
+// Claude Code session has not yet run - so after a Send the trail stays visible.
+// One cheap listing call (short-TTL memoized); hides itself when nothing pends.
+function pendingIntentsCard(s){
+ const card=el("div","card"); card.dataset.pad="sm"; card.hidden=true;
+ card.innerHTML="<h2>Pending intents</h2><div class='mut pibody'>Checking gradebook/intents/…</div>";
+ getPendingIntents(s.key).then(list=>{
+  const box=card.querySelector(".pibody"); if(!box)return;
+  if(!list.length){ card.remove(); return; }
+  card.hidden=false; box.classList.remove("mut");
+  box.innerHTML="<p class='mut' data-size='sm'>Filed by the console, not yet run. In a Claude Code session in the teacher repo, run pending intents, then Refresh (↻).</p>"+
+   "<ul class='status-list'>"+list.map(it=>{
+    const label=INTENT_LABEL[it.kind]||it.kind;
+    const title=esc(label)+(it.aid?" · <a href='"+classHref(s.key,"review")+"/"+encodeURIComponent(it.aid)+"'>"+esc(it.aid)+"</a>":"");
+    const age=relTime(it.at);
+    return "<li class='status-list__item'><span class='status-list__mark'>◷</span><span class='status-list__title'>"+title+"</span>"+(age?"<span class='status-list__meta'>"+esc(age)+"</span>":"")+"</li>";
+   }).join("")+"</ul>";
+ }).catch(()=>card.remove());
+ return card;
 }
 
 // GRADEBOOK tab (#/c/:key/gradebook): the full-width matrix and the delivery
@@ -961,9 +983,9 @@ function showManualAttendance(s){
   const date=$("#mAttDate").value;
   if(!picked.length||!date){$("#mAttOut").innerHTML="<p class='mut'>Pick at least one student and a date.</p>";return;}
   const txt=buildManualAttendance(s,picked,date);
-  $("#mAttOut").innerHTML="<div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='mAttCp'>Copy</button>"+openInClaude("#mAttPrompt",txt)+"</div><pre class='code-block prompt' id='mAttPrompt'>"+esc(txt)+"</pre>";
+  $("#mAttOut").innerHTML=CONSEQUENCE+"<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='mAttCp'>Copy</button>"+openInClaude("#mAttPrompt",txt)+"</div><pre class='code-block prompt' id='mAttPrompt'>"+esc(txt)+"</pre>";
   $("#mAttCp").onclick=()=>{navigator.clipboard.writeText(txt).then(()=>{$("#mAttCp").textContent="Copied ✓"})};
-  wireSend(s,"manual-attendance",null,txt);
+  wireSend(s,"manual-attendance",null,txt,path=>drawerSent(s,path,"manual-attendance",null));
  };
 }
 function attMatrix(s,dates){
@@ -986,6 +1008,50 @@ function attMatrix(s,dates){
  }).join("");
  t.innerHTML=thead+rows; sc.append(t); card.append(sc); return card;
 }
+
+// ---- pipeline stage memory + shared drawer helpers (Phase D) ----
+// Which pipeline steps have been FILED as intents, per section+activity. The
+// pending-intents listing is the real trail, but the stage header needs a
+// synchronous signal to choose the ONE contextual primary, so a successful Send
+// records it here immediately. Monotonic per activity; cleared only by Reset.
+const SENTKEY="hau-intent-sent-v1";
+function sentMap(){ try{return JSON.parse(localStorage.getItem(SENTKEY)||"{}")}catch(e){return {}} }
+function markSent(section,kind,aid){ try{const m=sentMap();m[section+"|"+kind+"|"+(aid||"")]=new Date().toISOString();localStorage.setItem(SENTKEY,JSON.stringify(m));}catch(e){} }
+function wasSent(section,kind,aid){ return !!sentMap()[section+"|"+kind+"|"+(aid||"")]; }
+function clearSent(section,aid){ try{const m=sentMap();const sfx="|"+(aid||"");for(const k of Object.keys(m))if(k.startsWith(section+"|")&&k.endsWith(sfx))delete m[k];localStorage.setItem(SENTKEY,JSON.stringify(m));}catch(e){} }
+
+// transient status toast (bottom-centre): used for the review detail's otherwise
+// silent approve-and-advance so the reviewer gets confirmation without a popup.
+let toastTimer=null;
+function toast(msg){
+ let t=$("#toast"); if(!t){t=el("div");t.id="toast";document.body.append(t);}
+ t.textContent=msg; t.dataset.on="true";
+ clearTimeout(toastTimer); toastTimer=setTimeout(()=>{t.dataset.on="false";},1800);
+}
+
+// human label + relative age for a pending-intent listing entry
+const INTENT_LABEL={"gen-feedback":"Generate feedback","apply-ai":"Apply reviewed grades","finalize":"Finalize & deliver","apply-grades":"Apply grades to Canvas","deliver":"Deliver to Canvas + workspaces","new-activity":"New activity scaffolds","manual-attendance":"Manual attendance"};
+function relTime(iso){ const t=Date.parse(iso); if(isNaN(t))return""; const s=(Date.now()-t)/1000; if(s<90)return"just now"; if(s<5400)return Math.round(s/60)+" min ago"; if(s<172800)return Math.round(s/3600)+" h ago"; return Math.round(s/86400)+" d ago"; }
+
+// one plain line in every prompt drawer about what the two buttons do. The
+// console never writes grades: Send files an intent that a Claude Code session
+// runs; Copy drops the same text into a chat. Neither changes anything until run.
+const CONSEQUENCE="<p class='mut consequence' data-size='sm'><b>Send</b> files this as an intent in the teacher repo; run it in a Claude Code session (\"run pending intents\"). <b>Copy</b> pastes the same prompt into a chat instead. Neither writes anything until you run it.</p>";
+
+// After a successful Send, swap the drawer's action row for a next-step card so
+// the trail does not go cold: name the filed intent and the two things left to do.
+function nextStepCard(path){
+ const host=$("#actRow"); if(!host)return;
+ host.innerHTML="<div class='card nextstep' data-pad='sm'><h4 style='margin:0 0 4px'>Filed ✓</h4>"+
+  "<p class='mut' data-size='sm'>Saved as <span class='mono'>"+esc(path.split("/").pop())+"</span> in gradebook/intents/.</p>"+
+  "<ol class='status-list nextstep__steps'>"+
+   "<li class='status-list__item'><span class='status-list__mark'>1</span><span class='status-list__title'>In a Claude Code session in the teacher repo, <b>run pending intents</b>.</span></li>"+
+   "<li class='status-list__item'><span class='status-list__mark'>2</span><span class='status-list__title'>Come back and hit <b>Refresh</b> (↻) to see the result.</span></li>"+
+  "</ol></div>";
+}
+// standard onSent for a prompt drawer: remember the step, refresh the pending list,
+// and show the next-step card in place of the Send/Copy row.
+function drawerSent(s,path,kind,aid){ markSent(s.section,kind,aid); invalidateIntents(s.key); nextStepCard(path); }
 
 // ================= AI REVIEW =================
 function heldActs(s){return s.assignments.filter(a=>a.aiGraded)}
@@ -1015,11 +1081,47 @@ function renderAI(s,w){
  w.append(sub);
  const rows=reviewRows(s,revAct);
  const done=rows.filter(x=>isDecided(x.dec)).length, appr=rows.filter(x=>x.dec&&x.dec.status==="approve").length, ov=rows.filter(x=>x.dec&&x.dec.status==="override").length, fl=rows.filter(x=>x.dec&&x.dec.status==="flag").length;
- // progress + actions
+ // ---- stage header: Generate -> Review -> Apply -> Deliver (Phase D1) ----
+ // The AI Review lane is a strict state machine; expose it as a stepper with ONE
+ // contextual primary and everything else in an overflow menu, instead of five
+ // always-enabled buttons.
+ const pending=rows.filter(x=>!x.r.note).length;   // submissions with no note draft yet
+ const notReviewed=rows.length-done;
+ const empty=rows.length===0;
+ const applySent=wasSent(s.section,"apply-ai",revAct);
+ const finSent=wasSent(s.section,"finalize",revAct);
+ let gen="todo",rev="todo",app="todo",del="todo";
+ if(!empty){
+  gen=pending>0?"active":"done";
+  rev=pending>0?"todo":(notReviewed>0?"active":"done");
+  app=(pending===0&&notReviewed===0)?(applySent?"done":"active"):"todo";
+  del=applySent?(finSent?"done":"active"):"todo";
+ }
+ // the single contextual primary follows the active stage
+ let primary=null;
+ if(empty)primary=null;
+ else if(pending>0)primary={label:"Generate feedback → prompt",act:()=>showGenFeedback(s,revAct)};
+ else if(notReviewed>0){const un=rows.find(x=>!isDecided(x.dec));primary={label:"Review next → "+notReviewed+" left",act:()=>go(detailHref(s.key,revAct,skeyOf(un.st)))};}
+ else if(!applySent)primary={label:"Apply reviewed → prompt",act:()=>showApplyAI(s,revAct)};
+ else primary={label:"Finalize → deliver",act:()=>showFinalize(s,revAct),soft:finSent};
+ const STEPS=[["Generate",gen],["Review",rev],["Apply",app],["Deliver",del]];
+ const stepper="<ol class='stepper'>"+STEPS.map(([l,st],i)=>"<li class='stepper__step' data-state='"+st+"'"+(st==="active"?" aria-current='step'":"")+"><span class='stepper__dot'>"+(st==="done"?"✓":i+1)+"</span><span class='stepper__label'>"+l+"</span></li>").join("")+"</ol>";
+ const badges='<span class="badge" data-tone="good">'+appr+' approved</span> <span class="badge" data-tone="held">'+ov+' override</span> <span class="badge" data-tone="warn">'+fl+' flagged</span>';
+ const sentHint=applySent&&!finSent?" <span class='mut' data-size='sm'>· apply intent filed, run it then finalize</span>":"";
+ const overflow="<details class='ovmenu'><summary class='btn' data-size='sm' data-variant='soft' aria-label='More review actions'>⋯</summary>"+
+  "<div class='ovmenu__list' role='menu'>"+
+   "<button class='ovmenu__item' id='genFb' role='menuitem'>Generate feedback → prompt</button>"+
+   "<button class='ovmenu__item' id='applyAI' role='menuitem'>Apply reviewed → prompt</button>"+
+   "<button class='ovmenu__item' id='finalize' role='menuitem'>Finalize → deliver</button>"+
+   "<button class='ovmenu__item' id='apprAll' role='menuitem'>Approve all unreviewed…</button>"+
+   "<button class='ovmenu__item ovmenu__item--danger' id='reset' role='menuitem'>Reset decisions…</button>"+
+  "</div></details>";
  const bar=el("div","card"); bar.dataset.pad="sm"; const pct=rows.length?Math.round(done/rows.length*100):0;
- bar.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
-  '<div><b>'+esc(revAct)+'</b> - reviewed <b>'+done+'/'+rows.length+'</b> · <span class="badge" data-tone="good">'+appr+' approved</span> <span class="badge" data-tone="held">'+ov+' override</span> <span class="badge" data-tone="warn">'+fl+' flagged</span></div>'+
-  '<div><button class="btn" data-size="sm" data-variant="soft" id="genFb">Generate feedback → prompt</button> <button class="btn" data-size="sm" data-variant="soft" id="apprAll">Approve all unreviewed</button> <button class="btn" data-size="sm" data-variant="soft" id="reset">Reset</button> <button class="btn" data-size="sm" id="applyAI">Apply reviewed → prompt</button> <button class="btn" data-size="sm" id="finalize">Finalize → publish + Canvas</button></div></div>'+
+ bar.innerHTML=stepper+
+  "<div class='revbar'>"+
+   "<div class='revbar__info'><b>"+esc(revAct)+"</b> · reviewed <b>"+done+"/"+rows.length+"</b> · "+badges+sentHint+"</div>"+
+   "<div class='revbar__act'>"+(primary?"<button class='btn' data-size='sm'"+(primary.soft?" data-variant='soft'":"")+" id='rvPrimary'>"+esc(primary.label)+"</button>":"")+overflow+"</div>"+
+  "</div>"+
   '<div class="meter" role="meter" aria-label="Review progress" aria-valuenow="'+pct+'" aria-valuemin="0" aria-valuemax="100"><span class="meter__seg" data-tone="ok" style="--seg:'+pct+'%"></span></div>';
  w.append(bar);
  // queue table
@@ -1040,11 +1142,14 @@ function renderAI(s,w){
  scr.append(t); card.append(scr); w.append(card);
  setTimeout(()=>{
    t.querySelectorAll("tr[data-s]").forEach(tr=>tr.onclick=()=>go(detailHref(s.key,revAct,tr.dataset.s)));
+   if(primary)$("#rvPrimary").onclick=primary.act;
    $("#apprAll").onclick=()=>{const t=rows.filter(row=>!isDecided(row.dec)&&row.r.proposed!=null);if(!t.length){alert("No unreviewed submissions with a proposed score to approve.");return;}if(!confirm("Approve "+t.length+" unreviewed submission(s) at the AI's proposed score for "+revAct+"? This records an approve decision for each - review them individually to catch a bad proposal."))return;t.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),Object.assign({},row.dec,{status:"approve"})));render()};
-   $("#reset").onclick=()=>{if(confirm("Clear all decisions for "+revAct+"?")){rows.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),null));render()}};
+   $("#reset").onclick=()=>{if(confirm("Clear all decisions for "+revAct+"? This also clears the filed-step memory so the stage header restarts at Generate.")){rows.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),null));clearSent(s.section,revAct);render()}};
    $("#genFb").onclick=()=>showGenFeedback(s,revAct);
    $("#applyAI").onclick=()=>showApplyAI(s,revAct);
    $("#finalize").onclick=()=>showFinalize(s,revAct);
+   // close the overflow menu after any item click
+   bar.querySelectorAll(".ovmenu__item").forEach(b=>b.addEventListener("click",()=>{const d=b.closest("details");if(d)d.open=false;}));
  },0);
 }
 
@@ -1074,11 +1179,17 @@ function renderReviewDetail(s,w,aid,skey){
  const sk=skey, r=st.activities[aid];
  const orig=parseNote(r.note);
  const here=detailHref(s.key,aid,skey);
+ const leftN=reviewRows(s,aid).filter(x=>!isDecided(x.dec)).length;   // unreviewed still in the queue
  const box=el("div"); w.append(box);
- detailKey=e=>{ if(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))return;
+ // Keyboard nav: skip when focus is on an interactive control (INPUT/TEXTAREA/
+ // SELECT/BUTTON) so an arrow press never navigates away and discards unsaved
+ // textarea edits, and Enter on a focused button does its own thing. On the page
+ // body: arrows page prev/next, Enter approves + advances, Esc goes back.
+ detailKey=e=>{ if(e.target&&/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName))return;
   if(e.key==="Escape")go(back);
   else if(e.key==="ArrowRight"&&i<order.length-1)go(detailHref(s.key,aid,order[i+1]));
-  else if(e.key==="ArrowLeft"&&i>0)go(detailHref(s.key,aid,order[i-1])); };
+  else if(e.key==="ArrowLeft"&&i>0)go(detailHref(s.key,aid,order[i-1]));
+  else if(e.key==="Enter"){ const ap=$("#dApprove"); if(ap){ e.preventDefault(); ap.click(); } } };
  document.addEventListener("keydown",detailKey);
  function paint(){
   // lazy media, per pane: screenshots fetch on first sight (they are the default
@@ -1098,14 +1209,11 @@ function renderReviewDetail(s,w,aid,skey){
   const stt=decStatus({dec:curDec});
   const chip="<span class='badge' data-tone='"+TONE[stt.k]+"'>"+stt.l+"</span>";
   const flag=r.aiFlag?r.aiFlag.split(" - ")[0]:null;
-  box.innerHTML="<a class='mut' href='"+back+"'>← AI Review · "+esc(aid)+"</a>"+
-   "<div class='rvhead' style='margin-top:4px'><h1 style='margin:0'>"+esc(st.name||"(blank)")+"</h1>"+chip+
-     "<div class='rvnav'><button class='btn' data-size='sm' data-variant='soft' id='prev'"+(i<=0?" disabled":"")+">← Prev</button>"+
-     "<span class='cnt'>"+(i+1)+" / "+order.length+"</span>"+
-     "<button class='btn' data-size='sm' data-variant='soft' id='next'"+(i>=order.length-1?" disabled":"")+">Next →</button></div></div>"+
-   "<div class='muted'>"+esc(aid)+" · "+esc(sk)+" · @"+esc(st.github||"")+" · repo "+esc(r.repo)+"</div>"+
-   "<div class='legend'><span>Automated: <b>"+r.raw+"</b></span><span>AI proposed: <b data-grade='grain'>"+(r.proposed!=null?r.proposed+"/"+max:"-")+"</b></span>"+(flag?"<span>AI-authored: <b data-grade='grain'>"+esc(flag)+"</b></span>":"")+"</div>"+
-   "<div class='rev2'>"+
+  // Collapse the media pane once we KNOW it is empty (no shots, and code fetched
+  // and empty) so it does not own half the page with a placeholder. codeUnknown
+  // means code is still loading, so keep the two-column layout until it resolves.
+  const mediaEmpty=!hasShots&&!hasCode&&!codeUnknown;
+  const mediaCol=mediaEmpty?"":
     "<div class='rvcol'>"+
      "<nav class='tab-bar'>"+
       "<button class='tab'"+(lv==='shots'?" data-active='true'":"")+" data-lv='shots'"+(hasShots?'':' disabled')+">Screenshots</button>"+
@@ -1113,7 +1221,17 @@ function renderReviewDetail(s,w,aid,skey){
      "</nav>"+
      "<div class='shots' id='lvShots' data-lightbox-group style='display:"+(lv==='shots'?'flex':'none')+"'>"+shotsHTML(shots)+"</div>"+
      "<div id='lvCode' style='display:"+(lv==='code'?'block':'none')+"'>"+codeHTML(files)+"</div>"+
-    "</div>"+
+    "</div>";
+  box.innerHTML="<a class='mut' href='"+back+"'>← AI Review · "+esc(aid)+"</a>"+
+   "<div class='rvhead' style='margin-top:4px'><h1 style='margin:0'>"+esc(st.name||"(blank)")+"</h1>"+chip+
+     "<div class='rvnav'><button class='btn' data-size='sm' data-variant='soft' id='prev'"+(i<=0?" disabled":"")+">← Prev</button>"+
+     "<span class='cnt'>"+(i+1)+" / "+order.length+(leftN?" · "+leftN+" left":" · queue clear")+"</span>"+
+     "<button class='btn' data-size='sm' data-variant='soft' id='next'"+(i>=order.length-1?" disabled":"")+">Next →</button></div></div>"+
+   "<div class='muted'>"+esc(aid)+" · "+esc(sk)+" · @"+esc(st.github||"")+" · repo "+esc(r.repo)+"</div>"+
+   "<div class='legend'><span>Automated: <b>"+r.raw+"</b></span><span>AI proposed: <b data-grade='grain'>"+(r.proposed!=null?r.proposed+"/"+max:"-")+"</b></span>"+(flag?"<span>AI-authored: <b data-grade='grain'>"+esc(flag)+"</b></span>":"")+"</div>"+
+   "<div class='kbdlegend mut' data-size='sm'><kbd>←</kbd> <kbd>→</kbd> prev / next · <kbd>Enter</kbd> approve + advance · <kbd>Esc</kbd> back</div>"+
+   "<div class='rev2'"+(mediaEmpty?" data-solo='true'":"")+">"+
+    mediaCol+
     "<div class='rvcol'>"+
      "<div class='card' data-pad='sm' style='margin:0 0 12px'>"+
       "<div class='decision'>"+
@@ -1147,12 +1265,14 @@ function renderReviewDetail(s,w,aid,skey){
     if(inv.trim()!==orig.instructor.trim())d.instructorText=inv; else delete d.instructorText;
     if(cm)d.comment=cm; else delete d.comment;
     return d; };
-  const save=v=>{setDec(s.section,aid,sk,v);if(i<order.length-1)go(detailHref(s.key,aid,order[i+1]));else paint();};
+  // record the decision, confirm it in a toast (the advance is otherwise silent),
+  // then move to the next submission (or repaint the last one in place)
+  const save=v=>{setDec(s.section,aid,sk,v);const lbl=v.status==="approve"?"Approved":v.status==="override"?("Override "+v.score):v.status==="flag"?"Flagged":"Saved";const rem=reviewRows(s,aid).filter(x=>!isDecided(x.dec)).length;toast(lbl+(rem?" · "+rem+" left":" · queue clear"));if(i<order.length-1)go(detailHref(s.key,aid,order[i+1]));else paint();};
   $("#dApprove").onclick=()=>save(collect(r.proposed!=null?{status:"approve"}:{status:"override",score:+$("#dOv").value}));
   $("#dOvBtn").onclick=()=>save(collect({status:"override",score:+$("#dOv").value}));
   $("#dFlag").onclick=()=>save(collect({status:"flag"}));
   $("#dClear").onclick=()=>{setDec(s.section,aid,sk,null);paint();};
-  $("#dSave").onclick=()=>{const d=collect({});setDec(s.section,aid,sk,Object.keys(d).length?d:null);$("#dSaved").textContent="saved ✓";const stt2=decStatus({dec:getDec(s.section,aid,sk)});const c=box.querySelector(".rvhead .badge");if(c){c.dataset.tone=TONE[stt2.k];c.textContent=stt2.l;}};
+  $("#dSave").onclick=()=>{const d=collect({});setDec(s.section,aid,sk,Object.keys(d).length?d:null);$("#dSaved").textContent="saved ✓";toast("Edits saved");const stt2=decStatus({dec:getDec(s.section,aid,sk)});const c=box.querySelector(".rvhead .badge");if(c){c.dataset.tone=TONE[stt2.k];c.textContent=stt2.l;}};
   $("#dRevert").onclick=()=>{$("#dStudent").value=orig.student;$("#dInstr").value=orig.instructor;const d=collect({});setDec(s.section,aid,sk,Object.keys(d).length?d:null);paint();};
  }
  paint();
@@ -1161,24 +1281,32 @@ function renderReviewDetail(s,w,aid,skey){
 function showGenFeedback(s,aid){
  const rows=reviewRows(s,aid);
  const pending=rows.filter(x=>!x.r.note);
+ const noop=pending.length===0;   // nothing to draft (the prompt skips notes that exist)
  const txt=buildGenFeedback(s,aid);
  const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Generate AI feedback drafts - "+esc(aid)+"</h3><div class='muted'>"+pending.length+" submission(s) without a note yet · runs in a Claude Code session on your subscription (no GitHub Models)</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
+ p.innerHTML="<button class='x'>×</button><h3>Generate AI feedback drafts - "+esc(aid)+"</h3><div class='muted'>"+pending.length+" submission(s) without a note yet · runs in a Claude Code session on your subscription (no GitHub Models)</div>"+
+  (noop?"<p class='warnline'>Every submission already has a note draft, so this intent would do nothing (it skips repos that already have a note). Hit Refresh, or edit a draft from the review detail.</p>":"")+
+  CONSEQUENCE+
+  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
  const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
- wireSend(s,"gen-feedback",aid,txt);
+ if(!noop)wireSend(s,"gen-feedback",aid,txt,path=>drawerSent(s,path,"gen-feedback",aid));
 }
 
 function showApplyAI(s,aid){
  const rows=reviewRows(s,aid); const max=s.assignments.find(a=>a.id===aid).totalPoints;
  const {txt,decided,flagged,undone}=buildApplyAI(s,aid,rows);
+ const noop=decided.length===0&&flagged.length===0;   // no approve/override/flag yet
  const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Apply reviewed AI grades - "+esc(aid)+"</h3><div class='muted'>"+decided.length+" to apply · "+flagged.length+" flagged · "+undone.length+" not reviewed</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+" <button class='btn' data-size='sm' data-variant='soft' id='csv'>Download CSV</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
+ p.innerHTML="<button class='x'>×</button><h3>Apply reviewed AI grades - "+esc(aid)+"</h3><div class='muted'>"+decided.length+" to apply · "+flagged.length+" flagged · "+undone.length+" not reviewed</div>"+
+  (noop?"<p class='warnline'>No decisions recorded yet. Approve, override, or flag at least one submission before applying (an empty apply would just blank every aiScore).</p>":"")+
+  CONSEQUENCE+
+  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+" <button class='btn' data-size='sm' data-variant='soft' id='csv'>Download CSV</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
  const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
- wireSend(s,"apply-ai",aid,txt);
+ if(!noop)wireSend(s,"apply-ai",aid,txt,path=>drawerSent(s,path,"apply-ai",aid));
  $("#csv").onclick=()=>{
    const hdr="studentNumber,name,repo,proposed,decision,finalScore,max,comment\n";
    const body=rows.map(x=>{const fin=finalScore(x);const st=isDecided(x.dec)?x.dec.status:"unreviewed";return [x.st.number||"",'"'+(x.st.name||"").replace(/"/g,'""')+'"',x.r.repo,x.r.proposed==null?"":x.r.proposed,st,fin==null?"":fin,max,'"'+((x.dec&&x.dec.comment||"")).replace(/"/g,'""')+'"'].join(",")}).join("\n");
@@ -1189,12 +1317,16 @@ function showApplyAI(s,aid){
 function showFinalize(s,aid){
  const rows=reviewRows(s,aid);
  const {txt,delivered,heldOut}=buildFinalize(s,aid,rows);
+ const noop=delivered.length===0;   // nothing cleared to deliver
  const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Finalize and deliver - "+esc(aid)+"</h3><div class='muted'>"+delivered.length+" cleared to deliver · "+heldOut.length+" held out</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
+ p.innerHTML="<button class='x'>×</button><h3>Finalize and deliver - "+esc(aid)+"</h3><div class='muted'>"+delivered.length+" cleared to deliver · "+heldOut.length+" held out</div>"+
+  (noop?"<p class='warnline'>No cleared students yet. Approve or override at least one submission (and apply those grades) before delivering.</p>":"")+
+  CONSEQUENCE+
+  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
  const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
- wireSend(s,"finalize",aid,txt);
+ if(!noop)wireSend(s,"finalize",aid,txt,path=>drawerSent(s,path,"finalize",aid));
 }
 
 function matrix(s){
@@ -1234,9 +1366,20 @@ function openNote(s,skey,aid){
  const a=s.assignments.find(x=>x.id===aid);
  const max=a.totalPoints ?? a.autoPoints ?? r.total;
  const val=r.kind==="held"?(r.proposed+"/"+max+" (held - review)"):r.kind==="manual"?"manual":(r.canvasPts+"/"+max);
+ // split the note into its two labelled halves (wrapping, not clipped) and, for a
+ // held/AI cell, offer the way into the full review detail instead of a dead end.
+ const parts=parseNote(r.note);
+ const reviewLink=a.aiGraded?"<div style='margin:8px 0'><a class='btn' data-size='sm' data-variant='soft' href='"+detailHref(s.key,aid,skeyOf(st))+"'>Open in AI Review →</a></div>":"";
+ const body=r.note?
+   "<div class='notewrap'>"+
+    (parts.student?"<section class='notehalf'><h4>Student-facing <span class='mut'>· prose only</span></h4><div class='noteprose'>"+esc(parts.student)+"</div></section>":"")+
+    (parts.instructor?"<section class='notehalf notehalf--instr'><h4>Instructor-only <span class='badge' data-tone='held'>not shown to student</span></h4><div class='noteprose'>"+esc(parts.instructor)+"</div></section>":"")+
+    (!parts.student&&!parts.instructor?"<div class='noteprose'>"+esc(r.note)+"</div>":"")+
+   "</div>"
+   :"<p class='mut'>No written feedback for this submission"+(a.aiGraded?" yet - generate a draft from AI Review.":".")+"</p>";
  p.innerHTML="<button class='x'>×</button><h3>"+esc(st.name)+" - "+esc(aid)+"</h3><div class='muted'>"+esc(st.number||"")+" · @"+esc(st.github||"")+" · repo "+esc(r.repo)+" @"+esc(r.sha)+"</div>"+
   "<div class='legend'><span>Automated: <b>"+r.raw+"</b></span><span>Canvas: <b>"+val+"</b></span></div>"+
-  "<pre>"+esc(r.note||"(no written feedback)")+"</pre>";
+  reviewLink+body;
  d.append(p); document.body.append(d);
  const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
 }
@@ -1267,11 +1410,11 @@ function canvasPanel(s){
 function showPrompt(s){
  const txt=buildApplyGrades(s,DATA.generatedAt);
  const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Apply-grades prompt - "+esc(s.section)+"</h3><div class='muted'>Send it to the repo (run pending intents), or copy it into a Claude Code chat.</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
+ p.innerHTML="<button class='x'>×</button><h3>Apply-grades prompt - "+esc(s.section)+"</h3>"+CONSEQUENCE+"<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
  const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
  $("#cp").onclick=()=>{navigator.clipboard.writeText(txt).then(()=>{$("#cp").textContent="Copied ✓"})};
- wireSend(s,"apply-grades",null,txt);
+ wireSend(s,"apply-grades",null,txt,path=>drawerSent(s,path,"apply-grades",null));
 }
 
 // Deliver the section's DETERMINISTIC activities (auto-graded tests + quizzes) to
@@ -1281,11 +1424,15 @@ function showPrompt(s){
 function showDeliver(s){
  const {txt,graded,pub}=buildDeliver(s,DATA.generatedAt);
  const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Deliver to Canvas + workspaces - "+esc(s.section)+"</h3><div class='muted'>"+graded.length+" deterministic activit(y/ies) to push · "+pub.length+" to publish to workspaces · AI/held + manual excluded</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
+ const noop=graded.length===0;   // nothing deterministic has graded students
+ p.innerHTML="<button class='x'>×</button><h3>Deliver to Canvas + workspaces - "+esc(s.section)+"</h3><div class='muted'>"+graded.length+" deterministic activit(y/ies) to push · "+pub.length+" to publish to workspaces · AI/held + manual excluded</div>"+
+  (noop?"<p class='warnline'>No deterministic activity has graded students yet, so there is nothing to deliver from here. (AI/held activities flow through AI Review → Finalize.)</p>":"")+
+  CONSEQUENCE+
+  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
  const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
- wireSend(s,"deliver",null,txt);
+ if(!noop)wireSend(s,"deliver",null,txt,path=>drawerSent(s,path,"deliver",null));
 }
 
 function toggleTheme(){const r=document.documentElement;const cur=r.getAttribute("data-color-scheme")|| (matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");const next=cur==="dark"?"light":"dark";r.setAttribute("data-color-scheme",next);try{localStorage.setItem("grain-color-scheme",next);}catch(e){}/* persist to the same key theme-boot reads, so the choice survives a reload */render();}

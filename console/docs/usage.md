@@ -71,10 +71,13 @@ show as a visible "not loaded [load]" row instead of being silently absent.
 
 ## A class: Overview
 
-The class landing page (opens when you click into a class): stat tiles, an
-**At risk** strip (missing work and/or low attendance, linking to each
-student's profile), a Canvas-push preview, an in-class **Flags** card (only
-appears when the engine actually flagged something for that class), a
+The class landing page (opens when you click into a class): stat tiles, a
+**Pending intents** strip (what the console has filed into
+`gradebook/intents/` but a Claude Code session has not run yet, so the trail
+stays visible after a Send - run pending intents in the teacher repo, then
+Refresh), an **At risk** strip (missing work and/or low attendance, linking
+to each student's profile), a Canvas-push preview, an in-class **Flags** card
+(only appears when the engine actually flagged something for that class), a
 **Recent engine runs** timeline for the workflows that matter day to day
 (needs a PAT with Actions: Read), and a **Reports** card linking to that
 class's generated reports (markdown files open in the in-console reader,
@@ -119,20 +122,36 @@ attendance record.
 
 ## AI Review
 
-A queue per AI-graded activity. Approve / override / flag from the queue,
-or click a row to open the **full-page review detail**: screenshots (with
-lightbox zoom) or code tabs on the left, the decision card plus editable
-student-facing and instructor-only text on the right. Arrow keys or the
-Prev/Next buttons move between students without leaving the page; Escape
-returns to the queue. Decisions live in this browser (Export/Import in
-Settings backs them up). From here:
+A queue per AI-graded activity. The header is a **stage stepper** -
+Generate -> Review -> Apply -> Deliver - with ONE contextual primary button
+that follows the active stage (Generate feedback while drafts are missing,
+Review next while decisions remain, Apply reviewed once everything is decided,
+Finalize once the apply intent is filed). The other actions - Generate,
+Apply, Finalize, Approve all, Reset - live in the **⋯ overflow menu**.
 
-- **Generate feedback → prompt** drafts AI notes for ungraded submissions.
+Approve / override / flag from the queue, or click a row to open the
+**full-page review detail**: screenshots (with lightbox zoom) or code tabs on
+the left (the media pane collapses when a submission has neither), the
+decision card plus editable student-facing and instructor-only text on the
+right. Keyboard: **←/→** prev/next, **Enter** approve + advance, **Esc** back
+(arrows and Enter are ignored while a text field or button is focused, so you
+never lose an unsaved edit); a legend shows this above the panes, the counter
+shows how many are still unreviewed, and each decision confirms with a brief
+toast. Decisions live in this browser (Export/Import in Settings backs them
+up). The pipeline actions:
+
+- **Generate feedback → prompt** drafts AI notes for ungraded submissions
+  (disabled when every submission already has a note).
 - **Apply reviewed → prompt** writes your reviewed decisions into the
-  gradebook (grades only - no delivery).
-- **Finalize → publish + Canvas** delivers the cleared students only.
+  gradebook (grades only - no delivery; disabled until at least one decision).
+- **Finalize → deliver** delivers the cleared students only (disabled until
+  at least one is cleared).
 
-See [commands.md](commands.md) for what each of those prompts actually does.
+Every prompt drawer opens with a one-line **consequence** note (Send files an
+intent that a Claude Code session runs; Copy pastes it into a chat; neither
+writes anything until you run it), and after a successful **Send** the drawer
+shows a **next-step card** naming the filed intent and reminding you to run it
+then Refresh. See [commands.md](commands.md) for what each prompt actually does.
 
 ## Attendance
 

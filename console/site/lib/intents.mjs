@@ -15,14 +15,17 @@ export const workFrom=s=>"classes/"+s.repo+" (the local clone of github.com/"+s.
 
 // "Send to repo" on every prompt drawer: files the prompt as an Intent under
 // gradebook/intents/ so a local "run pending intents" picks it up - no pasting.
-export function wireSend(s,kind,aid,txt){
+// onSent(path, kind, aid) fires after a successful file, so the caller can record
+// the pipeline step, invalidate the pending-intents cache, and show a next-step
+// card. Optional - older call sites pass nothing and just see the "Sent" label.
+export function wireSend(s,kind,aid,txt,onSent){
  const b=$("#send"); if(!b)return;
  b.onclick=async()=>{
   b.disabled=true; b.textContent="Sending…";
   const ts=new Date().toISOString().replace(/[-:]/g,"").replace(/\..+/,"").replace("T","-");
   const path="gradebook/intents/"+ts+"-"+kind+(aid?"-"+aid:"")+".md";
   const body=txt+"\n---\n_Filed by Course Console at "+new Date().toISOString()+". When this intent is done, move this file to gradebook/intents/done/ in the same commit as the changes._\n";
-  try{ await putIntent(s.org,s.repo,path,body,":memo: console intent: "+kind+(aid?" "+aid:"")); b.textContent="Sent ✓ "+path.split("/").pop(); }
+  try{ await putIntent(s.org,s.repo,path,body,":memo: console intent: "+kind+(aid?" "+aid:"")); b.textContent="Sent ✓ "+path.split("/").pop(); if(onSent)onSent(path,kind,aid); }
   catch(e){ b.disabled=false; b.textContent="Send to repo →"; alert("Sending failed: "+e.message); }
  };
 }

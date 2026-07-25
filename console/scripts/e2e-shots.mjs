@@ -78,6 +78,13 @@ async function stub(route) {
   ]);
   if (rest.startsWith("/contents/reports/FLAGGED.md")) return wantsRaw ? raw("# Flagged for review\n\nTwo submissions share **studentNumber 20250009** - resolve by hand:\n\n- m1a1-" + section + "-dupA\n- m1a1-" + section + "-dupB\n") : json({ content: b64("x") });
   if (rest.startsWith("/contents/gradebook/GRADEBOOK.md")) return wantsRaw ? raw("# Gradebook - section " + section + "\n\n| Student | m1a1 | m2a1 |\n| --- | --- | --- |\n| Dela Cruz, Juan | 7/7 | 3/3 |\n| Santos, Maria | 7/7 | 3/3 |\n") : json({ content: b64("x") });
+  // Phase D: pending-intents listing. 2240 has one filed intent so the Overview
+  // strip renders; other sections have none (the strip hides itself).
+  if (rest === "/contents/gradebook/intents") return json(section === "2240" ? [
+    { type: "file", name: "20260725-140205-apply-ai-m3a1.md" },
+    { type: "file", name: "20260725-090012-deliver.md" },
+    { type: "dir", name: "done" },
+  ] : []);
   if (rest.startsWith("/actions/workflows/")) return json(RUNS);
   return route.fulfill({ status: 404, body: "{}" });
 }
@@ -109,9 +116,18 @@ await shot("01-dashboard");
 // Phase C: #/c/:key is the Overview (tiles, at-risk, Canvas preview, flags card,
 // runs, Reports card); the grade matrix is one tab deeper at /gradebook.
 await page.goto("http://localhost:8931/#/c/6APSI-2240"); await shot("02-overview");
+// Phase D2: the pending-intents strip shows what the console filed but has not run.
+console.log("overview pending-intents strip:", await page.evaluate(() => !![...document.querySelectorAll(".card h2")].find(h => h.textContent === "Pending intents")));
 await page.waitForTimeout(600); await page.evaluate(() => { const m = document.getElementById("main"); m.scrollTop = m.scrollHeight; }); await shot("02a-overview-bottom");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/gradebook"); await shot("02-gradebook");
 await page.waitForTimeout(400); await page.evaluate(() => { const m = document.getElementById("main"); m.scrollTop = m.scrollHeight; }); await shot("02b-gradebook-bottom");
+// Phase D4: openNote splits the note into wrapping student/instructor halves and
+// (for a held/AI cell) links into the review detail. Click the m3a1 held cell.
+await page.evaluate(() => { const td = [...document.querySelectorAll("td.cell[data-a='m3a1']")].find(x => x.textContent.trim() && x.textContent.includes("/")); if (td) td.click(); });
+await page.waitForTimeout(500);
+console.log("openNote halves:", await page.evaluate(() => document.querySelectorAll(".drawer .notehalf").length), "· review link:", await page.evaluate(() => !!document.querySelector(".drawer .dp a[href*='/review/']")));
+await shot("02d-opennote");
+await page.evaluate(() => document.querySelectorAll(".drawer").forEach(d => d.remove()));
 // Handoff button: open the apply-grades prompt drawer (the #prompt button lives
 // on the Gradebook tab now), verify the "Open in Claude" trigger renders, its
 // source resolves to the live prompt, encoding survives nasty input, and flag if
@@ -141,8 +157,16 @@ await page.goto("http://localhost:8931/#/c/6APSI-2240/activities"); await shot("
 await page.goto("http://localhost:8931/#/c/6APSI-2240/activities/new"); await shot("03b-activity-new");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/students"); await shot("04-students");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/students/20250001"); await shot("05-profile");
+// Phase D1: AI Review stage header (stepper + one contextual primary + overflow).
 await page.goto("http://localhost:8931/#/c/6APSI-2240/review"); await shot("06-review");
+console.log("review stepper steps:", await page.evaluate(() => document.querySelectorAll(".stepper__step").length), "(want 4)");
+console.log("review has ONE primary:", await page.evaluate(() => !!document.querySelector("#rvPrimary")), "· overflow:", await page.evaluate(() => !!document.querySelector(".ovmenu")));
+// D1: overflow menu opens (native <details>)
+await page.evaluate(() => { const d = document.querySelector(".ovmenu"); if (d) d.open = true; });
+await shot("06d-review-overflow");
+await page.evaluate(() => { const d = document.querySelector(".ovmenu"); if (d) d.open = false; });
 await page.goto("http://localhost:8931/#/c/6APSI-2240/review/m3a1/20250001"); await shot("06b-review-detail");
+console.log("detail kbd legend:", await page.evaluate(() => !!document.querySelector(".kbdlegend")), "· N-left counter:", await page.evaluate(() => /left|clear/.test(document.querySelector(".cnt")?.textContent || "")));
 await page.keyboard.press("Meta+k"); await shot("07-cmdk");
 await page.keyboard.press("Escape");
 // Phase C: Ops is a per-class tab now. The old global #/ops/:key redirects here.
