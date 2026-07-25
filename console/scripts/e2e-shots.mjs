@@ -96,6 +96,7 @@ await page.goto("http://localhost:8931/#/c/6APSI-2240/activities"); await shot("
 await page.goto("http://localhost:8931/#/c/6APSI-2240/students"); await shot("04-students");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/students/20250001"); await shot("05-profile");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/review"); await shot("06-review");
+await page.goto("http://localhost:8931/#/c/6APSI-2240/review/m3a1/20250001"); await shot("06b-review-detail");
 await page.keyboard.press("Meta+k"); await shot("07-cmdk");
 await page.keyboard.press("Escape");
 await page.goto("http://localhost:8931/#/ops/6APSI-2240"); await shot("08-ops");

@@ -69,6 +69,9 @@ jobs:
           if grep -rlE '"studentNumber"|"fullName"|"githubAccount"' dist/ --include='*.json' 2>/dev/null | grep -q .; then
             echo "::error::student-identity fields found in a shipped JSON"; exit 1; fi
           test -s dist/vendor/grain/lightbox.js || { echo "::error::grain vendor scripts missing"; exit 1; }
+          # Intent byte-compat: the six prompt builders must match the golden
+          # fixtures (the grading skills parse these formats).
+          node scripts/check-intents.mjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:

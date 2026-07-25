@@ -4,7 +4,7 @@
 // data half now lives in lib/. The app READS everything and WRITES exactly one
 // thing: Intent prompt files into gradebook/intents/ (executed by Claude Code
 // locally - "run pending intents").
-import { putIntent, AuthError, rate, ghJSON as ghJSON2 } from "./lib/gh.mjs";
+import { AuthError, rate, ghJSON as ghJSON2 } from "./lib/gh.mjs";
 import { loadConfig, saveConfig } from "./lib/store.mjs";
 import { discoverSections, parseRepoURL } from "./lib/config.mjs";
 import { shotsFor, shotsCached } from "./lib/shots.mjs";
@@ -16,29 +16,14 @@ import { initSearch } from "./lib/search-index.mjs";
 import { OPS } from "./lib/ops-catalog.mjs";
 import { listRuns, dispatch as dispatchWf, findDispatchedRun, pollRun } from "./lib/actions.mjs";
 import { editAssignments } from "./lib/config-writes.mjs";
+import { $, el, esc, confirmExecute } from "./lib/ui.mjs";
+import { DEC, getDec, setDec, skeyOf, isDecided, finalScore, exportDecisions, importDecisions } from "./lib/decisions.mjs";
+import { hl } from "./lib/hl.mjs";
+import { wireSend, buildGenFeedback, buildApplyAI, buildFinalize, buildApplyGrades, buildDeliver, buildManualAttendance } from "./lib/intents.mjs";
 
-const $=(s,r=document)=>r.querySelector(s), el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e};
-const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 let q="", revAct=null;
 let DATA={generatedAt:new Date().toISOString()};   // prompt builders stamp "graded as of"
 const main=$("#main");
-
-// where the prompts tell Claude Code to work from (the local clone convention)
-const workFrom=s=>"classes/"+s.repo+" (the local clone of github.com/"+s.org+"/"+s.repo+")";
-
-// "Send to repo" on every prompt drawer: files the prompt as an Intent under
-// gradebook/intents/ so a local "run pending intents" picks it up - no pasting.
-function wireSend(s,kind,aid,txt){
- const b=$("#send"); if(!b)return;
- b.onclick=async()=>{
-  b.disabled=true; b.textContent="Sending…";
-  const ts=new Date().toISOString().replace(/[-:]/g,"").replace(/\..+/,"").replace("T","-");
-  const path="gradebook/intents/"+ts+"-"+kind+(aid?"-"+aid:"")+".md";
-  const body=txt+"\n---\n_Filed by Course Console at "+new Date().toISOString()+". When this intent is done, move this file to gradebook/intents/done/ in the same commit as the changes._\n";
-  try{ await putIntent(s.org,s.repo,path,body,":memo: console intent: "+kind+(aid?" "+aid:"")); b.textContent="Sent ✓ "+path.split("/").pop(); }
-  catch(e){ b.disabled=false; b.textContent="Send to repo →"; alert("Sending failed: "+e.message); }
- };
-}
 
 function openSettings(firstRun){
  const c=loadConfig()||{repos:[],labels:{}};
@@ -66,7 +51,7 @@ function openSettings(firstRun){
  $("#sAdd").onclick=()=>{ $("#sRepos").insertAdjacentHTML("beforeend",rowHTML()); wireDel(); };
  $("#sExpDec").onclick=exportDecisions;
  $("#sImpDec").onclick=()=>$("#sImpFile").click();
- $("#sImpFile").onchange=e=>{const f=e.target.files[0];if(f)importDecisions(f);e.target.value="";};
+ $("#sImpFile").onchange=e=>{const f=e.target.files[0];if(f)importDecisions(f,()=>render());e.target.value="";};
  const close=()=>d.remove();
  p.querySelector(".x").onclick=()=>{ if(firstRun&&!loadConfig()){$("#sMsg").textContent="Add at least one repo (URL + PAT), then Save.";return;} close(); };
  d.onclick=e=>{if(e.target===d)p.querySelector(".x").onclick()};
@@ -107,7 +92,7 @@ function setTabs(key,mode,s){
  const t=$("#ctxTabs");
  if(!key){t.innerHTML="";return;}
  const items=[["","Gradebook","book"],["activities","Activities"+(s?" ("+s.stats.activities+")":""),"act"],["students","Students"+(s?" ("+s.stats.students+")":""),"stu"],["review","AI Review"+(s?" ("+s.stats.held+")":""),"ai"],["attendance","Attendance"+(s&&s.stats.sessions?" ("+s.stats.sessions+")":""),"att"]];
- t.innerHTML=items.map(([sub,l,m])=>{const on=m===mode||(m==="stu"&&String(mode).startsWith("profile:"));return "<a class='tab' href='"+classHref(key,sub)+"'"+(on?" aria-current='page' data-active='true'":"")+">"+l+"</a>";}).join("");
+ t.innerHTML=items.map(([sub,l,m])=>{const on=m===mode||(m==="stu"&&String(mode).startsWith("profile:"))||(m==="ai"&&mode==="revdetail");return "<a class='tab' href='"+classHref(key,sub)+"'"+(on?" aria-current='page' data-active='true'":"")+">"+l+"</a>";}).join("");
 }
 
 function statusLine(key){
@@ -150,13 +135,15 @@ async function withSection(key,fn){
  }
 }
 
-function classView(key,mode){
+function classView(key,mode,extra){
  withSection(key,s=>{
   setTabs(key,mode,s); statusLine(key);
   main.innerHTML="";
   const w=el("div","wrap");
   main.append(w);
-  if(mode==="ai") renderAI(s,w); else if(mode==="att") renderAttendance(s,w);
+  if(mode==="ai"){ if(extra&&extra.aid)revAct=extra.aid; renderAI(s,w); }
+  else if(mode==="revdetail") renderReviewDetail(s,w,extra.aid,extra.skey);
+  else if(mode==="att") renderAttendance(s,w);
   else if(mode==="act") renderActivities(s,w);
   else if(mode==="stu") renderStudents(s,w);
   else if(mode&&mode.startsWith("profile:")) renderStudentProfile(s,w,mode.slice(8));
@@ -295,9 +282,11 @@ route("#/c/:key/activities", p=>classView(p.key,"act"));
 route("#/c/:key/students", p=>classView(p.key,"stu"));
 route("#/c/:key/students/:sk", p=>classView(p.key,"profile:"+p.sk));
 route("#/c/:key/review", p=>classView(p.key,"ai"));
+route("#/c/:key/review/:aid", p=>classView(p.key,"ai",{aid:p.aid}));
+route("#/c/:key/review/:aid/:skey", p=>classView(p.key,"revdetail",{aid:p.aid,skey:p.skey}));
 route("#/c/:key/attendance", p=>classView(p.key,"att"));
 fallback(()=>go("#/"));
-beforeEach(()=>{ setNav(); });
+beforeEach(()=>{ setNav(); if(detailKey){document.removeEventListener("keydown",detailKey);detailKey=null;} });
 
 let started=false;
 async function boot(){
@@ -326,38 +315,7 @@ initSearch(()=>dispatch());
 
 function curScheme(){ return document.documentElement.getAttribute("data-color-scheme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"); }
 function cellColor(pct){ if(pct==null)return""; const g=Math.round(pct*120); const dark=curScheme()==="dark"; return "background:hsl("+g+"deg "+(dark?"30%":"55%")+" "+(dark?"24%":"90%")+")"; }
-// ---- review decisions (persisted in this browser) ----
-const DKEY="hau-grade-decisions-v1";
-let DEC={}; try{DEC=JSON.parse(localStorage.getItem(DKEY)||"{}")}catch(e){DEC={}}
-const dkey=(sec,act,skey)=>sec+"|"+act+"|"+skey;
-const getDec=(sec,act,skey)=>DEC[dkey(sec,act,skey)]||null;
-const setDec=(sec,act,skey,v)=>{const k=dkey(sec,act,skey);if(v)DEC[k]=v;else delete DEC[k];localStorage.setItem(DKEY,JSON.stringify(DEC));};
-const skeyOf=st=>st.number||st.name;
-function exportDecisions(){
-  const n=Object.keys(DEC).length;
-  if(!n&&!confirm("You have 0 saved decisions. Export an empty file anyway?"))return;
-  const payload={_meta:{key:DKEY,exportedAt:new Date().toISOString(),count:n},decisions:DEC};
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}));
-  a.download="hau-grade-decisions-"+new Date().toISOString().slice(0,10)+".json";
-  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-}
-function importDecisions(file){
-  const rd=new FileReader();
-  rd.onload=()=>{
-    let obj; try{obj=JSON.parse(rd.result)}catch(e){alert("Not valid JSON: "+e.message);return}
-    const inc=obj&&obj.decisions&&typeof obj.decisions==="object"?obj.decisions:(obj&&typeof obj==="object"&&!Array.isArray(obj)?obj:null);
-    if(!inc){alert("No decisions object found in that file.");return}
-    const keys=Object.keys(inc);
-    if(!keys.length){alert("That file has 0 decisions.");return}
-    if(!confirm("Import "+keys.length+" decision(s)? This MERGES into your current "+Object.keys(DEC).length+" (imported values win on conflicts)."))return;
-    keys.forEach(k=>{DEC[k]=inc[k]});
-    localStorage.setItem(DKEY,JSON.stringify(DEC));
-    render();
-    alert("Imported "+keys.length+" decision(s). Total now "+Object.keys(DEC).length+".");
-  };
-  rd.readAsText(file);
-}
+// review decisions now live in lib/decisions.mjs (same storage key + dkey shape)
 
 // ---- Flags (cheap cross-class inbox: FLAGS.md + reports/FLAGGED.md per class) ----
 async function flagsView(){
@@ -391,23 +349,6 @@ let millMod=null;
 async function renderMd(md){
  if(!millMod) millMod=await import("./vendor/mill.js");
  return millMod.renderGrainDocument(md).html;
-}
-
-// ---- typed execute confirm (native dialog) ----
-function confirmExecute(action, word){
- return new Promise(resolve=>{
-  const d=document.createElement("dialog"); d.className="confirm-dialog";
-  d.innerHTML="<h3>Execute: are you sure?</h3><p class='muted'>This will "+esc(action)+". Type <b>"+esc(word)+"</b> to confirm.</p>"+
-   "<input class='field__input' id='ceWord' autocomplete='off'>"+
-   "<div style='display:flex;gap:8px;margin-top:10px'><button class='btn' data-size='sm' id='ceOk' disabled>Execute</button><button class='btn' data-size='sm' data-variant='soft' id='ceNo'>Cancel</button></div>";
-  document.body.append(d); d.showModal();
-  const inp=d.querySelector("#ceWord"), ok=d.querySelector("#ceOk");
-  inp.oninput=()=>{ ok.disabled=inp.value.trim()!==word; };
-  ok.onclick=()=>{d.close();d.remove();resolve(true);};
-  d.querySelector("#ceNo").onclick=()=>{d.close();d.remove();resolve(false);};
-  d.addEventListener("cancel",()=>{d.remove();resolve(false);});
-  inp.focus();
- });
 }
 
 // ---- docked op feed (grain console organism) ----
@@ -649,7 +590,6 @@ function renderAttendance(s,w){
 // Manual rows carry the literal signature "manual" (teacher-attested):
 // verify-attendance counts them as present (MANUAL), never FLAGGED.
 function showManualAttendance(s){
- const att=s.attendance||{students:{},sessionDates:[]};
  const today=new Date().toISOString().slice(0,10);
  const d=el("div","drawer on"); const p=el("div","dp");
  const stuRow=st=>'<label class="status-list__item" style="cursor:pointer"><input type="checkbox" class="mAttStu" value="'+esc(st.number)+'" data-name="'+esc(st.name||"")+'"> <span class="status-list__title">'+esc(st.name||"(blank)")+' <span class="badge" data-status="archived">'+esc(st.number||"-")+'</span></span></label>';
@@ -667,23 +607,7 @@ function showManualAttendance(s){
   const picked=[...p.querySelectorAll(".mAttStu:checked")].map(c=>({num:c.value,name:c.dataset.name}));
   const date=$("#mAttDate").value;
   if(!picked.length||!date){$("#mAttOut").innerHTML="<p class='mut'>Pick at least one student and a date.</p>";return;}
-  const already=picked.filter(x=>{const a=att.students[x.num];return a&&a.present&&a.present.includes(date)});
-  const txt=
-"# Manual attendance - "+s.subject+" (section "+s.section+") - "+date+"\n\n"+
-"You are my course assistant for the HAU platform. Record teacher-attested manual attendance for this section. Work from the teacher repo:\n"+
-workFrom(s)+" - pull it first.\n\n"+
-"## Rules (do not violate)\n"+
-"- Attendance session CSVs (attendance/sessions/<date>/*.csv) are the record; never edit the generated .md/summary.json by hand (verify-attendance rebuilds them).\n"+
-"- Manual rows use the literal word manual in the signature column - verify-attendance counts them as present (MANUAL). Never fabricate a real HMAC signature.\n"+
-"- MERGE, never overwrite: union by studentNumber; keep every existing row and timestamp.\n\n"+
-"## Mark these students present on "+date+"\n"+
-picked.map(x=>"- "+x.num+(x.name?" ("+x.name+")":"")).join("\n")+"\n\n"+
-(already.length?"NOTE: already verified present on "+date+" per the current summary (skip them): "+already.map(x=>x.num).join(", ")+"\n\n":"")+
-"## Steps\n"+
-"1. In attendance/sessions/"+date+"/manual.csv (create the folder/file if needed, header timestamp,studentNumber,signature), append one row per listed student NOT already in any of that date's CSVs: \""+date+" 00:00:00,<studentNumber>,manual\".\n"+
-"2. Commit as \":memo: Manual attendance "+date+" ("+picked.length+")\" and push.\n"+
-"3. The push triggers the Verify attendance workflow (rebuilds the day summary, ATTENDANCE.md, summary.json; publish-attendance then delivers receipts automatically). Wait for it and confirm it is green.\n"+
-"4. VERIFY: the listed students show as MANUAL in attendance/sessions/"+date+"/"+date+".md and appear with "+date+" in attendance/summary.json. Nothing may be FLAGGED by this change.\n";
+  const txt=buildManualAttendance(s,picked,date);
   $("#mAttOut").innerHTML="<div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='mAttCp'>Copy</button></div><pre class='code-block prompt'>"+esc(txt)+"</pre>";
   $("#mAttCp").onclick=()=>{navigator.clipboard.writeText(txt).then(()=>{$("#mAttCp").textContent="Copied ✓"})};
   wireSend(s,"manual-attendance",null,txt);
@@ -713,13 +637,11 @@ function attMatrix(s,dates){
 // ================= AI REVIEW =================
 function heldActs(s){return s.assignments.filter(a=>a.aiGraded)}
 function reviewRows(s,aid){return s.students.filter(st=>st.activities[aid]).map(st=>({st,r:st.activities[aid],dec:getDec(s.section,aid,skeyOf(st))}))}
-const isDecided=d=>!!(d&&d.status);
 // decision-state -> product badge tone (hue is the documented monochrome exception)
 const TONE={todo:"muted",ok:"good",ov:"held",fl:"warn"};
 // activity kind -> product badge tone
 const KTONE={push:"good",held:"held",quiz:"quiz",manual:"muted"};
 function decStatus(row){ const d=row.dec; if(!isDecided(d))return{k:"todo",l:d&&(d.studentText||d.instructorText||d.comment)?"edited":"unreviewed"}; if(d.status==="approve")return{k:"ok",l:"approved"}; if(d.status==="override")return{k:"ov",l:"override "+d.score}; return{k:"fl",l:"flagged"}; }
-function finalScore(row){ const d=row.dec; if(!d)return null; if(d.status==="override")return d.score; if(d.status==="approve")return row.r.proposed; return null; }
 // split an AI note into the student-facing prose and the instructor-only block
 function parseNote(note){
  if(!note) return {student:"",instructor:""};
@@ -736,7 +658,7 @@ function renderAI(s,w){
  if(!acts.length){const c=el("div","card",'<p class="card__body">No AI-graded activities in this section.</p>');c.dataset.pad="sm";w.append(c);return;}
  if(!revAct||!acts.find(a=>a.id===revAct)) revAct=acts[0].id;
  const sub=el("nav","tab-bar");
- acts.forEach(a=>{const rows=reviewRows(s,a.id);const done=rows.filter(x=>isDecided(x.dec)).length;const b=el("div","tab",esc(a.id)+" <span class='pill'>"+done+"/"+rows.length+"</span>");if(revAct===a.id)b.dataset.active="true";b.onclick=()=>{revAct=a.id;render()};sub.append(b)});
+ acts.forEach(a=>{const rows=reviewRows(s,a.id);const done=rows.filter(x=>isDecided(x.dec)).length;const b=el("a","tab",esc(a.id)+" <span class='pill'>"+done+"/"+rows.length+"</span>");b.href=classHref(s.key,"review")+"/"+encodeURIComponent(a.id);if(revAct===a.id){b.dataset.active="true";b.setAttribute("aria-current","page");}sub.append(b)});
  w.append(sub);
  const rows=reviewRows(s,revAct);
  const done=rows.filter(x=>isDecided(x.dec)).length, appr=rows.filter(x=>x.dec&&x.dec.status==="approve").length, ov=rows.filter(x=>x.dec&&x.dec.status==="override").length, fl=rows.filter(x=>x.dec&&x.dec.status==="flag").length;
@@ -764,7 +686,7 @@ function renderAI(s,w){
  }).join("");
  scr.append(t); card.append(scr); w.append(card);
  setTimeout(()=>{
-   t.querySelectorAll("tr[data-s]").forEach(tr=>tr.onclick=()=>openReview(s,revAct,tr.dataset.s));
+   t.querySelectorAll("tr[data-s]").forEach(tr=>tr.onclick=()=>go(detailHref(s.key,revAct,tr.dataset.s)));
    $("#apprAll").onclick=()=>{rows.forEach(row=>{if(!isDecided(row.dec)&&row.r.proposed!=null)setDec(s.section,revAct,skeyOf(row.st),Object.assign({},row.dec,{status:"approve"}))});render()};
    $("#reset").onclick=()=>{if(confirm("Clear all decisions for "+revAct+"?")){rows.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),null));render()}};
    $("#genFb").onclick=()=>showGenFeedback(s,revAct);
@@ -784,58 +706,47 @@ function codeHTML(files){
  return "<select class='field__select cfile' id='cfile'>"+files.map((f,i)=>"<option value='"+i+"'>"+esc(f.path)+"</option>").join("")+"</select>"+
    "<pre class='code-block codepre' id='cpre'>"+hl(files[0].content,files[0].lang)+"</pre>";
 }
-// tiny self-contained syntax highlighter (no external lib; local file:// safe)
-const HLKW=new Set("await async break case catch class const continue debugger default delete do else export extends false finally for from function if implements import in instanceof interface let new null of return super switch this throw true try typeof var void while with yield static get set public private protected abstract final dynamic bool int double num String List Map Widget build override late required as is enum mixin extension typedef on part show hide library".split(/\s+/));
-function hlCode(s){
- const re=/(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(`(?:\\[\s\S]|[^`\\])*`|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*')|(\b\d[\w.]*\b)|([A-Za-z_$][\w$]*)/g;
- let out="",last=0,m;
- while((m=re.exec(s))){ out+=esc(s.slice(last,m.index)); last=re.lastIndex;
-  if(m[1])out+="<span class=tc>"+esc(m[1])+"</span>";
-  else if(m[2])out+="<span class=ts>"+esc(m[2])+"</span>";
-  else if(m[3])out+="<span class=tn>"+esc(m[3])+"</span>";
-  else out+=(HLKW.has(m[4])?"<span class=tk>"+esc(m[4])+"</span>":esc(m[4])); }
- return out+esc(s.slice(last));
-}
-function hlMarkup(s){
- const re=/(<!--[\s\S]*?-->)|(<\/?[A-Za-z][^>]*>)/g;
- let out="",last=0,m;
- while((m=re.exec(s))){ out+=esc(s.slice(last,m.index)); last=re.lastIndex;
-  if(m[1])out+="<span class=tc>"+esc(m[1])+"</span>";
-  else out+="<span class=tg>"+esc(m[2]).replace(/("[^"]*"|'[^']*')/g,x=>"<span class=ts>"+x+"</span>")+"</span>"; }
- return out+esc(s.slice(last));
-}
-function hl(code,lang){ return /^(html?|xml|vue|svelte)$/.test(lang||"")?hlMarkup(String(code)):hlCode(String(code)); }
-function openReview(s,aid,skey){
- const max=s.assignments.find(a=>a.id===aid).totalPoints;
+const detailHref=(key,aid,sk)=>classHref(key,"review")+"/"+encodeURIComponent(aid)+"/"+encodeURIComponent(sk);
+let detailKey=null;      // document keydown handler for the detail route; removed in beforeEach
+let leftViewPref=null;   // "shots" | "code" - persists across prev/next navigations
+function renderReviewDetail(s,w,aid,skey){
+ const a=s.assignments.find(x=>x.id===aid);
+ const back=classHref(s.key,"review");
+ if(!a||!a.aiGraded){ w.append(el("div","card","<p class='card__body'>No AI-graded activity "+esc(aid)+" here. <a href='"+back+"'>Back to AI Review</a></p>")); return; }
+ const max=a.totalPoints;
  const order=reviewRows(s,aid).map(row=>skeyOf(row.st));
- let idx=Math.max(0,order.indexOf(skey));
- let leftView=null;   // "shots" | "code" - persists across prev/next in this drawer
- const d=el("div","drawer on"); const p=el("div","dp wide"); d.append(p); document.body.append(d);
- const close=()=>{d.remove();document.removeEventListener("keydown",onKey);render()};
- const onKey=e=>{ if(e.key==="Escape")close(); else if(e.key==="ArrowRight"&&idx<order.length-1)paint(idx+1); else if(e.key==="ArrowLeft"&&idx>0)paint(idx-1); };
- function paint(i){
-  idx=i; const sk=order[i];
-  const st=s.students.find(x=>skeyOf(x)===sk); const r=st.activities[aid];
-  const orig=parseNote(r.note);
+ const i=order.indexOf(skey);
+ const st=s.students.find(x=>skeyOf(x)===skey);
+ if(i<0||!st){ w.append(el("div","card","<p class='card__body'>No held "+esc(aid)+" submission for that student. <a href='"+back+"'>Back to AI Review</a></p>")); return; }
+ const sk=skey, r=st.activities[aid];
+ const orig=parseNote(r.note);
+ const here=detailHref(s.key,aid,skey);
+ const box=el("div"); w.append(box);
+ detailKey=e=>{ if(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))return;
+  if(e.key==="Escape")go(back);
+  else if(e.key==="ArrowRight"&&i<order.length-1)go(detailHref(s.key,aid,order[i+1]));
+  else if(e.key==="ArrowLeft"&&i>0)go(detailHref(s.key,aid,order[i-1])); };
+ document.addEventListener("keydown",detailKey);
+ function paint(){
   // lazy media, per pane: screenshots fetch on first sight (they are the default
   // pane); CODE fetches only when its tab is opened, so shots never wait on it.
   const shots=shotsCached(s.section,r.repo);   // null = loading, [] = none
   const files=codeCached(s.section,r.repo);    // undefined = not fetched, null = none
-  const repaint=()=>{ if(document.body.contains(d)&&order[idx]===sk) paint(idx); };
+  const repaint=()=>{ if(location.hash===here&&document.body.contains(box)) paint(); };
   if(shots===null) shotsFor(s.section,s.org,r.repo).then(repaint);
   else if(shots&&!shots.length&&files===undefined) codeFor(s.section,s.org,r.repo).then(repaint); // no shots -> code becomes the default pane
-  if(leftView==="code"&&files===undefined) codeFor(s.section,s.org,r.repo).then(repaint);
+  if(leftViewPref==="code"&&files===undefined) codeFor(s.section,s.org,r.repo).then(repaint);
   const hasShots=!!(shots&&shots.length);
   const hasCode=!!(files&&files.length);
   const codeUnknown=files===undefined;
-  if(leftView===null||(leftView==="shots"&&!hasShots&&hasCode)||(leftView==="code"&&!hasCode&&!codeUnknown&&hasShots)) leftView=hasShots?"shots":(hasCode?"code":"shots");
-  const lv=leftView;
+  if(leftViewPref===null||(leftViewPref==="shots"&&!hasShots&&hasCode)||(leftViewPref==="code"&&!hasCode&&!codeUnknown&&hasShots)) leftViewPref=hasShots?"shots":(hasCode?"code":"shots");
+  const lv=leftViewPref;
   const curDec=getDec(s.section,aid,sk);
   const stt=decStatus({dec:curDec});
   const chip="<span class='badge' data-tone='"+TONE[stt.k]+"'>"+stt.l+"</span>";
   const flag=r.aiFlag?r.aiFlag.split(" - ")[0]:null;
-  p.innerHTML="<button class='x'>×</button>"+
-   "<div class='rvhead'><h3 style='margin:0'>"+esc(st.name||"(blank)")+"</h3>"+chip+
+  box.innerHTML="<a class='mut' href='"+back+"'>← AI Review · "+esc(aid)+"</a>"+
+   "<div class='rvhead' style='margin-top:4px'><h1 style='margin:0'>"+esc(st.name||"(blank)")+"</h1>"+chip+
      "<div class='rvnav'><button class='btn' data-size='sm' data-variant='soft' id='prev'"+(i<=0?" disabled":"")+">← Prev</button>"+
      "<span class='cnt'>"+(i+1)+" / "+order.length+"</span>"+
      "<button class='btn' data-size='sm' data-variant='soft' id='next'"+(i>=order.length-1?" disabled":"")+">Next →</button></div></div>"+
@@ -866,16 +777,15 @@ function openReview(s,aid,skey){
      "<div style='display:flex;gap:8px;align-items:center;margin-top:8px'><button class='btn' data-size='sm' id='dSave'>Save edits</button> <button class='btn' data-size='sm' data-variant='soft' id='dRevert'>Revert to AI text</button> <span class='mut' id='dSaved' style='font-size:12px'></span></div>"+
     "</div>"+
    "</div>";
-  p.querySelector(".x").onclick=close;
   const prev=$("#prev"),next=$("#next");
-  if(prev)prev.onclick=()=>{if(idx>0)paint(idx-1)};
-  if(next)next.onclick=()=>{if(idx<order.length-1)paint(idx+1)};
+  if(prev)prev.onclick=()=>{if(i>0)go(detailHref(s.key,aid,order[i-1]))};
+  if(next)next.onclick=()=>{if(i<order.length-1)go(detailHref(s.key,aid,order[i+1]))};
   // left-pane toggle (screenshots <-> code) - no repaint, just show/hide.
   // First open of the Code tab triggers its (deferred) fetch, then repaints.
-  p.querySelectorAll(".tab[data-lv]").forEach(b=>b.onclick=()=>{ if(b.disabled)return; leftView=b.dataset.lv;
-    if(leftView==="code"&&codeCached(s.section,r.repo)===undefined){ $("#lvCode").innerHTML="<p class='mut'>Loading code…</p>"; codeFor(s.section,s.org,r.repo).then(repaint); }
-    $("#lvShots").style.display=leftView==="shots"?"flex":"none"; $("#lvCode").style.display=leftView==="code"?"block":"none";
-    p.querySelectorAll(".tab[data-lv]").forEach(x=>{if(x.dataset.lv===leftView)x.dataset.active="true";else x.removeAttribute("data-active")}); });
+  box.querySelectorAll(".tab[data-lv]").forEach(b=>b.onclick=()=>{ if(b.disabled)return; leftViewPref=b.dataset.lv;
+    if(leftViewPref==="code"&&codeCached(s.section,r.repo)===undefined){ $("#lvCode").innerHTML="<p class='mut'>Loading code…</p>"; codeFor(s.section,s.org,r.repo).then(repaint); }
+    $("#lvShots").style.display=leftViewPref==="shots"?"flex":"none"; $("#lvCode").style.display=leftViewPref==="code"?"block":"none";
+    box.querySelectorAll(".tab[data-lv]").forEach(x=>{if(x.dataset.lv===leftViewPref)x.dataset.active="true";else x.removeAttribute("data-active")}); });
   const cf=$("#cfile"); if(cf){ cf.onchange=()=>{ const f=files[+cf.value]; $("#cpre").innerHTML=hl(f.content,f.lang); }; }
   // gather the current text edits + comment, keeping only what differs from the AI original
   const collect=(extra)=>{ const d=Object.assign({},getDec(s.section,aid,sk)||{},extra);
@@ -884,36 +794,21 @@ function openReview(s,aid,skey){
     if(inv.trim()!==orig.instructor.trim())d.instructorText=inv; else delete d.instructorText;
     if(cm)d.comment=cm; else delete d.comment;
     return d; };
-  const save=v=>{setDec(s.section,aid,sk,v);if(idx<order.length-1)paint(idx+1);else paint(idx);};
+  const save=v=>{setDec(s.section,aid,sk,v);if(i<order.length-1)go(detailHref(s.key,aid,order[i+1]));else paint();};
   $("#dApprove").onclick=()=>save(collect(r.proposed!=null?{status:"approve"}:{status:"override",score:+$("#dOv").value}));
   $("#dOvBtn").onclick=()=>save(collect({status:"override",score:+$("#dOv").value}));
   $("#dFlag").onclick=()=>save(collect({status:"flag"}));
-  $("#dClear").onclick=()=>{setDec(s.section,aid,sk,null);paint(idx);};
-  $("#dSave").onclick=()=>{const d=collect({});setDec(s.section,aid,sk,Object.keys(d).length?d:null);$("#dSaved").textContent="saved ✓";const stt2=decStatus({dec:getDec(s.section,aid,sk)});const c=p.querySelector(".rvhead .badge");if(c){c.dataset.tone=TONE[stt2.k];c.textContent=stt2.l;}};
-  $("#dRevert").onclick=()=>{$("#dStudent").value=orig.student;$("#dInstr").value=orig.instructor;const d=collect({});setDec(s.section,aid,sk,Object.keys(d).length?d:null);paint(idx);};
+  $("#dClear").onclick=()=>{setDec(s.section,aid,sk,null);paint();};
+  $("#dSave").onclick=()=>{const d=collect({});setDec(s.section,aid,sk,Object.keys(d).length?d:null);$("#dSaved").textContent="saved ✓";const stt2=decStatus({dec:getDec(s.section,aid,sk)});const c=box.querySelector(".rvhead .badge");if(c){c.dataset.tone=TONE[stt2.k];c.textContent=stt2.l;}};
+  $("#dRevert").onclick=()=>{$("#dStudent").value=orig.student;$("#dInstr").value=orig.instructor;const d=collect({});setDec(s.section,aid,sk,Object.keys(d).length?d:null);paint();};
  }
- d.onclick=e=>{if(e.target===d)close()};
- document.addEventListener("keydown",onKey);
- paint(idx);
+ paint();
 }
 
 function showGenFeedback(s,aid){
- const rows=reviewRows(s,aid); const max=s.assignments.find(a=>a.id===aid).totalPoints;
+ const rows=reviewRows(s,aid);
  const pending=rows.filter(x=>!x.r.note);
- const txt=
-"# Generate AI feedback drafts - "+s.subject+" (section "+s.section+") - "+aid+"\n\n"+
-"The grade sweep wrote a per-submission input file to gradebook/notes-input/"+aid+"/ for each submission that opted in. Turn each into a reviewable note draft I can check in this dashboard. Work from: "+workFrom(s)+" - pull it first.\n\n"+
-"## What to do\n"+
-"For EVERY gradebook/notes-input/"+aid+"/<repo>.md that does NOT already have a matching gradebook/notes/"+aid+"/<repo>.md:\n"+
-"  1. Read the input file. It embeds the persona, the hard rules, the class context, the rubric, the automated result, the student source, and the exact output format.\n"+
-"  2. If it lists screenshots, open those image files (gradebook/notes-input/"+aid+"/<repo>.shots/...) to judge the design.\n"+
-"  3. Write gradebook/notes/"+aid+"/<repo>.md following that file's skeleton and output format EXACTLY: the student-facing prose half (no scores, no rubric, no \"AI\" mention), then a line with only ---, then \"**For the instructor (not shown to the student):**\", then the rubric breakdown, a \"Proposed total: N/"+max+"\" line, and the \"AI-authored likelihood\" line.\n\n"+
-"## Rules (do not violate)\n"+
-"- This step DRAFTS notes only. Do NOT write grades.csv, do NOT flip \"publish\": true, do NOT publish to students, do NOT push Canvas.\n"+
-"- SKIP any repo that already has a note in gradebook/notes/"+aid+"/ - never overwrite a draft I may have edited.\n"+
-"- The student-facing half must never mention \"AI\", scores, points, or the rubric; the likelihood/vibecode line stays in the instructor half only.\n"+
-"- Only process repos that have an input file; do not invent submissions.\n\n"+
-"When done, COMMIT AND PUSH the new notes to the teacher repo. The hosted dashboard reads the repo live - I'll hit Refresh, review each draft and its proposed score, then Approve/Override/Flag there.\n";
+ const txt=buildGenFeedback(s,aid);
  const d=el("div","drawer on"); const p=el("div","dp");
  p.innerHTML="<button class='x'>×</button><h3>Generate AI feedback drafts - "+esc(aid)+"</h3><div class='muted'>"+pending.length+" submission(s) without a note yet · runs in a Claude Code session on your subscription (no GitHub Models)</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
@@ -924,36 +819,7 @@ function showGenFeedback(s,aid){
 
 function showApplyAI(s,aid){
  const rows=reviewRows(s,aid); const max=s.assignments.find(a=>a.id===aid).totalPoints;
- const decided=rows.filter(x=>isDecided(x.dec)&&x.dec.status!=="flag");
- const flagged=rows.filter(x=>x.dec&&x.dec.status==="flag");
- const undone=rows.filter(x=>!isDecided(x.dec));
- const edited=decided.filter(x=>x.dec.studentText!=null||x.dec.instructorText!=null);
- const lines=decided.map(x=>{const fin=finalScore(x);const tags=[x.dec.status==="override"?"OVERRIDE - was "+(x.r.proposed==null?"none":x.r.proposed):"approved"];if(x.dec.studentText!=null)tags.push("edited student feedback");if(x.dec.instructorText!=null)tags.push("edited instructor note");return "  - "+(x.st.name||x.r.repo)+" ("+(x.st.number||"?")+") · "+x.r.repo+": "+fin+"/"+max+"  ["+tags.join("; ")+"]"+(x.dec.comment?" - note: "+x.dec.comment:"");}).join("\n");
- const editBlocks=edited.map(x=>{
-   let b="### "+x.r.repo+"  (final "+finalScore(x)+"/"+max+")\n";
-   if(x.dec.studentText!=null)b+="STUDENT-FACING - replace the prose half of gradebook/notes/"+aid+"/"+x.r.repo+".md (between the italic disclaimer line and the '---' instructor separator):\n<<<\n"+x.dec.studentText+"\n>>>\n";
-   if(x.dec.instructorText!=null)b+="INSTRUCTOR-ONLY - replace the instructor half (everything after the '---'):\n<<<\n"+x.dec.instructorText+"\n>>>\n";
-   return b;
- }).join("\n");
- const txt=
-"# Apply reviewed AI grades - "+s.subject+" (section "+s.section+") - "+aid+"\n\n"+
-"I have reviewed the held AI grades for "+aid+". Apply my decisions below. Work from: "+workFrom(s)+" - pull it first.\n\n"+
-"## Reviewed decisions (final score / "+max+")\n"+(lines||"  (none decided yet)")+"\n\n"+
-(editBlocks?"## Edited feedback to write (use this EXACT text, verbatim)\n"+editBlocks+"\n":"")+
-(flagged.length?"## Flagged for deeper review - do NOT apply, publish, or push; re-examine and report back to me\n"+
-"For each student below, do a thorough second pass on "+aid+":\n"+
-"  1. Read the current assessment in gradebook/notes/"+aid+"/<repo>.md and the rubric in grader/"+aid+"/RUBRIC.md (plus grader/class-prompt.md).\n"+
-"  2. Clone the submission repo at its graded SHA and read the ACTUAL code; if it is a design activity, open its screenshots (gradebook/previews/"+aid+"/<repo>/ or the previews branch).\n"+
-"  3. Produce a fresh per-criterion breakdown, a revised proposed score out of "+max+", and a revised student-facing feedback draft, explicitly addressing my flag note. Call out anything that looks off (over/under-scored, mismatch with the code, possible integrity issue).\n"+
-"  4. Present it all to me in chat for a decision. Do NOT write grades.csv, notes, publish, or push Canvas for these students.\n\n"+
-flagged.map(x=>"  - "+(x.st.name||x.r.repo)+" ("+(x.st.number||"?")+") · "+x.r.repo+" @"+(x.r.sha||"?")+" · current proposed "+(x.r.proposed!=null?x.r.proposed+"/"+max:"none")+(x.r.aiFlag?" · AI-likelihood "+x.r.aiFlag.split(" - ")[0]:"")+(x.dec.comment?" - my note: "+x.dec.comment:"")).join("\n")+"\n\n":"")+
-(undone.length?"## Not yet reviewed ("+undone.length+") - do NOT apply\n\n":"")+
-"## Steps\n"+
-"1. For each OVERRIDE student, set gradebook/grades.csv aiScore to the final score I gave (do not touch the objective test score column). Approved students keep the AI's proposed aiScore.\n"+
-"2. For every FLAGGED or NOT-YET-REVIEWED student on "+aid+", BLANK their aiScore cell in gradebook/grades.csv. A blank aiScore holds a student out of the Canvas push (canvas-push skips it) and marks them not-cleared for delivery.\n"+
-"3. For every student under \"Edited feedback to write\", overwrite gradebook/notes/"+aid+"/<repo>.md with my exact text: replace the student-facing prose half and/or the instructor half as labelled, keeping the title line and the italic disclaimer line intact. For OVERRIDE students with no edited instructor text, still update the instructor note's proposed total to match my score, adjust the per-criterion bullets to sum to it, and record the human-review note on the proposed-total line (so it stays out of the Canvas comment).\n"+
-"4. Verify the gradebook: overrides show my score, flagged/unreviewed aiScore are blank, approved are unchanged. Commit and push - the hosted dashboard reads the repo live; I'll refresh to review the applied grades before delivery.\n\n"+
-"Do NOT publish or push Canvas from this prompt, and do NOT flip \"publish\": true. This prompt writes grades only. Delivery (flip publish:true, publish to students, push Canvas, verify) is the separate Finalize step (the Finalize button emits that prompt), gated on my go. The student-facing FEEDBACK.md and the Canvas comment must stay free of any \"AI\" mention and of the instructor-only likelihood/vibecode line. The <<< >>> markers are delimiters only - do not include them in the files.\n";
+ const {txt,decided,flagged,undone}=buildApplyAI(s,aid,rows);
  const d=el("div","drawer on"); const p=el("div","dp");
  p.innerHTML="<button class='x'>×</button><h3>Apply reviewed AI grades - "+esc(aid)+"</h3><div class='muted'>"+decided.length+" to apply · "+flagged.length+" flagged · "+undone.length+" not reviewed</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button> <button class='btn' data-size='sm' data-variant='soft' id='csv'>Download CSV</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
@@ -968,27 +834,8 @@ flagged.map(x=>"  - "+(x.st.name||x.r.repo)+" ("+(x.st.number||"?")+") · "+x.r.
 }
 
 function showFinalize(s,aid){
- const rows=reviewRows(s,aid); const max=s.assignments.find(a=>a.id===aid).totalPoints;
- const delivered=rows.filter(x=>isDecided(x.dec)&&x.dec.status!=="flag");
- const heldOut=rows.filter(x=>!(isDecided(x.dec)&&x.dec.status!=="flag"));
- const delList=delivered.map(x=>"  - "+x.r.repo+": "+finalScore(x)+"/"+max).join("\n")||"  (none cleared yet)";
- const heldList=heldOut.map(x=>"  - "+x.r.repo+(x.dec&&x.dec.status==="flag"?" (flagged)":" (not reviewed)")).join("\n")||"  (none)";
- const txt=
-"# Finalize and deliver - "+s.subject+" (section "+s.section+") - "+aid+"\n\n"+
-"The reviewed grades for "+aid+" are already written to the gradebook (approved + overrides applied; held/flagged aiScore blanked). Now deliver ONLY the cleared students to their workspaces and to Canvas. Work from: "+workFrom(s)+" - pull it first.\n\n"+
-"## Cleared to deliver ("+delivered.length+")\n"+delList+"\n\n"+
-"## Held OUT - do NOT deliver ("+heldOut.length+")\n"+heldList+"\n\n"+
-"## Rules (do not violate)\n"+
-"- Dry-run first for BOTH publish and Canvas; execute only on my explicit \"go\".\n"+
-"- Student FEEDBACK.md and the Canvas comment carry NO scores-as-AI, no \"AI\" mention, and never the instructor-only likelihood/vibecode line.\n"+
-"- publish-grades.mjs gates on aiScore: a blank aiScore holds a student out of BOTH the student publish and the Canvas push, so a single publish only="+aid+" delivers exactly the cleared students above (held/flagged students, with blank aiScore, are skipped automatically).\n\n"+
-"## Steps\n"+
-"1. Flip \"publish\": true on "+aid+" in grader/assignments.json (the readiness gate; nothing delivers yet).\n"+
-"2. Student publish (publish.yml), DRY RUN (publish=false), restricted to the cleared repos. Show me the plan; confirm it lists exactly the cleared repos above and no held student.\n"+
-"3. On my \"go\": run publish for real (publish=true) for the cleared repos only.\n"+
-"4. Canvas push in CHECK mode for "+aid+" (tools/canvas-push.mjs --section="+s.section+" --check). Show the report; confirm every cleared student maps and no held student appears (held students have blank aiScore and are skipped).\n"+
-"5. On my \"go\": canvas-push --execute. Each cleared student gets their final score PLUS a rubric-breakdown comment (per-criterion points + feedback prose).\n"+
-"6. VERIFY: each cleared student received FEEDBACK.md/GRADES.md and the correct Canvas grade + comment (spot-check 2-3), and NO held/flagged student got anything.\n";
+ const rows=reviewRows(s,aid);
+ const {txt,delivered,heldOut}=buildFinalize(s,aid,rows);
  const d=el("div","drawer on"); const p=el("div","dp");
  p.innerHTML="<button class='x'>×</button><h3>Finalize and deliver - "+esc(aid)+"</h3><div class='muted'>"+delivered.length+" cleared to deliver · "+heldOut.length+" held out</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
@@ -1065,28 +912,7 @@ function canvasPanel(s){
 }
 
 function showPrompt(s){
- const held=s.assignments.filter(a=>a.aiGraded).map(a=>a.id);
- const push=s.assignments.filter(a=>!a.aiGraded&&!a.manual).map(a=>a.id);
- const rows=s.assignments.filter(a=>!a.aiGraded&&!a.manual).map(a=>{
-   const rs=s.students.map(st=>st.activities[a.id]).filter(Boolean);
-   return "  - "+a.id+": "+(a.totalPoints!=null?a.totalPoints+" pts":"raw tests")+", "+rs.length+" students graded";
- }).join("\n");
- const txt=
-"# Apply grades to Canvas - "+s.subject+" (section "+s.section+")\n\n"+
-"You are my grading assistant for the HAU platform. Apply the reviewed grades for this section to Canvas. Work from the teacher repo:\n"+
-workFrom(s)+" - pull it first.\n\n"+
-"## Rules (do not violate)\n"+
-"- gradebook/grades.csv is the source of truth. Never hand-edit a grade.\n"+
-"- These AI/held activities must NOT be auto-pushed - I review + publish them separately: "+(held.join(", ")||"(none)")+".\n"+
-"- Dry-run first. Only execute on my explicit \"go\".\n\n"+
-"## Steps\n"+
-"1. Re-run a grade sweep only if submissions changed since "+new Date(DATA.generatedAt).toLocaleDateString()+"; otherwise use the current gradebook.\n"+
-"2. Canvas push in CHECK mode for section "+s.section+" (tools/canvas-push.mjs --section="+s.section+" --check, or the Canvas push workflow in check mode). \n"+
-"3. Show me the report: # grades, # students matched, per-activity counts, and ANY unmatched students or points-possible mismatches.\n"+
-"4. Confirm it matches this expected preview (pushable activities only):\n"+rows+"\n"+
-"5. On my \"go\", run the same command with --execute (workflow mode=execute).\n"+
-"6. VERIFY: re-read the push report; confirm pushed count == matched students × pushable activities, no new unmatched, and spot-check 3 students' Canvas values against gradebook/grades.csv.\n\n"+
-"## Reminder\nHeld activities ("+(held.join(", ")||"none")+") stay out of this push. To deliver those to students later: review gradebook/notes/, set \"publish\": true on the ready ones, and run publish.yml.\n";
+ const txt=buildApplyGrades(s,DATA.generatedAt);
  const d=el("div","drawer on"); const p=el("div","dp");
  p.innerHTML="<button class='x'>×</button><h3>Apply-grades prompt - "+esc(s.section)+"</h3><div class='muted'>Send it to the repo (run pending intents), or copy it into a Claude Code chat.</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
@@ -1100,33 +926,7 @@ workFrom(s)+" - pull it first.\n\n"+
 // safety framing but WITHOUT aiScore gating - these scores are final, not held.
 // AI/held activities are excluded on purpose (they flow through AI Review -> Finalize).
 function showDeliver(s){
- const det=s.assignments.filter(a=>a.kind==="push"||a.kind==="quiz");
- const held=s.assignments.filter(a=>a.aiGraded).map(a=>a.id);
- const manual=s.assignments.filter(a=>a.manual).map(a=>a.id);
- const graded=det.map(a=>({a,n:s.students.map(st=>st.activities[a.id]).filter(Boolean).length})).filter(x=>x.n>0);
- const pub=graded.filter(x=>x.a.publish);
- const canvasRows=graded.map(x=>"  - "+x.a.id+": "+(x.a.totalPoints!=null?x.a.totalPoints+" pts":x.a.autoPoints!=null?x.a.autoPoints+" pts":x.a.quiz?"quiz (raw tests scaled to Canvas)":"raw tests scaled to Canvas")+", "+x.n+" students graded").join("\n")||"  (no deterministic activity has graded students yet)";
- const pubRows=pub.map(x=>"  - "+x.a.id+(x.a.quiz?" (quiz)":"")).join("\n")||"  (none of the deterministic activities are flagged \"publish\": true)";
- const txt=
-"# Deliver reviewed grades - "+s.subject+" (section "+s.section+") - deterministic activities\n\n"+
-"These are the section's DETERMINISTIC activities (auto-graded tests + quizzes). Their gradebook scores are final - no AI review needed. Deliver them to student workspaces (the \"publish\": true ones) and to Canvas. Work from: "+workFrom(s)+" - pull it first.\n\n"+
-"## Push to Canvas - deterministic activities with graded students ("+graded.length+")\n"+canvasRows+"\n\n"+
-"## Publish to student workspaces (only activities flagged \"publish\": true)\n"+pubRows+"\n\n"+
-"## Excluded on purpose - do NOT deliver from this prompt\n"+
-"- AI-graded / held (review in the AI Review tab, then use its Finalize button): "+(held.join(", ")||"(none)")+"\n"+
-"- Manual (entered in Canvas by hand): "+(manual.join(", ")||"(none)")+"\n\n"+
-"## Rules (do not violate)\n"+
-"- gradebook/grades.csv is the source of truth. Never hand-edit a grade.\n"+
-"- Dry-run BOTH the student publish and the Canvas push first; execute either only on my explicit \"go\".\n"+
-"- Student FEEDBACK.md/GRADES.md and any Canvas comment carry NO \"AI\" mention.\n"+
-"- Touch ONLY the deterministic activities above. The AI/held activities flow through the separate AI Review -> Finalize path; do not publish or push them here.\n\n"+
-"## Steps\n"+
-"1. Re-run a grade sweep only if submissions changed since "+new Date(DATA.generatedAt).toLocaleDateString()+"; otherwise use the current gradebook.\n"+
-"2. Student publish - DRY RUN first: publish.yml (publish=false), or tools/publish-grades.mjs "+s.section+" (dry-run by default). publish only ever delivers \"publish\": true activities, and it skips any AI student whose aiScore is blank - so this delivers exactly the deterministic publish:true activities above (plus any already-cleared AI students, which is fine). Show me the plan; confirm it lists those activities and their graded workspaces.\n"+
-"3. On my \"go\": run the student publish for real (publish=true / --execute).\n"+
-"4. Canvas push in CHECK mode: tools/canvas-push.mjs --section="+s.section+" --check. Show the report: # grades, # students matched, per-activity counts, and ANY unmatched students or points-possible mismatches. Confirm it matches the Canvas preview above and that NO held or manual activity appears (canvas-push holds AI activities and skips manual automatically).\n"+
-"5. On my \"go\": re-run with --execute.\n"+
-"6. VERIFY: pushed count == matched students x pushed activities; spot-check 2-3 students' Canvas values and their delivered GRADES.md/FEEDBACK.md against gradebook/grades.csv; confirm no held or manual activity was delivered.\n";
+ const {txt,graded,pub}=buildDeliver(s,DATA.generatedAt);
  const d=el("div","drawer on"); const p=el("div","dp");
  p.innerHTML="<button class='x'>×</button><h3>Deliver to Canvas + workspaces - "+esc(s.section)+"</h3><div class='muted'>"+graded.length+" deterministic activit(y/ies) to push · "+pub.length+" to publish to workspaces · AI/held + manual excluded</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);

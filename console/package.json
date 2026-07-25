@@ -9,6 +9,7 @@
   },
   "scripts": {
     "bake": "node scripts/bake-theme.mjs",
+    "check:intents": "node scripts/check-intents.mjs",
     "dev": "node scripts/bake-theme.mjs && npx serve site",
     "audit": "node src/audit-students.mjs",
     "fix": "node src/apply-fixes.mjs",
