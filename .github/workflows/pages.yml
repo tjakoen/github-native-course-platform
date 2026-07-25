@@ -1,0 +1,79 @@
+name: Deploy Course Console to GitHub Pages
+
+# The Course Console (console/) is a data-free STATIC SHELL: all gradebook data
+# is fetched at view time from api.github.com with the teacher's own PAT (stored
+# in the browser). The only build step is baking the GRAIN theme from the
+# @tjakoen/grain package into theme.css. A tripwire step fails the deploy if
+# anything that looks like student data ends up in the artifact - this matters
+# even more here because live teacher-repo clones sit (gitignored) under
+# console/classes/ in local checkouts.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "console/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  packages: read   # to install @tjakoen/grain from GitHub Packages
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # @tjakoen/grain lives in GitHub Packages; auth the scope with the workflow
+      # token. The committed console/.npmrc already routes @tjakoen -> npm.pkg.github.com.
+      # NOTE: the @tjakoen/grain package must grant this repo Actions access
+      # (package settings -> Manage Actions access), or this install 403s.
+      - run: echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
+      - run: npm ci
+      - run: node scripts/bake-theme.mjs
+      - name: Assemble dist
+        run: |
+          mkdir -p dist
+          cp -R site/. dist/
+      - name: Verify (theme baked + no data in the artifact)
+        run: |
+          test -s dist/theme.css || { echo "theme.css missing/empty"; exit 1; }
+          test -s dist/index.html
+          test -s dist/app.mjs
+          # PII tripwire: the artifact must never contain gradebook data.
+          # grades.csv rows carry studentNumber + fullName columns; any CSV or
+          # per-student note sneaking into dist/ is a hard failure.
+          if grep -rlE 'studentNumber,|fullName,|githubAccount,' dist/ --include='*.csv' 2>/dev/null | grep -q .; then
+            echo "::error::gradebook CSV found in artifact"; exit 1; fi
+          if find dist -name 'grades.csv' -o -name 'shots-manifest.json' -o -path '*dashboard-assets*' -o -name 'student.json' -o -path '*classes*' | grep -q .; then
+            echo "::error::local data artifact found in dist/"; exit 1; fi
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: console/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
