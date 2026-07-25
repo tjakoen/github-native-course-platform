@@ -123,8 +123,9 @@ A students x sessions matrix read from each teacher repo's
 `attendance/summary.json` (produced by `verify-attendance`), with per-student
 present counts and a below-50% flag. **Manual attendance → prompt** lets you
 pick students and a date and generates an intent for teacher-attested
-attendance (no QR needed) - see commands.md. This tab is absent for sections
-with no scans yet. Actually taking attendance (the phone scanner) is the
+attendance (no QR needed) - see commands.md. The tab is always available; the
+summary matrix is simply empty for sections with no scans yet (Manual
+attendance still works). Actually taking attendance (the phone scanner) is the
 separate `scanner/` page, not this tab.
 
 ## Ops
@@ -150,7 +151,11 @@ Writes are tiered, and this doesn't change with the new shell:
   console as an **Intent** - a prompt file dropped into `gradebook/intents/`
   (via "Send to repo") that a Claude Code session picks up and executes as
   `git`/`gh` operations ("run pending intents"). The console never writes a
-  grade itself.
+  grade itself. Every prompt drawer also has a **Copy** button and an **Open
+  in Claude** button: Open in Claude launches claude.ai with the prompt
+  pre-filled in the composer (you still press send - the human gate is intact),
+  so you skip the copy-paste. Copy stays as the fallback, and for an unusually
+  long prompt the link is dropped in favor of Copy (it would overflow the URL).
 - **Direct, sha-guarded commits** exist for exactly one thing: flipping
   `grader/assignments.json` flags (the lock/publish toggles, and the new
   activity entry). You always see the diff before it commits.

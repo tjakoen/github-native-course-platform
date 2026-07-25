@@ -36,7 +36,8 @@ function tokenForURL(url) {
 
 export class AuthError extends Error {}
 
-// in-memory ETag cache: revalidated 304s are free against the rate limit
+// in-memory ETag cache: a conditional GET (If-None-Match) that comes back 304
+// Not Modified does not count against the primary REST rate limit
 const CACHE = new Map(); // url|accept -> { etag, body }
 export const rate = { remaining: null, limit: null };
 
@@ -109,9 +110,11 @@ export async function putIntent(org, repo, path, content, message) {
 }
 
 // General contents write with optional sha (update-in-place). Used ONLY by the
-// tiered direct-write surfaces (today: attendance scan batch CSVs, which the
-// per-repo verify-attendance workflow validates server-side). Grades, notes and
-// publish flags still flow through intents - keep it that way.
+// tiered direct-write surfaces: attendance scan batch CSVs (which the per-repo
+// verify-attendance workflow validates server-side) and single-flag toggles of
+// grader/assignments.json (locked / publish, via config-writes.mjs, shown as a
+// diff and confirmed). Grades, notes, and delivery still flow through intents -
+// keep it that way.
 export async function putFile(org, repo, path, content, message, sha) {
   const body = { message, content: b64(content) };
   if (sha) body.sha = sha;

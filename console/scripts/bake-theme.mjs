@@ -23,6 +23,7 @@ const GRAIN_COMPONENTS = [
   "components/atoms/b-kbd/b-kbd.css",             // .kbd — the ⌘K hint
   "components/atoms/b-list/b-list.css",           // .list — md-lite lists
   "components/atoms/b-select/b-select.css",       // .field__select — the code-file picker
+  "components/atoms/b-switch/b-switch.css",        // .switch — lock/publish state toggles (Activities)
   "components/atoms/b-meter/b-meter.css",         // .meter — review progress
   "components/atoms/action-badge/action-badge.css", // .action-badge — op step lines
   "components/atoms/code-block/code-block.css",   // .code-block — prompts, notes, source viewer
@@ -54,7 +55,7 @@ const GRAIN_COMPONENTS = [
 // Grain's runnable islands + icon sprite, copied from the installed package into
 // site/vendor/grain/ so the Pages artifact is self-contained (no node_modules at
 // view time). Committed like jsQR; `npm run bake` refreshes them on a grain bump.
-const GRAIN_SCRIPTS = ["cmdk.js", "shell.js", "tabs.js", "theme.js", "theme-boot.js", "lightbox.js"];
+const GRAIN_SCRIPTS = ["cmdk.js", "shell.js", "tabs.js", "theme.js", "theme-boot.js", "lightbox.js", "handoff.js"];
 
 const GRAIN = [
   grainFile("styles/variables.css")

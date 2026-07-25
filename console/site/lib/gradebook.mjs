@@ -108,7 +108,12 @@ export async function loadSection(sc) {
     return { ...st, tally: { push, pushMax, held: heldSum, heldMax } };
   }).sort((x,y)=> (x.name||"").localeCompare(y.name||""));
 
-  const heldCount = assignments.filter(a=>a.aiGraded).length;
+  // "held" here counts HELD SUBMISSION ROWS awaiting review (Canvas "needs
+  // grading" convention), not the number of AI activities. The UI drains it
+  // further by the reviewer's local decisions (heldUnreviewed in app.mjs); this
+  // data-only baseline is the count before any decision is recorded.
+  let heldCount = 0;
+  for (const st of students) for (const a of assignments) if (a.kind === "held" && st.activities[a.id]) heldCount++;
   const blank = students.filter(s=>!s.number).length;
 
   // Attendance: verify-attendance writes attendance/summary.json (keyed by

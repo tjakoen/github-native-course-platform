@@ -108,6 +108,30 @@ await page.goto("http://localhost:8931/#/");
 await shot("01-dashboard");
 await page.goto("http://localhost:8931/#/c/6APSI-2240"); await shot("02-gradebook");
 await page.waitForTimeout(600); await page.evaluate(() => { const m = document.getElementById("main"); m.scrollTop = m.scrollHeight; }); await shot("02b-gradebook-bottom");
+// Handoff button: open the apply-grades prompt drawer, verify the "Open in
+// Claude" trigger renders, its source resolves to the live prompt, encoding
+// survives nasty input, and flag if real prompts routinely blow the URL budget.
+await page.click("#prompt").catch(() => {});
+await page.waitForTimeout(600);
+const handoff = await page.evaluate(() => {
+  const btn = document.querySelector("[data-handoff]");
+  if (!btn) return { ok: false, why: "no handoff button" };
+  const sel = btn.dataset.handoffSource;
+  const src = document.querySelector(sel);
+  const payload = src ? (src.textContent || "") : "";
+  const tricky = "a & b # c\nline2 café ñ 100%";
+  const composedTricky = window.grainHandoff.compose(btn.dataset.handoffUrl, tricky);
+  const composedReal = window.grainHandoff.compose(btn.dataset.handoffUrl, payload);
+  return {
+    ok: true, url: btn.dataset.handoffUrl, sel, payloadLen: payload.length,
+    sourceResolves: !!src && payload.length > 0,
+    trickyRoundtrips: (() => { try { return new URL(composedTricky).searchParams.get("q") === tricky; } catch { return false; } })(),
+    realUrlLen: composedReal.length,
+  };
+});
+console.log("handoff:", JSON.stringify(handoff));
+await shot("02c-handoff-drawer");
+await page.evaluate(() => document.querySelectorAll(".drawer").forEach(d => d.remove()));
 await page.goto("http://localhost:8931/#/c/6APSI-2240/activities"); await shot("03-activities");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/activities/new"); await shot("03b-activity-new");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/students"); await shot("04-students");
@@ -117,6 +141,12 @@ await page.goto("http://localhost:8931/#/c/6APSI-2240/review/m3a1/20250001"); aw
 await page.keyboard.press("Meta+k"); await shot("07-cmdk");
 await page.keyboard.press("Escape");
 await page.goto("http://localhost:8931/#/ops/6APSI-2240"); await shot("08-ops");
+// A1: after a dispatch the docked ops feed must be VISIBLE (data-console-open on
+// .app-shell), not rendered into display:none. Click the first dry-run Run.
+await page.locator(".opcard .opform .btn").first().click().catch(() => {});
+await page.waitForTimeout(900);
+console.log("app-shell data-console-open:", await page.evaluate(() => document.querySelector(".app-shell")?.hasAttribute("data-console-open")));
+await shot("08b-ops-feed");
 await page.goto("http://localhost:8931/#/flags"); await shot("09-flags");
 await page.goto("http://localhost:8931/#/reports"); await shot("11-reports");
 await page.goto("http://localhost:8931/#/reports/6APSI-2240/" + encodeURIComponent("reports/FLAGGED.md")); await shot("12-report-viewer");
@@ -125,6 +155,47 @@ await page.click("[data-crumb-start]"); await page.waitForTimeout(600); await sh
 await page.click('[data-crumb="next"]'); await page.waitForTimeout(600); await shot("15-tour-step1");
 await page.keyboard.press("Escape"); await page.waitForTimeout(300);
 await page.goto("http://localhost:8931/scanner/"); await shot("10-scanner");
+
+// A3: phone-width gradebook. The matrix must scroll inside its own .table-scroll
+// box (with the sticky student column pinned to that scroller), not pan the
+// whole page. Full-page shot so a horizontal page overflow would be obvious.
+const narrow = await ctx.newPage();
+await narrow.setViewportSize({ width: 390, height: 780 });
+await narrow.goto("http://localhost:8931/#/c/6APSI-2240");
+await narrow.waitForTimeout(1200);
+const overflow = await narrow.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+console.log("390px gradebook page-level horizontal overflow:", overflow, "(want false)");
+await narrow.screenshot({ path: `${OUT}/16-gradebook-390.png`, fullPage: true });
+console.log("shot 16-gradebook-390");
+// B1 narrow: cmdk must be a full-width sheet, not squeezed to the trigger.
+await narrow.keyboard.press("Meta+k");
+await narrow.waitForTimeout(500);
+const cmdk390 = await narrow.evaluate(() => { const d = document.querySelector(".cmdk"); return d ? Math.round(d.getBoundingClientRect().width) : null; });
+console.log("390px cmdk width:", cmdk390, "(want ~374, near full viewport)");
+await narrow.screenshot({ path: `${OUT}/17-cmdk-390.png` });
+console.log("shot 17-cmdk-390");
+await narrow.close();
+
+// Dark-theme pass (B1/B2 both themes): a fresh page forced to dark scheme.
+const dctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+await dctx.route("https://api.github.com/**", stub);
+await dctx.addInitScript(() => {
+  localStorage.setItem("grain-color-scheme", "dark");
+  localStorage.setItem("hau-crumb-first-run-v1", "1");
+  localStorage.setItem("grader-ui-config-v1", JSON.stringify({ repos: [
+    { url: "github.com/HAU-6APSI/teacher-6apsi-2240-tjakoen", token: "fake" },
+    { url: "github.com/HAU-6INTROWEB/teacher-6introweb-2106-tjakoen", token: "fake" },
+  ], labels: { "6APSI": "Application Development", "6INTROWEB": "Intro to Web" } }));
+});
+const dpage = await dctx.newPage();
+await dpage.goto("http://localhost:8931/#/c/6APSI-2240");
+await dpage.waitForTimeout(1200);
+await dpage.screenshot({ path: `${OUT}/18-gradebook-dark.png` });
+await dpage.keyboard.press("Meta+k");
+await dpage.waitForTimeout(500);
+await dpage.screenshot({ path: `${OUT}/19-cmdk-dark.png` });
+console.log("shot 18-gradebook-dark + 19-cmdk-dark");
+await dctx.close();
 
 await browser.close();
 server.kill();

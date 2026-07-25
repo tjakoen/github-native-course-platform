@@ -108,9 +108,28 @@
     const anchor = document.querySelector(".window-bar__search");
     if (!anchor || anchor.offsetParent === null) { root.classList.remove("cmdk--anchored"); return; }
     const r = anchor.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    const MARGIN = 8;
+    // Narrow viewport: a full-width sheet dropping from just under the field. A
+    // compact trigger button must not squeeze the palette to its own width.
+    if (vw <= 768) {
+      root.style.setProperty("--cmdk-top", `${r.bottom + 4}px`);
+      root.style.setProperty("--cmdk-left", `${MARGIN}px`);
+      root.style.setProperty("--cmdk-width", `${vw - MARGIN * 2}px`);
+      root.classList.add("cmdk--anchored");
+      return;
+    }
+    // Wide: at least 24rem, and never narrower than the trigger. When the clamp
+    // makes it wider than the trigger, grow LEFTWARD so the right edges align
+    // (the search field sits at the top-right), then clamp to the viewport so it
+    // can never overflow the right edge.
+    const minW = 24 * 16;
+    const w = Math.min(vw - MARGIN * 2, Math.max(r.width, minW));
+    let left = w > r.width ? r.right - w : r.left;
+    left = Math.max(MARGIN, Math.min(left, vw - MARGIN - w));
     root.style.setProperty("--cmdk-top", `${r.bottom + 4}px`);
-    root.style.setProperty("--cmdk-left", `${r.left}px`);
-    root.style.setProperty("--cmdk-width", `${r.width}px`);
+    root.style.setProperty("--cmdk-left", `${left}px`);
+    root.style.setProperty("--cmdk-width", `${w}px`);
     root.classList.add("cmdk--anchored");
   }
 

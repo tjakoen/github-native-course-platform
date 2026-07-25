@@ -98,6 +98,11 @@ textarea.fta.mono{font-family:var(--font-mono);font-size:var(--text-xs);line-hei
   --scan-bad:#b00020;--scan-bad-soft:color-mix(in srgb,#b00020 16%,transparent);
   display:flex;flex-direction:column;gap:var(--space-4);max-width:640px}
 [data-color-scheme="dark"] .scanview{--scan-ok:#5cd07a;--scan-bad:#ff6b6b}
+/* OS dark mode with no explicit override: a first-run phone in the dark would
+   otherwise show the light (dark-green) status color on dark paper (~2.8:1),
+   defeating the at-a-glance read. Mirrors the not([data-color-scheme=light])
+   guard used for the palette twins above. */
+@media(prefers-color-scheme:dark){:root:not([data-color-scheme=light]) .scanview{--scan-ok:#5cd07a;--scan-bad:#ff6b6b}}
 .scan-video{width:100%;border:1px solid var(--color-line);border-radius:var(--radius-md);background:var(--paper-2)}
 .scan-status{padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);font-weight:var(--font-weight-semibold)}
 .scan-status.ok{background:var(--scan-ok-soft);color:var(--scan-ok)}
@@ -147,9 +152,12 @@ textarea.fta.mono{font-family:var(--font-mono);font-size:var(--text-xs);line-hei
 .opdesc{margin:var(--space-1) 0}
 .opform{display:flex;gap:var(--space-2);align-items:flex-end;flex-wrap:wrap}
 .opform .opf{margin:0;min-width:140px}
-.confirm-dialog{border:1px solid var(--color-line);border-radius:var(--radius-md);background:var(--paper);color:inherit;padding:var(--space-4);max-width:min(640px,92vw)}
+.confirm-dialog{border:1px solid var(--color-line);border-radius:var(--radius-md);background:var(--paper);color:inherit;padding:var(--space-4);max-width:min(640px,92vw);max-height:85vh;display:flex;flex-direction:column}
 .confirm-dialog::backdrop{background:rgb(0 0 0/.35)}
 .confirm-dialog h3{margin:0 0 var(--space-2)}
+/* the diff/pre is the only growable part: it scrolls inside the dialog so the
+   title, summary, and Commit/Cancel buttons stay on screen at any file size */
+.confirm-dialog pre{overflow:auto;min-height:0}
 #opConsole .console__feed{max-height:180px;overflow:auto;font-family:var(--font-mono);font-size:var(--text-xs);padding:var(--space-2) var(--space-3)}
 #opConsole .console__bar{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-1) var(--space-3);border-top:1px solid var(--color-line)}
 .opline{padding:2px 0}

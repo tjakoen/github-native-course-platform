@@ -10,7 +10,7 @@ import { discoverSections, parseRepoURL } from "./lib/config.mjs";
 import { shotsFor, shotsCached } from "./lib/shots.mjs";
 import { codeFor, codeCached } from "./lib/code.mjs";
 import { route, start, go, dispatch, beforeEach, fallback } from "./lib/router.mjs";
-import { discover, sections, findSc, getSection, sectionCached, invalidate, ageOf, STALE_MS, getFlagsFiles } from "./lib/data.mjs";
+import { discover, sections, findSc, getSection, sectionCached, invalidate, ageOf, STALE_MS, getFlagsFiles, discoErrors } from "./lib/data.mjs";
 import { missingWork, workspaceInfo } from "./lib/students.mjs";
 import { initSearch } from "./lib/search-index.mjs";
 import { OPS } from "./lib/ops-catalog.mjs";
@@ -24,6 +24,19 @@ import { wireSend, buildGenFeedback, buildApplyAI, buildFinalize, buildApplyGrad
 let q="", revAct=null;
 let DATA={generatedAt:new Date().toISOString()};   // prompt builders stamp "graded as of"
 const main=$("#main");
+// Fast path beside every "Copy": grain's handoff button (0.1.11+) opens claude.ai
+// with the generated prompt pre-filled, so the teacher stops copy-pasting by hand.
+// Declarative - handoff.js delegates on document, reads the payload from `sel` at
+// click time (works for dynamically-built drawers), URI-encodes it, opens a new
+// tab (noopener). Copy stays as the fallback. sel defaults to the drawer's #ptxt.
+// claude.ai/new?q= puts the text in the composer (the teacher still hits send -
+// the intended human gate). Very long prompts overflow the URL budget and would
+// arrive truncated, so above a conservative cap we drop the link and lean on Copy
+// (a truncated prompt is worse than one honest extra paste).
+const CLAUDE_URL_CAP=8000;   // prompt chars; ~11k encoded URL, the safe ceiling for the composer
+const openInClaude=(sel="#ptxt",txt="")=> (txt||"").length>CLAUDE_URL_CAP
+ ? " <span class='mut' data-size='sm'>(prompt too long for a link - use Copy)</span>"
+ : " <button class='btn' data-size='sm' data-variant='soft' type='button' data-handoff data-handoff-url='https://claude.ai/new?q={payload}' data-handoff-source='"+sel+"'>Open in Claude →</button>";
 
 function openSettings(firstRun){
  const c=loadConfig()||{repos:[],labels:{}};
@@ -91,7 +104,7 @@ function setNav(){
 function setTabs(key,mode,s){
  const t=$("#ctxTabs");
  if(!key){t.innerHTML="";return;}
- const items=[["","Gradebook","book"],["activities","Activities"+(s?" ("+s.stats.activities+")":""),"act"],["students","Students"+(s?" ("+s.stats.students+")":""),"stu"],["review","AI Review"+(s?" ("+s.stats.held+")":""),"ai"],["attendance","Attendance"+(s&&s.stats.sessions?" ("+s.stats.sessions+")":""),"att"]];
+ const items=[["","Gradebook","book"],["activities","Activities"+(s?" ("+s.stats.activities+")":""),"act"],["students","Students"+(s?" ("+s.stats.students+")":""),"stu"],["review","AI Review"+(s?" ("+heldUnreviewed(s)+")":""),"ai"],["attendance","Attendance"+(s&&s.stats.sessions?" ("+s.stats.sessions+")":""),"att"]];
  t.innerHTML=items.map(([sub,l,m])=>{const on=m===mode||(m==="stu"&&String(mode).startsWith("profile:"))||(m==="ai"&&mode==="revdetail")||(m==="act"&&mode==="actnew");return "<a class='tab' href='"+classHref(key,sub)+"'"+(on?" aria-current='page' data-active='true'":"")+">"+l+"</a>";}).join("");
 }
 
@@ -118,6 +131,19 @@ function railHeld(key,held){
  const b=document.querySelector("[data-classnav='"+key.replace(/'/g,"")+"'] .navheld");
  if(b){ if(held>0){b.textContent=held;b.hidden=false;} else b.hidden=true; }
 }
+// The held badge counts UNREVIEWED submissions awaiting a decision (Canvas
+// "needs grading" convention), not the number of AI activities. It drains to
+// zero as the reviewer decides each one (approve/override/flagged all count as
+// decided). Computed live here because decisions live in this browser, not in
+// the cached section load.
+function heldUnreviewed(s){
+ if(!s) return 0;
+ let n=0;
+ const held=s.assignments.filter(a=>a.kind==="held");
+ for(const st of s.students){ const sk=skeyOf(st);
+  for(const a of held){ if(st.activities[a.id] && !isDecided(getDec(s.section,a.id,sk))) n++; } }
+ return n;
+}
 
 async function withSection(key,fn){
  const sc=findSc(key);
@@ -127,7 +153,7 @@ async function withSection(key,fn){
   const s=await getSection(key);
   if(curKey()!==key) return;   // navigated away while loading
   DATA.generatedAt=new Date(Date.now()-(ageOf(key)||0)).toISOString();
-  railHeld(key,s.stats.held);
+  railHeld(key,heldUnreviewed(s));
   fn(s);
  }catch(e){
   if(e instanceof AuthError){ main.innerHTML="<div class='boot'>"+esc(e.message)+"</div>"; openSettings(false); }
@@ -178,7 +204,7 @@ function renderStudents(s,w){
   });
   holder.innerHTML="";
   const card=el("div","card"); card.append(el("h2",null,"Students <span class='mut' style='font-weight:400'>("+rows.length+" of "+s.students.length+")</span>"));
-  const sc2=el("div","scroll"); const t=el("table","matrix");
+  const sc2=el("div","table-scroll"); const t=el("table","matrix");
   t.innerHTML="<tr><th class='stu'>Student</th><th>#</th><th>@github</th><th class='center'>Auto</th><th class='center'>Held</th><th class='center'>Attendance</th><th class='center'>Missing</th></tr>"+
    rows.map(st=>{
     const miss=missingWork(s,st).length; const r=attOf(st);
@@ -229,7 +255,7 @@ function renderStudentProfile(s,w,sk){
  }).catch(()=>{ const box=idc.querySelector("#wsInfo"); if(box)box.textContent="Workspace check failed."; });
  // activities
  const ac=el("div","card"); ac.append(el("h2",null,"Activities"));
- const asc=el("div","scroll"); const t=el("table","matrix");
+ const asc=el("div","table-scroll"); const t=el("table","matrix");
  t.innerHTML="<tr><th>Activity</th><th>Kind</th><th class='center'>Score</th><th class='center'>Late</th><th>Repo</th></tr>"+
   s.assignments.map(a=>{
    const r=st.activities[a.id];
@@ -258,6 +284,16 @@ function dashView(){
  main.innerHTML="";
  const w=el("div","wrap");
  w.innerHTML="<h1>My classes</h1><p class='lede' data-size='sm'>Live from GitHub. A class's gradebook loads when you open it; nothing is stored outside this browser.</p>";
+ // Discovery drops a repo it cannot read (typo'd URL, expired/under-scoped PAT)
+ // instead of failing the whole load; without this banner that section just is
+ // not there, silently.
+ const derr=discoErrors();
+ if(derr.length){
+  const b=el("div","card"); b.dataset.pad="sm"; b.setAttribute("style","border-left:3px solid var(--warn)");
+  b.innerHTML="<h2>⚠ "+derr.length+" teacher repo(s) could not be loaded</h2><p class='mut'>A typo'd URL or an expired/under-scoped token - these sections are missing below. <a href='#/settings'>Open settings</a></p><ul class='status-list'>"+
+   derr.map(e=>"<li class='status-list__item'><span class='status-list__title mono'>"+esc(e.url||"?")+"</span><span class='status-list__meta'>"+esc(e.err||"unreadable")+"</span></li>").join("")+"</ul>";
+  w.append(b);
+ }
  const ctl=el("div","ctl");
  ctl.innerHTML='<button class="btn" data-size="sm" data-variant="soft" id="loadAll">Load all classes</button>'+
   '<div class="meter" id="laMeter" style="flex:1;max-width:280px" hidden role="meter" aria-label="Load progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="meter__seg" data-tone="ok" style="--seg:0%"></span></div>'+
@@ -268,7 +304,7 @@ function dashView(){
   const s=sectionCached(sc.key);
   const c=el("a","card dashcard"); c.href=classHref(sc.key); c.dataset.pad="sm"; c.dataset.dash=sc.key;
   c.innerHTML="<h2>"+esc(sc.subject)+" · "+esc(sc.section)+(sc.courseCode?" <span class='mut'>("+esc(sc.courseCode)+")</span>":"")+"</h2><div class='mut'>"+esc(sc.org)+"</div>"+
-   (s?"<div class='stats stats--mini'>"+[["Students",s.stats.students],["Held",s.stats.held],["Activities",s.stats.activities]].map(([l,n])=>"<div class='stat'><span class='stat__value'>"+n+"</span><span class='stat__label'>"+l+"</span></div>").join("")+"</div>"
+   (s?"<div class='stats stats--mini'>"+[["Students",s.stats.students],["To review",heldUnreviewed(s)],["Activities",s.stats.activities]].map(([l,n])=>"<div class='stat'><span class='stat__value'>"+n+"</span><span class='stat__label'>"+l+"</span></div>").join("")+"</div>"
      :"<div class='mut'>"+sc.pol.length+" activities · open to load</div>");
   return c;
  };
@@ -279,7 +315,7 @@ function dashView(){
  const paintAlerts=()=>{
   const items=[];
   sections().forEach(sc=>{ const s=sectionCached(sc.key); if(!s)return;
-   if(s.stats.held>0)items.push("<a href='"+classHref(sc.key,"review")+"'>"+s.stats.held+" held AI grade(s) to review</a> · "+esc(sc.key));
+   {const hu=heldUnreviewed(s); if(hu>0)items.push("<a href='"+classHref(sc.key,"review")+"'>"+hu+" AI grade(s) to review</a> · "+esc(sc.key));}
    if(s.stats.blankStudentJson>0)items.push("<a href='"+classHref(sc.key,"students")+"'>"+s.stats.blankStudentJson+" blank student.json</a> · "+esc(sc.key));
    const att=s.attendance;
    if(att&&att.sessionDates&&att.sessionDates.length){
@@ -301,7 +337,7 @@ function dashView(){
   const list=unloaded(); let done=0;
   for(const sc of list){
    $("#laMsg").textContent="Loading "+sc.key+"…";
-   try{ const s=await getSection(sc.key); railHeld(sc.key,s.stats.held); const old=grid.querySelector("[data-dash='"+sc.key.replace(/'/g,"")+"']"); if(old)old.replaceWith(cardFor(sc)); }
+   try{ const s=await getSection(sc.key); railHeld(sc.key,heldUnreviewed(s)); const old=grid.querySelector("[data-dash='"+sc.key.replace(/'/g,"")+"']"); if(old)old.replaceWith(cardFor(sc)); }
    catch(e){ $("#laMsg").textContent=sc.key+" failed: "+e.message; }
    done++;
    const pct=Math.round(done/list.length*100);
@@ -332,7 +368,7 @@ route("#/c/:key/review/:aid", p=>classView(p.key,"ai",{aid:p.aid}));
 route("#/c/:key/review/:aid/:skey", p=>classView(p.key,"revdetail",{aid:p.aid,skey:p.skey}));
 route("#/c/:key/attendance", p=>classView(p.key,"att"));
 fallback(()=>go("#/"));
-beforeEach(()=>{ setNav(); if(detailKey){document.removeEventListener("keydown",detailKey);detailKey=null;} });
+beforeEach(()=>{ setNav(); if(detailKey){document.removeEventListener("keydown",detailKey);detailKey=null;} document.querySelectorAll(".drawer").forEach(d=>d.remove()); });
 
 let started=false;
 async function boot(){
@@ -442,7 +478,12 @@ async function renderMd(md){
 // ---- docked op feed (grain console organism) ----
 function opFeed(line, link){
  const box=$("#opConsole"); box.hidden=false;
- if(!box.firstChild){ box.innerHTML="<div class='console__box'><div class='console__bar'><span class='mut mono'>ops</span><span style='flex:1'></span><button class='btn' data-size='sm' data-variant='soft' id='opHide'>×</button></div><div class='console__feed' id='opLines'></div></div>"; $("#opHide").onclick=()=>{box.hidden=true;}; }
+ // grain's console organism hides .console__feed unless the app-shell carries
+ // data-console-open; without this the whole ops feed (dispatch status, dry-run
+ // results, run links, and ERRORS) renders into display:none and a failed
+ // execute looks like silence.
+ document.querySelector(".app-shell")?.setAttribute("data-console-open","");
+ if(!box.firstChild){ box.innerHTML="<div class='console__box'><div class='console__bar'><span class='mut mono'>ops</span><span style='flex:1'></span><button class='btn' data-size='sm' data-variant='soft' id='opHide'>×</button></div><div class='console__feed' id='opLines'></div></div>"; $("#opHide").onclick=()=>{box.hidden=true;document.querySelector(".app-shell")?.removeAttribute("data-console-open");}; }
  const l=el("div","opline"); l.innerHTML="<span class='mut mono'>"+new Date().toLocaleTimeString()+"</span> "+line+(link?" <a href='"+esc(link)+"' target='_blank' rel='noopener'>run →</a>":"");
  $("#opLines").append(l); $("#opLines").scrollTop=1e9;
  return l;
@@ -579,7 +620,7 @@ function renderActivities(s,w){
  top.innerHTML="<span class='mut'>Toggles commit a one-line change to grader/assignments.json (diff shown first). Content and Canvas run the repo's own dry-run-gated workflows.</span><span style='flex:1'></span><a class='btn' data-size='sm' href='"+classHref(s.key,"activities/new")+"'>+ New activity</a>";
  w.append(top);
  const card=el("div","card"); card.append(el("h2",null,"Activities"));
- const scr=el("div","scroll"); const t=el("table","matrix");
+ const scr=el("div","table-scroll"); const t=el("table","matrix");
  t.innerHTML="<tr><th>Activity</th><th>Kind</th><th class='center'>Points</th><th class='center'>Graded</th><th class='center'>Locked</th><th class='center'>Published to students</th><th></th></tr>"+
   s.assignments.map(a=>{
    const graded=s.students.filter(st=>st.activities[a.id]).length;
@@ -711,8 +752,8 @@ function renderActivityNew(s,w){
   const nxt=card.querySelector("#naNext");
   const txt=buildNewActivity(s,e);
   nxt.innerHTML="<h2 style='margin-top:16px'>2 · Scaffolds (intent for Claude Code)</h2>"+
-   "<div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='naCp'>Copy</button></div>"+
-   "<pre class='code-block prompt'>"+esc(txt)+"</pre>"+
+   "<div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='naCp'>Copy</button>"+openInClaude("#naPrompt",txt)+"</div>"+
+   "<pre class='code-block prompt' id='naPrompt'>"+esc(txt)+"</pre>"+
    "<h2>3 · Canvas shell</h2><p class='mut'>Author the Canvas assignment from the new entry (dry-run; execute lives behind Activate / Ops).</p>"+
    "<button class='btn' data-size='sm' data-variant='soft' id='naCs'>Canvas sync dry-run (only="+esc(e.id)+")</button>";
   nxt.querySelector("#naCp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>{nxt.querySelector("#naCp").textContent="Copied ✓"});
@@ -731,7 +772,7 @@ function renderBook(s,w){
  const avgP=avg(s.students.map(x=>x.tally.pushMax?x.tally.push/x.tally.pushMax:null));
  tiles.innerHTML=[
   ["Students",s.stats.students],["Activities",s.stats.activities],
-  ["Held for review",s.stats.held,"AI, not auto-pushed"],
+  ["To review",heldUnreviewed(s),"AI, awaiting your decision"],
   ["Blank student.json",s.stats.blankStudentJson],
   ["Avg auto-push",avgP==null?"-":Math.round(avgP*100)+"%"],
  ].map(([l,n,sub])=>'<div class="stat"><span class="stat__value">'+n+'</span><span class="stat__label">'+l+'</span>'+(sub?'<span class="stat__sub">'+sub+'</span>':'')+'</div>').join("");
@@ -840,7 +881,7 @@ function showManualAttendance(s){
   const date=$("#mAttDate").value;
   if(!picked.length||!date){$("#mAttOut").innerHTML="<p class='mut'>Pick at least one student and a date.</p>";return;}
   const txt=buildManualAttendance(s,picked,date);
-  $("#mAttOut").innerHTML="<div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='mAttCp'>Copy</button></div><pre class='code-block prompt'>"+esc(txt)+"</pre>";
+  $("#mAttOut").innerHTML="<div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='mAttCp'>Copy</button>"+openInClaude("#mAttPrompt",txt)+"</div><pre class='code-block prompt' id='mAttPrompt'>"+esc(txt)+"</pre>";
   $("#mAttCp").onclick=()=>{navigator.clipboard.writeText(txt).then(()=>{$("#mAttCp").textContent="Copied ✓"})};
   wireSend(s,"manual-attendance",null,txt);
  };
@@ -849,7 +890,7 @@ function attMatrix(s,dates){
  const att=s.attendance;
  const card=el("div","card"); card.id="attmatrix";
  card.append(el("h2",null,"Attendance - students × sessions <span class='mut' style='font-weight:400'>(✓ present · absent)</span>"));
- const sc=el("div","scroll"); const t=el("table","matrix");
+ const sc=el("div","table-scroll"); const t=el("table","matrix");
  // union of gradebook students + any attendance-only numbers (present in scans but no graded work)
  const gradeNums=new Set(s.students.map(st=>st.number).filter(Boolean));
  const extras=Object.keys(att.students).filter(n=>!gradeNums.has(n)).map(n=>({number:n,name:"",github:"",attOnly:true}));
@@ -919,7 +960,7 @@ function renderAI(s,w){
  scr.append(t); card.append(scr); w.append(card);
  setTimeout(()=>{
    t.querySelectorAll("tr[data-s]").forEach(tr=>tr.onclick=()=>go(detailHref(s.key,revAct,tr.dataset.s)));
-   $("#apprAll").onclick=()=>{rows.forEach(row=>{if(!isDecided(row.dec)&&row.r.proposed!=null)setDec(s.section,revAct,skeyOf(row.st),Object.assign({},row.dec,{status:"approve"}))});render()};
+   $("#apprAll").onclick=()=>{const t=rows.filter(row=>!isDecided(row.dec)&&row.r.proposed!=null);if(!t.length){alert("No unreviewed submissions with a proposed score to approve.");return;}if(!confirm("Approve "+t.length+" unreviewed submission(s) at the AI's proposed score for "+revAct+"? This records an approve decision for each - review them individually to catch a bad proposal."))return;t.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),Object.assign({},row.dec,{status:"approve"})));render()};
    $("#reset").onclick=()=>{if(confirm("Clear all decisions for "+revAct+"?")){rows.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),null));render()}};
    $("#genFb").onclick=()=>showGenFeedback(s,revAct);
    $("#applyAI").onclick=()=>showApplyAI(s,revAct);
@@ -1042,7 +1083,7 @@ function showGenFeedback(s,aid){
  const pending=rows.filter(x=>!x.r.note);
  const txt=buildGenFeedback(s,aid);
  const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Generate AI feedback drafts - "+esc(aid)+"</h3><div class='muted'>"+pending.length+" submission(s) without a note yet · runs in a Claude Code session on your subscription (no GitHub Models)</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
+ p.innerHTML="<button class='x'>×</button><h3>Generate AI feedback drafts - "+esc(aid)+"</h3><div class='muted'>"+pending.length+" submission(s) without a note yet · runs in a Claude Code session on your subscription (no GitHub Models)</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
  const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
@@ -1053,7 +1094,7 @@ function showApplyAI(s,aid){
  const rows=reviewRows(s,aid); const max=s.assignments.find(a=>a.id===aid).totalPoints;
  const {txt,decided,flagged,undone}=buildApplyAI(s,aid,rows);
  const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Apply reviewed AI grades - "+esc(aid)+"</h3><div class='muted'>"+decided.length+" to apply · "+flagged.length+" flagged · "+undone.length+" not reviewed</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button> <button class='btn' data-size='sm' data-variant='soft' id='csv'>Download CSV</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
+ p.innerHTML="<button class='x'>×</button><h3>Apply reviewed AI grades - "+esc(aid)+"</h3><div class='muted'>"+decided.length+" to apply · "+flagged.length+" flagged · "+undone.length+" not reviewed</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+" <button class='btn' data-size='sm' data-variant='soft' id='csv'>Download CSV</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
  const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
@@ -1069,7 +1110,7 @@ function showFinalize(s,aid){
  const rows=reviewRows(s,aid);
  const {txt,delivered,heldOut}=buildFinalize(s,aid,rows);
  const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Finalize and deliver - "+esc(aid)+"</h3><div class='muted'>"+delivered.length+" cleared to deliver · "+heldOut.length+" held out</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
+ p.innerHTML="<button class='x'>×</button><h3>Finalize and deliver - "+esc(aid)+"</h3><div class='muted'>"+delivered.length+" cleared to deliver · "+heldOut.length+" held out</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
  const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
@@ -1082,7 +1123,7 @@ function matrix(s){
  const leg=el("div","legend"); leg.style.padding="0 14px";
  leg.innerHTML='<span><span class="b push">push</span> auto-pushed to Canvas</span><span><span class="b held">held</span> AI proposal, review first</span><span><span class="b quiz">quiz</span> import to Canvas</span><span><span class="b manual">manual</span> hand-entered</span><span>cell = Canvas points / max</span>';
  card.append(leg);
- const sc=el("div","scroll"); const t=el("table","matrix");
+ const sc=el("div","table-scroll"); const t=el("table","matrix");
  const cols=s.assignments;
  let thead="<tr><th class='stu'>Student</th><th>#</th>"+cols.map(a=>"<th class='center'>"+esc(a.id)+"<br><span class='pill'>"+(a.totalPoints!=null?a.totalPoints+"pt":a.autoPoints!=null?a.autoPoints+"pt":"tests")+"</span><br><span class='b "+a.kind+"'>"+a.kind+"</span></th>").join("")+"<th class='center'>Push total</th><th class='center'>+Held</th></tr>";
  const rows=s.students.filter(st=>!q||(st.name||"").toLowerCase().includes(q)||(st.number||"").includes(q)||(st.github||"").toLowerCase().includes(q)).map(st=>{
@@ -1123,7 +1164,7 @@ function openNote(s,skey,aid){
 function canvasPanel(s){
  const card=el("div","card");
  card.append(el("h2",null,"Canvas preview - what a push would do"));
- const bd=el("div","bd scroll");
+ const bd=el("div","bd table-scroll");
  const t=el("table");
  t.innerHTML="<tr><th>Activity</th><th>Max</th><th>Graded</th><th>Status</th><th>Avg (of graded)</th></tr>"+
  s.assignments.map(a=>{
@@ -1146,7 +1187,7 @@ function canvasPanel(s){
 function showPrompt(s){
  const txt=buildApplyGrades(s,DATA.generatedAt);
  const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Apply-grades prompt - "+esc(s.section)+"</h3><div class='muted'>Send it to the repo (run pending intents), or copy it into a Claude Code chat.</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
+ p.innerHTML="<button class='x'>×</button><h3>Apply-grades prompt - "+esc(s.section)+"</h3><div class='muted'>Send it to the repo (run pending intents), or copy it into a Claude Code chat.</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
  const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
  $("#cp").onclick=()=>{navigator.clipboard.writeText(txt).then(()=>{$("#cp").textContent="Copied ✓"})};
@@ -1160,13 +1201,13 @@ function showPrompt(s){
 function showDeliver(s){
  const {txt,graded,pub}=buildDeliver(s,DATA.generatedAt);
  const d=el("div","drawer on"); const p=el("div","dp");
- p.innerHTML="<button class='x'>×</button><h3>Deliver to Canvas + workspaces - "+esc(s.section)+"</h3><div class='muted'>"+graded.length+" deterministic activit(y/ies) to push · "+pub.length+" to publish to workspaces · AI/held + manual excluded</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button></div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
+ p.innerHTML="<button class='x'>×</button><h3>Deliver to Canvas + workspaces - "+esc(s.section)+"</h3><div class='muted'>"+graded.length+" deterministic activit(y/ies) to push · "+pub.length+" to publish to workspaces · AI/held + manual excluded</div><div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>";
  d.append(p); document.body.append(d);
  const close=()=>d.remove(); p.querySelector(".x").onclick=close; d.onclick=e=>{if(e.target===d)close()};
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
  wireSend(s,"deliver",null,txt);
 }
 
-function toggleTheme(){const r=document.documentElement;const cur=r.getAttribute("data-color-scheme")|| (matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");r.setAttribute("data-color-scheme",cur==="dark"?"light":"dark");render();}
+function toggleTheme(){const r=document.documentElement;const cur=r.getAttribute("data-color-scheme")|| (matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");const next=cur==="dark"?"light":"dark";r.setAttribute("data-color-scheme",next);try{localStorage.setItem("grain-color-scheme",next);}catch(e){}/* persist to the same key theme-boot reads, so the choice survives a reload */render();}
 function avg(a){const v=a.filter(x=>x!=null);return v.length?v.reduce((x,y)=>x+y,0)/v.length:null}
 boot();
