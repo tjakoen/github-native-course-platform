@@ -154,7 +154,9 @@ textarea.fta.mono{font-family:var(--font-mono);font-size:var(--text-xs);line-hei
 #opConsole .console__bar{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-1) var(--space-3);border-top:1px solid var(--color-line)}
 .opline{padding:2px 0}
 /* grouped class rail */
-.side-rail__grouplabel{font-size:var(--text-xs);letter-spacing:.06em;text-transform:uppercase;color:var(--color-muted);padding:var(--space-2) var(--space-3) 2px}
-.nav-item--sub .nav-item__label{padding-left:var(--space-4)}
+/* subject group label: starts past the rail's icon-gutter hairline, like grain's
+   own sub items, so nothing straddles the line */
+.side-rail__grouplabel{font-size:var(--text-xs);letter-spacing:.06em;text-transform:uppercase;color:var(--color-muted);padding:var(--space-2) var(--space-2) 2px calc(var(--rail-icon-col,2.5rem) + var(--space-2));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+[data-rail-collapsed="true"] .side-rail__grouplabel{display:none}
 /* mill-rendered flag bodies */
 .flagbody .note{padding:0}

@@ -109,9 +109,9 @@ function fillRail(){
  sections().forEach(sc=>{ if(!bySubject.has(sc.subject))bySubject.set(sc.subject,[]); bySubject.get(sc.subject).push(sc); });
  $("#railClasses").innerHTML=[...bySubject.entries()].map(([subject,scs])=>
   "<div class='side-rail__grouplabel'>"+esc(subject)+"</div>"+
-  scs.map(sc=>"<a class='nav-item nav-item--sub' href='"+classHref(sc.key)+"' data-classnav='"+esc(sc.key)+"'>"+
+  "<div class='side-rail__sub'>"+scs.map(sc=>"<a class='nav-item' href='"+classHref(sc.key)+"' data-classnav='"+esc(sc.key)+"'>"+
    "<span class='nav-item__label'>"+esc(sc.section)+(sc.courseCode?" · "+esc(sc.courseCode):"")+"</span>"+
-   "<span class='badge navheld' data-tone='held' hidden></span></a>").join("")
+   "<span class='badge navheld' data-tone='held' hidden></span></a>").join("")+"</div>"
  ).join("");
 }
 function railHeld(key,held){
