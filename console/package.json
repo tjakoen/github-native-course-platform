@@ -13,5 +13,9 @@
     "audit": "node src/audit-students.mjs",
     "fix": "node src/apply-fixes.mjs",
     "blanks": "node src/check-blanks.mjs"
+  },
+  "devDependencies": {
+    "@tjakoen/mill": "^0.1.2",
+    "esbuild": "^0.28.1"
   }
 }

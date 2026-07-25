@@ -62,7 +62,7 @@ const GRAIN = [
     .replace(/url\("\/fonts\/([^"]+\.woff2)"\)/g, (_m, f) => 'url("' + grainFont(f) + '")'), // embed Redaction woff2 offline
   grainFile("styles/global.css"),                                                            // base/skin (paper, type, links, .muted, focus)
   grainFile("styles/grain.css"),                                                             // the grade-as-signal mechanism (data-grade / .field)
-  grainFile("styles/themes/baguette.css"),                                                   // the Baguette flavor (data-theme="baguette")
+  grainFile("styles/themes/brioche.css"),                                                    // the Brioche flavor (data-theme="brioche") - warm cream + honey gold, distinct from the portfolio's look
   ...GRAIN_COMPONENTS.map(grainFile),
 ].join("\n");
 
@@ -79,3 +79,14 @@ for (const f of GRAIN_SCRIPTS) {
 }
 fs.copyFileSync(fileURLToPath(import.meta.resolve("@tjakoen/grain/assets/sprite.svg")), path.join(vendorDir, "sprite.svg"));
 console.log(`vendored ${GRAIN_SCRIPTS.length} grain scripts + sprite -> ${vendorDir}`);
+
+// MILL: bundle the markdown -> GRAIN-classes renderer (server-side TS in the
+// package) into a browser ESM the console imports at runtime. Build-time only -
+// the served page stays no-build, no-CDN.
+const esbuild = await import("esbuild");
+await esbuild.build({
+  entryPoints: [fileURLToPath(import.meta.resolve("@tjakoen/mill/adapters/grain/grain-adapter.ts"))],
+  bundle: true, format: "esm", platform: "browser", minify: true,
+  outfile: path.resolve(HERE, "../site/vendor/mill.js"),
+});
+console.log("vendored mill renderer -> site/vendor/mill.js");

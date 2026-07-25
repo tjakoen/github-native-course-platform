@@ -4,7 +4,7 @@
 // data half now lives in lib/. The app READS everything and WRITES exactly one
 // thing: Intent prompt files into gradebook/intents/ (executed by Claude Code
 // locally - "run pending intents").
-import { putIntent, AuthError, rate } from "./lib/gh.mjs";
+import { putIntent, AuthError, rate, ghJSON as ghJSON2 } from "./lib/gh.mjs";
 import { loadConfig, saveConfig } from "./lib/store.mjs";
 import { discoverSections, parseRepoURL } from "./lib/config.mjs";
 import { shotsFor, shotsCached } from "./lib/shots.mjs";
@@ -120,11 +120,14 @@ function statusLine(key){
 }
 
 function fillRail(){
- $("#railClasses").innerHTML=sections().map(sc=>
-  "<a class='nav-item' href='"+classHref(sc.key)+"' data-classnav='"+esc(sc.key)+"'>"+
-  "<svg class='icon' aria-hidden='true'><use href='vendor/grain/sprite.svg#files'></use></svg>"+
-  "<span class='nav-item__label'>"+esc(sc.subject)+" · "+esc(sc.section)+"</span>"+
-  "<span class='badge navheld' data-tone='held' hidden></span></a>").join("");
+ const bySubject=new Map();
+ sections().forEach(sc=>{ if(!bySubject.has(sc.subject))bySubject.set(sc.subject,[]); bySubject.get(sc.subject).push(sc); });
+ $("#railClasses").innerHTML=[...bySubject.entries()].map(([subject,scs])=>
+  "<div class='side-rail__grouplabel'>"+esc(subject)+"</div>"+
+  scs.map(sc=>"<a class='nav-item nav-item--sub' href='"+classHref(sc.key)+"' data-classnav='"+esc(sc.key)+"'>"+
+   "<span class='nav-item__label'>"+esc(sc.section)+(sc.courseCode?" · "+esc(sc.courseCode):"")+"</span>"+
+   "<span class='badge navheld' data-tone='held' hidden></span></a>").join("")
+ ).join("");
 }
 function railHeld(key,held){
  const b=document.querySelector("[data-classnav='"+key.replace(/'/g,"")+"'] .navheld");
@@ -271,12 +274,13 @@ function dashView(){
  sections().forEach(sc=>{
   const s=sectionCached(sc.key);
   const c=el("a","card dashcard"); c.href=classHref(sc.key); c.dataset.pad="sm";
-  c.innerHTML="<h2>"+esc(sc.subject)+" · "+esc(sc.section)+"</h2><div class='mut'>"+esc(sc.org)+"</div>"+
+  c.innerHTML="<h2>"+esc(sc.subject)+" · "+esc(sc.section)+(sc.courseCode?" <span class='mut'>("+esc(sc.courseCode)+")</span>":"")+"</h2><div class='mut'>"+esc(sc.org)+"</div>"+
    (s?"<div class='stats stats--mini'>"+[["Students",s.stats.students],["Held",s.stats.held],["Activities",s.stats.activities]].map(([l,n])=>"<div class='stat'><span class='stat__value'>"+n+"</span><span class='stat__label'>"+l+"</span></div>").join("")+"</div>"
      :"<div class='mut'>"+sc.pol.length+" activities · open to load</div>");
   grid.append(c);
  });
  w.append(grid);
+ main.append(w);
 }
 
 route("#/", dashView);
@@ -367,7 +371,8 @@ async function flagsView(){
   getFlagsFiles(sc.key).then(f=>{
    const box=card.querySelector(".flagbody"); if(!box)return;
    const both=[f.flags&&"## FLAGS.md\n"+f.flags, f.flagged&&"## reports/FLAGGED.md\n"+f.flagged].filter(Boolean).join("\n\n");
-   box.innerHTML=both?"<pre class='code-block prompt'>"+esc(both)+"</pre>":"<span class='mut'>Nothing flagged. ✓</span>";
+   if(!both){ box.innerHTML="<span class='mut'>Nothing flagged. ✓</span>"; return; }
+   renderMd(both).then(html=>{ box.innerHTML=html; }).catch(()=>{ box.innerHTML="<pre class='code-block prompt'>"+esc(both)+"</pre>"; });
   }).catch(()=>{const box=card.querySelector(".flagbody"); if(box)box.textContent="Unreadable (token scope?).";});
  }
 }
@@ -378,6 +383,14 @@ function reportsView(){
  main.innerHTML=""; const w=el("div","wrap"); main.append(w);
  w.innerHTML="<h1>Reports</h1><p class='lede' data-size='sm'>Each class's generated reports, read on GitHub (a richer in-console reader is coming).</p>"+
   "<ul class='content-index'>"+sections().map(sc=>"<li class='content-index__item'><span class='content-index__title'><a href='https://github.com/"+esc(sc.org)+"/"+esc(sc.repo)+"/tree/main/reports' target='_blank' rel='noopener'>"+esc(sc.subject)+" · "+esc(sc.section)+" reports/</a></span><span class='content-index__meta'>GRADEBOOK: <a href='https://github.com/"+esc(sc.org)+"/"+esc(sc.repo)+"/blob/main/gradebook/GRADEBOOK.md' target='_blank' rel='noopener'>GRADEBOOK.md</a></span></li>").join("")+"</ul>";
+}
+
+// Markdown -> GRAIN classes via the vendored MILL renderer (lazy ESM import;
+// falls back to a <pre> when the bundle is unavailable).
+let millMod=null;
+async function renderMd(md){
+ if(!millMod) millMod=await import("./vendor/mill.js");
+ return millMod.renderGrainDocument(md).html;
 }
 
 // ---- typed execute confirm (native dialog) ----
@@ -406,8 +419,8 @@ function opFeed(line, link){
  return l;
 }
 
-async function runOp(sc,op,inputs,executing){
- if(executing){ const okc=await confirmExecute(op.execDanger||("write for real on "+sc.key),sc.section); if(!okc)return; }
+async function runOp(sc,op,inputs,executing,preConfirmed){
+ if(executing&&!preConfirmed){ const okc=await confirmExecute(op.execDanger||("write for real on "+sc.key),sc.section); if(!okc)return; }
  const line=opFeed((executing?"EXECUTE ":"dry-run ")+esc(op.label)+" on "+esc(sc.key)+" · dispatching…");
  try{
   const {dispatchedAt}=await dispatchWf(sc.org,sc.repo,op.file,inputs);
@@ -433,7 +446,7 @@ function dangerOf(op){ const g=(op.inputs||[]).find(i=>i.gate||i.gateAlways); re
 
 function opCard(sc,op){
  const c=el("div","card opcard"); c.dataset.pad="sm";
- c.innerHTML="<div class='ophead'><b>"+esc(op.label)+"</b> <span class='mut mono'>"+esc(op.file)+"</span> <span class='oprun mut'>checking…</span></div><p class='mut opdesc'>"+esc(op.desc)+"</p>";
+ c.innerHTML="<div class='ophead'><b>"+esc(op.label)+"</b> <span class='mut mono'>"+esc(op.file)+"</span> <span class='oprun mut'>checking…</span></div><p class='mut opdesc'>"+esc(op.desc)+(op.note?" <em>"+esc(op.note)+"</em>":"")+"</p>";
  listRuns(sc.org,sc.repo,op.file,1).then(runs=>{
   const slot=c.querySelector(".oprun"); if(!slot)return;
   if(runs===null){ slot.textContent="no runs (or PAT lacks Actions scope)"; return; }
@@ -449,6 +462,7 @@ function opCard(sc,op){
   if(inp.type==="bool") ctl="<label class='chips__chip'><input type='checkbox' id='"+id+"'"+(inp.def==="true"?" checked":"")+"><span>"+esc(inp.name)+"</span></label>";
   else if(inp.type==="choice") ctl="<label class='field opf'><span class='field__label'>"+esc(inp.name)+"</span><select class='field__select' id='"+id+"'>"+inp.options.map(o=>"<option"+(o===inp.def?" selected":"")+">"+esc(o)+"</option>").join("")+"</select></label>";
   else if(inp.type==="text") ctl="<label class='field opf' style='width:100%'><span class='field__label'>"+esc(inp.name)+"</span><textarea class='field__input fta' rows='3' id='"+id+"'></textarea></label>";
+  else if(inp.name==="only"&&sc.pol) ctl="<label class='field opf'><span class='field__label'>only <span class='mut'>(blank = all)</span></span><select class='field__select' id='"+id+"'><option value=''></option>"+sc.pol.map(a=>"<option>"+esc(a.id)+"</option>").join("")+"</select></label>";
   else ctl="<label class='field opf'><span class='field__label'>"+esc(inp.name)+(inp.hint?" <span class='mut'>"+esc(inp.hint)+"</span>":"")+"</span><input class='field__input' id='"+id+"' value='"+esc(inp.def||"")+"'></label>";
   form.insertAdjacentHTML("beforeend",ctl);
  });
@@ -483,8 +497,45 @@ function opsView(key){
  w.append(picker);
  [...new Set(OPS.map(o=>o.group))].forEach(g=>{
   w.append(el("h2","opgroup",esc(g)));
-  OPS.filter(o=>o.group===g).forEach(op=>w.append(opCard(sc,op)));
+  OPS.filter(o=>o.group===g).forEach(op=>w.append(op.file==="publish-material.yml"?materialCard(sc,op):opCard(sc,op)));
  });
+}
+
+// Publish-material gets a real unit picker: the repo's content/ folders as a
+// multiselect. Selected units dispatch SEQUENTIALLY (each run polled to green
+// before the next starts) - the safe habit, now enforced by the UI.
+function materialCard(sc,op){
+ const c=el("div","card opcard"); c.dataset.pad="sm";
+ c.innerHTML="<div class='ophead'><b>"+esc(op.label)+"</b> <span class='mut mono'>"+esc(op.file)+"</span> <span class='oprun mut'>checking…</span></div>"+
+  "<p class='mut opdesc'>"+esc(op.desc)+" <em>"+esc(op.note||"")+"</em></p>"+
+  "<div class='mut unitpick'>Loading content/ units…</div>"+
+  "<div class='opform' style='margin-top:8px'><button class='btn' data-size='sm' id='pmAll' data-variant='soft'>Select all</button><button class='btn' data-size='sm' id='pmGo'>Publish selected</button><span class='mut' id='pmMsg'></span></div>";
+ listRuns(sc.org,sc.repo,op.file,1).then(runs=>{
+  const slot=c.querySelector(".oprun"); if(!slot)return;
+  const r=runs&&runs[0]; if(!runs){slot.textContent="no runs (or PAT lacks Actions scope)";return;}
+  if(!r){slot.textContent="never run";return;}
+  slot.innerHTML="<a href='"+esc(r.html_url)+"' target='_blank' rel='noopener'><span class='badge' data-tone='"+(r.status!=="completed"?"held":r.conclusion==="success"?"good":"bad")+"'>"+esc(r.status!=="completed"?r.status:(r.conclusion||"done"))+"</span></a>";
+ }).catch(()=>{});
+ ghJSON2("/repos/"+sc.org+"/"+sc.repo+"/contents/content").then(list=>{
+  const box=c.querySelector(".unitpick"); if(!box)return;
+  const units=(list||[]).filter(x=>x.type==="dir").map(x=>x.name);
+  if(!units.length){ box.textContent="No content/ units found."; return; }
+  box.innerHTML="<fieldset class='chips' data-select='multi' style='border:0;padding:0;margin:0'>"+units.map(u=>"<label class='chips__chip'><input type='checkbox' value='"+esc(u)+"'><span>"+esc(u)+"</span></label>").join("")+"</fieldset>";
+ }).catch(()=>{ const box=c.querySelector(".unitpick"); if(box)box.textContent="content/ not readable."; });
+ c.querySelector("#pmAll").onclick=()=>c.querySelectorAll(".unitpick input").forEach(i=>{i.checked=true;});
+ c.querySelector("#pmGo").onclick=async()=>{
+  const picked=[...c.querySelectorAll(".unitpick input:checked")].map(i=>i.value);
+  const msg=c.querySelector("#pmMsg");
+  if(!picked.length){ msg.textContent="Pick at least one unit."; return; }
+  const ok=await confirmExecute("push "+picked.length+" unit(s) ("+picked.join(", ")+") to every "+sc.key+" workspace, sequentially",sc.section);
+  if(!ok)return;
+  for(let i=0;i<picked.length;i++){
+   msg.textContent="Unit "+(i+1)+"/"+picked.length+": "+picked[i]+"…";
+   await runOp(sc,{...op,execDanger:""},{unit:picked[i]},true,true);
+  }
+  msg.textContent="Done: "+picked.length+" unit(s) published sequentially.";
+ };
+ return c;
 }
 
 // ---- Activities management ----

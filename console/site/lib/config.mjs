@@ -35,9 +35,19 @@ export async function discoverSections(repos, labels = {}) {
     if (!pol) { if (!errors.find(e => e.url === line)) errors.push({ url: line, err: "grader/assignments.json not found (not a teacher repo, or token lacks access)" }); continue; }
     const code = m[1].toUpperCase(), section = m[2];
     const key = code + "-" + section;
+    // Optional per-repo display metadata: course.config.json may carry
+    // courseName ("Application Development") and courseCode ("CS-401"). Both are
+    // optional - absence falls back to the name-derived subject code. One extra
+    // (ETag-cached) call per repo at discovery time.
+    let ccfg = null;
+    try {
+      const cj = await ghJSON(`/repos/${p.org}/${p.repo}/contents/course.config.json`);
+      if (cj && cj.content) ccfg = JSON.parse(atob(cj.content.replace(/\n/g, "")));
+    } catch { /* optional */ }
     sections.push({
       key, section, repo: p.repo, org: p.org,
-      subject: labels[key] || labels[code] || code,
+      subject: labels[key] || labels[code] || (ccfg && ccfg.courseName) || code,
+      courseCode: (ccfg && ccfg.courseCode) || null,
       acts: pol.filter(x => x.feedback === "project").map(x => x.id), // design activities publish screenshots
       pol,
     });
