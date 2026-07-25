@@ -19,7 +19,7 @@ import { editAssignments } from "./lib/config-writes.mjs";
 import { $, el, esc, confirmExecute } from "./lib/ui.mjs";
 import { DEC, getDec, setDec, skeyOf, isDecided, finalScore, exportDecisions, importDecisions } from "./lib/decisions.mjs";
 import { hl } from "./lib/hl.mjs";
-import { wireSend, buildGenFeedback, buildApplyAI, buildFinalize, buildApplyGrades, buildDeliver, buildManualAttendance } from "./lib/intents.mjs";
+import { wireSend, buildGenFeedback, buildApplyAI, buildFinalize, buildApplyGrades, buildDeliver, buildManualAttendance, buildNewActivity } from "./lib/intents.mjs";
 
 let q="", revAct=null;
 let DATA={generatedAt:new Date().toISOString()};   // prompt builders stamp "graded as of"
@@ -92,7 +92,7 @@ function setTabs(key,mode,s){
  const t=$("#ctxTabs");
  if(!key){t.innerHTML="";return;}
  const items=[["","Gradebook","book"],["activities","Activities"+(s?" ("+s.stats.activities+")":""),"act"],["students","Students"+(s?" ("+s.stats.students+")":""),"stu"],["review","AI Review"+(s?" ("+s.stats.held+")":""),"ai"],["attendance","Attendance"+(s&&s.stats.sessions?" ("+s.stats.sessions+")":""),"att"]];
- t.innerHTML=items.map(([sub,l,m])=>{const on=m===mode||(m==="stu"&&String(mode).startsWith("profile:"))||(m==="ai"&&mode==="revdetail");return "<a class='tab' href='"+classHref(key,sub)+"'"+(on?" aria-current='page' data-active='true'":"")+">"+l+"</a>";}).join("");
+ t.innerHTML=items.map(([sub,l,m])=>{const on=m===mode||(m==="stu"&&String(mode).startsWith("profile:"))||(m==="ai"&&mode==="revdetail")||(m==="act"&&mode==="actnew");return "<a class='tab' href='"+classHref(key,sub)+"'"+(on?" aria-current='page' data-active='true'":"")+">"+l+"</a>";}).join("");
 }
 
 function statusLine(key){
@@ -145,6 +145,7 @@ function classView(key,mode,extra){
   else if(mode==="revdetail") renderReviewDetail(s,w,extra.aid,extra.skey);
   else if(mode==="att") renderAttendance(s,w);
   else if(mode==="act") renderActivities(s,w);
+  else if(mode==="actnew") renderActivityNew(s,w);
   else if(mode==="stu") renderStudents(s,w);
   else if(mode&&mode.startsWith("profile:")) renderStudentProfile(s,w,mode.slice(8));
   else renderBook(s,w);
@@ -279,6 +280,7 @@ route("#/ops", ()=>opsView(null));
 route("#/ops/:key", p=>opsView(p.key));
 route("#/c/:key", p=>classView(p.key,"book"));
 route("#/c/:key/activities", p=>classView(p.key,"act"));
+route("#/c/:key/activities/new", p=>classView(p.key,"actnew"));
 route("#/c/:key/students", p=>classView(p.key,"stu"));
 route("#/c/:key/students/:sk", p=>classView(p.key,"profile:"+p.sk));
 route("#/c/:key/review", p=>classView(p.key,"ai"));
@@ -360,18 +362,22 @@ function opFeed(line, link){
  return l;
 }
 
+// Returns the run's conclusion ("success"/"failure"/…), "dispatched" when the
+// run could not be found, "cancelled" on a declined confirm, or "error".
+// Wizards chain on it: never start step N+1 unless step N came back "success".
 async function runOp(sc,op,inputs,executing,preConfirmed){
- if(executing&&!preConfirmed){ const okc=await confirmExecute(op.execDanger||("write for real on "+sc.key),sc.section); if(!okc)return; }
+ if(executing&&!preConfirmed){ const okc=await confirmExecute(op.execDanger||("write for real on "+sc.key),sc.section); if(!okc)return "cancelled"; }
  const line=opFeed((executing?"EXECUTE ":"dry-run ")+esc(op.label)+" on "+esc(sc.key)+" · dispatching…");
  try{
   const {dispatchedAt}=await dispatchWf(sc.org,sc.repo,op.file,inputs);
   const run=await findDispatchedRun(sc.org,sc.repo,op.file,dispatchedAt);
-  if(!run){ line.innerHTML+=" dispatched ✓ (find it in the repo's Actions tab)"; return; }
+  if(!run){ line.innerHTML+=" dispatched ✓ (find it in the repo's Actions tab)"; return "dispatched"; }
   line.innerHTML="<span class='mut mono'>"+new Date().toLocaleTimeString()+"</span> "+(executing?"EXECUTE ":"dry-run ")+esc(op.label)+" on "+esc(sc.key)+" · <span class='opstat'>queued</span> <a href='"+esc(run.html_url)+"' target='_blank' rel='noopener'>run →</a>";
   const stat=line.querySelector(".opstat");
   const done=await pollRun(sc.org,sc.repo,run.id,r=>{ stat.textContent=r.status==="completed"?(r.conclusion||"done"):r.status; });
   if(done) stat.innerHTML="<span class='badge' data-tone='"+(done.conclusion==="success"?"good":"bad")+"'>"+esc(done.conclusion||"done")+"</span>";
- }catch(e){ line.innerHTML+=" <span class='badge' data-tone='bad'>failed</span> "+esc(e.message); }
+  return done?(done.conclusion||"done"):"dispatched";
+ }catch(e){ line.innerHTML+=" <span class='badge' data-tone='bad'>failed</span> "+esc(e.message); return "error"; }
 }
 
 // Is this input-set an execute (real write)? Uses the catalog gate metadata.
@@ -472,7 +478,8 @@ function materialCard(sc,op){
   if(!ok)return;
   for(let i=0;i<picked.length;i++){
    msg.textContent="Unit "+(i+1)+"/"+picked.length+": "+picked[i]+"…";
-   await runOp(sc,{...op,execDanger:""},{unit:picked[i]},true,true);
+   const c=await runOp(sc,{...op,execDanger:""},{unit:picked[i]},true,true);
+   if(c!=="success"){ msg.textContent="Stopped at "+picked[i]+" ("+c+") - fix it, then re-run the remaining units."; return; }
   }
   msg.textContent="Done: "+picked.length+" unit(s) published sequentially.";
  };
@@ -483,7 +490,7 @@ function materialCard(sc,op){
 function renderActivities(s,w){
  const sc=findSc(s.key)||s;
  const top=el("div","ctl");
- top.innerHTML="<span class='mut'>Toggles commit a one-line change to grader/assignments.json (diff shown first). Content and Canvas run the repo's own dry-run-gated workflows.</span>";
+ top.innerHTML="<span class='mut'>Toggles commit a one-line change to grader/assignments.json (diff shown first). Content and Canvas run the repo's own dry-run-gated workflows.</span><span style='flex:1'></span><a class='btn' data-size='sm' href='"+classHref(s.key,"activities/new")+"'>+ New activity</a>";
  w.append(top);
  const card=el("div","card"); card.append(el("h2",null,"Activities"));
  const scr=el("div","scroll"); const t=el("table","matrix");
@@ -497,7 +504,7 @@ function renderActivities(s,w){
     "<td class='center'>"+graded+"</td>"+
     "<td class='center'><button class='btn tglLock' data-size='sm' data-variant='soft'>"+(a.locked?"🔒 locked":"open")+"</button></td>"+
     "<td class='center'><button class='btn tglPub' data-size='sm' data-variant='soft'>"+(a.publish?"publishing":"held back")+"</button></td>"+
-    "<td><button class='btn actSweep' data-size='sm' data-variant='soft' title='Grade sweep, dry-run, just this activity'>sweep</button></td></tr>";
+    "<td><button class='btn actSweep' data-size='sm' data-variant='soft' title='Grade sweep, dry-run, just this activity'>sweep</button> <button class='btn actActivate' data-size='sm' data-variant='soft' title='Author the Canvas shell (canvas-sync execute), then publish its content unit - each step polled green'>activate</button></td></tr>";
   }).join("");
  scr.append(t); card.append(scr); w.append(card);
  t.querySelectorAll("tr[data-aid]").forEach(tr=>{
@@ -517,6 +524,7 @@ function renderActivities(s,w){
    const op=OPS.find(o=>o.file==="grade.yml");
    runOp(sc,{...op,execDanger:"write the gradebook"},{dry_run:"true",only:aid,force:"false"},false);
   };
+  tr.querySelector(".actActivate").onclick=()=>activateActivity(s,sc,s.assignments.find(x=>x.id===aid));
  });
  const ops2=el("div","card"); ops2.dataset.pad="sm";
  ops2.innerHTML="<h2>Content & Canvas</h2><div class='opform'>"+
@@ -530,6 +538,101 @@ function renderActivities(s,w){
  $("#pmRun").onclick=()=>{const u=$("#pmUnit").value.trim();if(!u)return $("#pmUnit").focus();const op=OPS.find(o=>o.file==="publish-material.yml");runOp(sc,{...op,execDanger:"push unit "+u+" to every workspace"},{unit:u},true);};
  $("#csDry").onclick=()=>{const op=OPS.find(o=>o.file==="canvas-sync-assignments.yml");runOp(sc,op,{mode:"dry-run",desc:"false",submit:"false",rename:"false"},false);};
  $("#cpDry").onclick=()=>{const op=OPS.find(o=>o.file==="canvas-push.yml");runOp(sc,op,{mode:"dry-run",comment:"false"},false);};
+}
+
+// ---- Activate wizard: canvas-sync (execute, only=<id>) -> poll green ->
+// publish-material for the activity's content unit -> poll green. Every step
+// streams to the docked console feed; a non-green step stops the chain.
+async function activateActivity(s,sc,a){
+ if(!a)return;
+ const steps="author its Canvas assignment shell (canvas-sync execute, only="+a.id+")"+(a.content?", then publish content unit "+a.content+" to every workspace":"");
+ const ok=await confirmExecute("activate "+a.id+" on "+s.key+": "+steps,s.section);
+ if(!ok)return;
+ const cs=OPS.find(o=>o.file==="canvas-sync-assignments.yml");
+ const c1=await runOp(sc,{...cs,execDanger:""},{mode:"execute",only:a.id,desc:"false",submit:"false",rename:"false"},true,true);
+ if(c1!=="success"){ opFeed("Activate "+esc(a.id)+" STOPPED: canvas-sync came back "+esc(String(c1))+"."); return; }
+ if(a.content){
+  const pm=OPS.find(o=>o.file==="publish-material.yml");
+  const c2=await runOp(sc,{...pm,execDanger:""},{unit:a.content},true,true);
+  if(c2!=="success"){ opFeed("Activate "+esc(a.id)+" STOPPED: publish-material("+esc(a.content)+") came back "+esc(String(c2))+"."); return; }
+ } else opFeed("No content unit on "+esc(a.id)+" (assignments.json \"content\") - skipped publish-material.");
+ opFeed("Activate "+esc(a.id)+" done ✓ - set the due date and PUBLISH it in Canvas (the sync always leaves it unpublished).");
+}
+
+// ---- New-activity wizard (#/c/:key/activities/new): entry via diff-commit,
+// scaffolds via a new-activity intent, then an optional canvas-sync dry-run.
+function renderActivityNew(s,w){
+ const sc=findSc(s.key)||s;
+ const back=classHref(s.key,"activities");
+ const head=el("div");
+ head.innerHTML="<a class='mut' href='"+back+"'>← Activities</a><h1 style='margin-top:4px'>New activity - "+esc(s.section)+"</h1>"+
+  "<p class='lede' data-size='sm'>Three steps: commit the assignments.json entry (diff shown first), file the scaffold intent for Claude Code, then dry-run the Canvas sync. Nothing publishes to students from here.</p>";
+ w.append(head);
+ const card=el("div","card"); card.dataset.pad="sm";
+ card.innerHTML=
+  "<h2>1 · The entry</h2>"+
+  "<fieldset class='chips' id='naFam' style='border:0;padding:0;margin:0 0 10px'>"+
+   "<label class='chips__chip'><input type='radio' name='fam' value='tests' checked><span>Auto-graded tests</span></label>"+
+   "<label class='chips__chip'><input type='radio' name='fam' value='ai'><span>AI-graded (held for review)</span></label>"+
+   "<label class='chips__chip'><input type='radio' name='fam' value='manual'><span>Manual / badge (link in Canvas)</span></label>"+
+  "</fieldset>"+
+  "<div class='opform'>"+
+   "<label class='field opf'><span class='field__label'>id <span class='mut'>(e.g. m6a4)</span></span><input class='field__input mono' id='naId' autocomplete='off'></label>"+
+   "<label class='field opf'><span class='field__label'>title <span class='mut'>(Canvas name = ID: title)</span></span><input class='field__input' id='naTitle'></label>"+
+   "<label class='field opf'><span class='field__label'>points <span class='mut'>(blank = raw tests)</span></span><input class='field__input num' id='naPts' type='number' min='0'></label>"+
+   "<label class='field opf' data-fam='tests ai'><span class='field__label'>type</span><select class='field__select' id='naType'><option>vitest</option><option>dart</option><option>flutter</option></select></label>"+
+   "<label class='field opf' data-fam='tests ai'><span class='field__label'>namePrefix</span><input class='field__input mono' id='naPrefix' placeholder='(id)-'></label>"+
+   "<label class='field opf' data-fam='ai'><span class='field__label'>feedback</span><select class='field__select' id='naFb'><option>project</option><option>code</option></select></label>"+
+   "<label class='chips__chip' data-fam='ai'><input type='checkbox' id='naPrev'><span>previews: branch</span></label>"+
+   "<label class='field opf' data-fam='manual'><span class='field__label'>submit</span><select class='field__select' id='naSubmit'><option>url</option><option>canvas</option></select></label>"+
+   "<label class='field opf' data-fam='manual tests ai'><span class='field__label'>content unit <span class='mut'>(folder under content/, optional)</span></span><input class='field__input mono' id='naContent' list='naUnits'><datalist id='naUnits'></datalist></label>"+
+   "<label class='chips__chip'><input type='checkbox' id='naLocked' checked><span>locked (scores freeze once graded)</span></label>"+
+  "</div>"+
+  "<p class='mut' style='margin:8px 0'>\"publish\" starts false - delivery stays behind review/finalize.</p>"+
+  "<div style='display:flex;gap:8px;align-items:center'><button class='btn' data-size='sm' id='naCommit'>Review diff & commit entry</button><span class='mut' id='naMsg'></span></div>"+
+  "<div id='naNext'></div>";
+ w.append(card);
+ ghJSON2("/repos/"+sc.org+"/"+sc.repo+"/contents/content").then(list=>{
+  const dl=card.querySelector("#naUnits"); if(!dl)return;
+  dl.innerHTML=(list||[]).filter(x=>x.type==="dir").map(x=>"<option value='"+esc(x.name)+"'>").join("");
+ }).catch(()=>{});
+ const fam=()=>card.querySelector("#naFam input:checked").value;
+ const showFam=()=>{ const f=fam(); card.querySelectorAll("[data-fam]").forEach(n=>{ n.style.display=n.dataset.fam.split(" ").includes(f)?"":"none"; }); };
+ card.querySelector("#naFam").onchange=showFam; showFam();
+ const entryFromForm=()=>{
+  const f=fam(), id=card.querySelector("#naId").value.trim().toLowerCase();
+  if(!/^[a-z][a-z0-9]*$/.test(id)) return {err:"id must be a short lowercase token like m6a4"};
+  if(s.assignments.find(x=>x.id===id)) return {err:"id "+id+" already exists in this section"};
+  const pts=card.querySelector("#naPts").value.trim();
+  if((f==="ai"||f==="manual")&&!pts) return {err:(f==="ai"?"AI-graded":"manual")+" activities need points"};
+  const e={id, type:f==="manual"?"manual":card.querySelector("#naType").value};
+  if(f!=="manual") e.namePrefix=card.querySelector("#naPrefix").value.trim()||id+"-";
+  const title=card.querySelector("#naTitle").value.trim(); if(title)e.title=title;
+  if(pts)e.totalPoints=+pts;
+  if(f==="ai"){ e["ai-grading"]=true; e.feedback=card.querySelector("#naFb").value; if(card.querySelector("#naPrev").checked)e.previews="branch"; }
+  if(f==="manual"){ e.manual=true; e.submit=card.querySelector("#naSubmit").value; }
+  const content=card.querySelector("#naContent").value.trim(); if(content)e.content=content;
+  if(card.querySelector("#naLocked").checked)e.locked=true;
+  return {e};
+ };
+ card.querySelector("#naCommit").onclick=async()=>{
+  const {e,err}=entryFromForm(); const msg=card.querySelector("#naMsg");
+  if(err){ msg.textContent=err; return; }
+  const ok=await editAssignments(sc,es=>{ if(es.find(x=>x.id===e.id))return null; es.push(e); return "Add activity "+e.id; },"Add "+e.id+" - "+s.key).catch(x=>{msg.textContent=x.message;return false;});
+  if(!ok){ if(!msg.textContent)msg.textContent="Not committed."; return; }
+  invalidate(s.key);
+  msg.textContent="Committed ✓";
+  const nxt=card.querySelector("#naNext");
+  const txt=buildNewActivity(s,e);
+  nxt.innerHTML="<h2 style='margin-top:16px'>2 · Scaffolds (intent for Claude Code)</h2>"+
+   "<div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='naCp'>Copy</button></div>"+
+   "<pre class='code-block prompt'>"+esc(txt)+"</pre>"+
+   "<h2>3 · Canvas shell</h2><p class='mut'>Author the Canvas assignment from the new entry (dry-run; execute lives behind Activate / Ops).</p>"+
+   "<button class='btn' data-size='sm' data-variant='soft' id='naCs'>Canvas sync dry-run (only="+esc(e.id)+")</button>";
+  nxt.querySelector("#naCp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>{nxt.querySelector("#naCp").textContent="Copied ✓"});
+  wireSend(s,"new-activity",e.id,txt);
+  nxt.querySelector("#naCs").onclick=()=>{const op=OPS.find(o=>o.file==="canvas-sync-assignments.yml");runOp(sc,op,{mode:"dry-run",only:e.id,desc:"false",submit:"false",rename:"false"},false);};
+ };
 }
 
 

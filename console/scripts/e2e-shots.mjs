@@ -93,6 +93,7 @@ await page.goto("http://localhost:8931/#/");
 await shot("01-dashboard");
 await page.goto("http://localhost:8931/#/c/6APSI-2240"); await shot("02-gradebook");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/activities"); await shot("03-activities");
+await page.goto("http://localhost:8931/#/c/6APSI-2240/activities/new"); await shot("03b-activity-new");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/students"); await shot("04-students");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/students/20250001"); await shot("05-profile");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/review"); await shot("06-review");

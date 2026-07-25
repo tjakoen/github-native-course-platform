@@ -162,6 +162,27 @@ export function buildDeliver(s,generatedAt){
  return {txt,graded,pub};
 }
 
+// New-activity scaffold intent. NEW format (2026-07-25): no skill parses this
+// yet, so it is NOT under the golden-fixture byte-compat gate - document
+// changes in docs/commands.md instead.
+export function buildNewActivity(s,a){
+ const ai=!!a["ai-grading"], manual=!!a.manual;
+ return (
+"# New activity scaffolds - "+s.subject+" (section "+s.section+") - "+a.id+"\n\n"+
+"I just added this entry to grader/assignments.json via the Course Console (already committed - pull first). Create the authoring scaffolds around it. Work from the teacher repo:\n"+
+workFrom(s)+" - pull it first.\n\n"+
+"## The committed entry\n```json\n"+JSON.stringify(a,null,2)+"\n```\n\n"+
+"## Rules (do not violate)\n"+
+"- Do NOT flip \"publish\": true and do NOT touch the gradebook - this intent only creates authoring scaffolds.\n"+
+"- Do NOT create the Canvas assignment by hand: the canvas-sync-assignments workflow authors the Canvas shell FROM assignments.json (I run it from the console).\n"+
+"- Follow ACTIVITY-AUTHORING.md (in this repo) and the platform standard docs/canvas-activities.md; keep the score rule \"automated tests, or the rubric if applicable\".\n\n"+
+"## Steps\n"+
+"1. Write grader/"+a.id+"/CANVAS.md - the Canvas assignment description body (what/why, how to submit"+(manual?" (submit:\""+(a.submit||"url")+"\" - students submit a link in Canvas, no repo)":" (students submit via the "+(a.namePrefix||a.id+"-")+"<section>-<handle> repo convention)")+", and the score rule).\n"+
+(ai?"2. Write grader/"+a.id+"/RUBRIC.md following grader/RUBRIC-TEMPLATE.md, out of "+(a.totalPoints!=null?a.totalPoints:"the activity's")+" points, matching feedback flavor \""+(a.feedback||"code")+"\". Copy it into the activity template repo when that exists, and into existing student submission repos if any.\n":"")+
+(manual?"":(ai?"3":"2")+". Scaffold the canonical tests in grader/"+a.id+"/ and the public activity template repo "+s.org+"/"+a.id+"-classcode-yourname per ACTIVITY-AUTHORING.md (starter + student-facing test copy + README + student.json + Autograde workflow), matching the class's existing "+String(a.type||"vitest")+" activities. Validate: the empty starter FAILS, a solution PASSES.\n")+
+((manual?"2":(ai?"4":"3")))+". node --check / validate anything you wrote, commit as \":sparkles: "+a.id+" scaffolds\" and push. Report what was created and what still needs a human (e.g. Canvas due date + publish after the sync).\n");
+}
+
 export function buildManualAttendance(s,picked,date){
  const att=s.attendance||{students:{},sessionDates:[]};
  const already=picked.filter(x=>{const a=att.students[x.num];return a&&a.present&&a.present.includes(date)});
