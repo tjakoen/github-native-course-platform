@@ -5,7 +5,7 @@
   "private": true,
   "description": "Course Console: the hosted management + review surface for the GitHub-native course platform: a data-free GitHub Pages shell that reads teacher-repo gradebooks live from the GitHub API in the browser and generates the prompts the AI runs to apply decisions. Uses the GRAIN design system.",
   "dependencies": {
-    "@tjakoen/grain": "^0.1.8"
+    "@tjakoen/grain": "^0.1.10"
   },
   "scripts": {
     "bake": "node scripts/bake-theme.mjs",

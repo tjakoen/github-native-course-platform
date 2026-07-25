@@ -7,16 +7,16 @@
 import { putIntent, AuthError, rate } from "./lib/gh.mjs";
 import { loadConfig, saveConfig } from "./lib/store.mjs";
 import { discoverSections, parseRepoURL } from "./lib/config.mjs";
-import { loadSection } from "./lib/gradebook.mjs";
 import { shotsFor, shotsCached } from "./lib/shots.mjs";
 import { codeFor, codeCached } from "./lib/code.mjs";
-import { renderScanView, stopScanner } from "./lib/attendance-scan.mjs";
+import { route, start, go, dispatch, beforeEach, fallback } from "./lib/router.mjs";
+import { discover, sections, findSc, getSection, sectionCached, invalidate, ageOf, STALE_MS } from "./lib/data.mjs";
 
 const $=(s,r=document)=>r.querySelector(s), el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e};
 const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-let cur=0, q="", mode="book", revAct=null;
-let DATA=null;
-const app=$("#app");
+let q="", revAct=null;
+let DATA={generatedAt:new Date().toISOString()};   // prompt builders stamp "graded as of"
+const main=$("#main");
 
 // where the prompts tell Claude Code to work from (the local clone convention)
 const workFrom=s=>"classes/"+s.repo+" (the local clone of github.com/"+s.org+"/"+s.repo+")";
@@ -52,11 +52,16 @@ function openSettings(firstRun){
   "<div class='field__label' style='margin-top:12px'>Teacher repos <span class='mut'>- one repo + its own PAT per row</span></div>"+
   "<div id='sRepos'>"+((c.repos.length?c.repos:[{}]).map(rowHTML).join(""))+"</div>"+
   "<button class='btn' data-size='sm' data-variant='soft' id='sAdd' style='margin-top:2px'>+ Add repo</button>"+
-  "<div style='display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap'><button class='btn' data-size='sm' id='sSave'>Save & load</button> <button class='btn' data-size='sm' data-variant='soft' id='sTest'>Test connection</button> <span class='mut' id='sMsg' style='font-size:12px'></span></div>";
+  "<div style='display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap'><button class='btn' data-size='sm' id='sSave'>Save & load</button> <button class='btn' data-size='sm' data-variant='soft' id='sTest'>Test connection</button> <span class='mut' id='sMsg' style='font-size:12px'></span></div>"+
+  "<div class='field__label' style='margin-top:16px'>Review decisions <span class='mut'>- browser-local; back them up</span></div>"+
+  "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'><button class='btn' data-size='sm' data-variant='soft' id='sExpDec'>⭳ Export</button> <button class='btn' data-size='sm' data-variant='soft' id='sImpDec'>⭱ Import</button><input type='file' id='sImpFile' accept='application/json,.json' style='display:none'></div>";
  const read=()=>({repos:[...p.querySelectorAll(".repoRow")].map(row=>({url:row.querySelector(".rUrl").value.trim(),token:row.querySelector(".rTok").value.trim()})).filter(r=>r.url),labels:c.labels||{}});
  const wireDel=()=>p.querySelectorAll(".rDel").forEach(b=>b.onclick=()=>{const rows=p.querySelectorAll(".repoRow");if(rows.length>1)b.closest(".repoRow").remove();else{b.closest(".repoRow").querySelector(".rUrl").value="";b.closest(".repoRow").querySelector(".rTok").value="";}});
  wireDel();
  $("#sAdd").onclick=()=>{ $("#sRepos").insertAdjacentHTML("beforeend",rowHTML()); wireDel(); };
+ $("#sExpDec").onclick=exportDecisions;
+ $("#sImpDec").onclick=()=>$("#sImpFile").click();
+ $("#sImpFile").onchange=e=>{const f=e.target.files[0];if(f)importDecisions(f);e.target.value="";};
  const close=()=>d.remove();
  p.querySelector(".x").onclick=()=>{ if(firstRun&&!loadConfig()){$("#sMsg").textContent="Add at least one repo (URL + PAT), then Save.";return;} close(); };
  d.onclick=e=>{if(e.target===d)p.querySelector(".x").onclick()};
@@ -76,44 +81,126 @@ function openSettings(firstRun){
  };
 }
 
-async function boot(){
- const c=loadConfig();
- app.innerHTML="<div class='wrap'><h1>Course Console</h1><div class='muted' id='bootmsg'>Loading…</div></div>";
- if(!c){ $("#bootmsg").textContent="Live from GitHub - nothing loads until you connect your teacher repos and their tokens."; openSettings(true); return; }
+// ---- shell wiring + routes ----
+const classHref=(key,sub)=>"#/c/"+encodeURIComponent(key)+(sub?"/"+sub:"");
+function curKey(){ const m=(location.hash||"").match(/^#\/c\/([^/]+)/); return m?decodeURIComponent(m[1]):null; }
+
+function setNav(){
+ const h=location.hash||"#/";
+ const key=curKey();
+ document.querySelectorAll("#rail .nav-item[href^='#']").forEach(a=>{
+  const href=a.getAttribute("href");
+  let on;
+  if(href.startsWith("#/c/")) on=!!key&&href===classHref(key);
+  else if(href==="#/") on=(h==="#/"||h==="#"||h==="");
+  else on=h.startsWith(href);
+  if(on)a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current");
+ });
+}
+
+function setTabs(key,mode,s){
+ const t=$("#ctxTabs");
+ if(!key){t.innerHTML="";return;}
+ const items=[["","Gradebook","book"],["review","AI Review"+(s?" ("+s.stats.held+")":""),"ai"],["attendance","Attendance"+(s&&s.stats.sessions?" ("+s.stats.sessions+")":""),"att"]];
+ t.innerHTML=items.map(([sub,l,m])=>"<a class='tab' href='"+classHref(key,sub)+"'"+(m===mode?" aria-current='page' data-active='true'":"")+">"+l+"</a>").join("");
+}
+
+function statusLine(key){
+ const bits=[];
+ if(rate.remaining!=null) bits.push("<span"+(rate.remaining<500?" style='color:var(--color-danger,inherit);font-weight:var(--font-weight-semibold)'":"")+">API "+rate.remaining+"/"+rate.limit+"</span>");
+ if(key){ const age=ageOf(key); if(age!=null) bits.push("<span>"+esc(key)+" · loaded "+(age<6e4?"just now":Math.round(age/6e4)+" min ago")+(age>STALE_MS?" · stale (↻ to refresh)":"")+"</span>"); }
+ bits.push("<span>"+Object.keys(DEC).length+" decisions</span>");
+ bits.push("<span>writes go through intents</span>");
+ $("#statusBar").innerHTML=bits.join(" · ");
+}
+
+function fillRail(){
+ $("#railClasses").innerHTML=sections().map(sc=>
+  "<a class='nav-item' href='"+classHref(sc.key)+"' data-classnav='"+esc(sc.key)+"'>"+
+  "<svg class='icon' aria-hidden='true'><use href='vendor/grain/sprite.svg#files'></use></svg>"+
+  "<span class='nav-item__label'>"+esc(sc.subject)+" · "+esc(sc.section)+"</span>"+
+  "<span class='badge navheld' data-tone='held' hidden></span></a>").join("");
+}
+function railHeld(key,held){
+ const b=document.querySelector("[data-classnav='"+key.replace(/'/g,"")+"'] .navheld");
+ if(b){ if(held>0){b.textContent=held;b.hidden=false;} else b.hidden=true; }
+}
+
+async function withSection(key,fn){
+ const sc=findSc(key);
+ if(!sc){ main.innerHTML="<div class='boot'>Unknown class "+esc(key)+". <a href='#/'>Dashboard</a></div>"; return; }
+ if(!sectionCached(key)) main.innerHTML="<div class='boot'>Loading "+esc(sc.subject)+" · "+esc(sc.section)+"…</div>";
  try{
-  $("#bootmsg").textContent="Discovering sections…";
-  const {sections:scs,errors}=await discoverSections(c.repos,c.labels||{});
-  if(!scs.length){
-   $("#bootmsg").innerHTML="No teacher repos reachable."+(errors.length?" "+esc(errors.map(e=>e.url+": "+e.err).join(" · ")):"")+" <a href='#' id='fixCfg'>Open settings</a>";
-   $("#fixCfg").onclick=e=>{e.preventDefault();openSettings(false)}; return;
-  }
-  // Fast path for the classroom door: #/scan boots straight into the scanner
-  // from the discovery list, WITHOUT loading any gradebook (quick on a phone,
-  // near-zero API budget). Bookmark this hash on the phone's home screen.
-  if(location.hash.startsWith("#/scan")){ renderScanPage(scs); return; }
-  const sections=[];
-  for(const sc of scs){ $("#bootmsg").textContent="Loading "+sc.key+"… ("+(sections.length+1)+"/"+scs.length+")"; sections.push(await loadSection(sc)); }
-  DATA={generatedAt:new Date().toISOString(),sections};
-  if(errors.length) console.warn("course-console: skipped repos",errors);
-  cur=Math.min(cur,sections.length-1); render();
+  const s=await getSection(key);
+  if(curKey()!==key) return;   // navigated away while loading
+  DATA.generatedAt=new Date(Date.now()-(ageOf(key)||0)).toISOString();
+  railHeld(key,s.stats.held);
+  fn(s);
  }catch(e){
-  if(e instanceof AuthError){ $("#bootmsg").textContent=e.message; openSettings(false); }
-  else { $("#bootmsg").innerHTML="Load failed: "+esc(e.message)+" · <a href='#' id='fixCfg'>settings</a>"; const f=$("#fixCfg"); if(f)f.onclick=ev=>{ev.preventDefault();openSettings(false)}; }
+  if(e instanceof AuthError){ main.innerHTML="<div class='boot'>"+esc(e.message)+"</div>"; openSettings(false); }
+  else main.innerHTML="<div class='boot'>Load failed: "+esc(e.message)+" · <a href='"+classHref(key)+"'>retry</a></div>";
  }
 }
-// The standalone scanner page (#/scan): minimal header + the scan view, fed by
-// the light discovery objects. "Full console" clears the hash and boots normally.
-function renderScanPage(scs){
- app.innerHTML="";
- const w=el("div","wrap");
- const head=el("div"); head.innerHTML='<div class="hdr-actions"><button class="btn" data-size="sm" data-variant="soft" id="full">Full console</button><button class="btn" data-size="sm" data-variant="soft" id="cfg">⚙ Settings</button></div><h1 data-grade="accent">Course Console · Scan</h1><div class="muted">attendance scanner · commits batch CSVs to the teacher repo · signatures verified server-side</div>';
- w.append(head);
- const mountEl=el("div"); w.append(mountEl); app.append(w);
- renderScanView(mountEl,scs,null);
- $("#full").onclick=()=>{ stopScanner(); location.hash=""; boot(); };
- $("#cfg").onclick=()=>openSettings(false);
- app.insertAdjacentHTML("beforeend",'<footer class="made-with">made with <a href="https://tjakoen.github.io/grain">GRAIN</a> by <a href="https://tjakoen.github.io">tjakoen</a></footer>');
+
+function classView(key,mode){
+ withSection(key,s=>{
+  setTabs(key,mode,s); statusLine(key);
+  main.innerHTML="";
+  const w=el("div","wrap");
+  main.append(w);
+  if(mode==="ai") renderAI(s,w); else if(mode==="att") renderAttendance(s,w); else renderBook(s,w);
+ });
 }
+
+function dashView(){
+ setTabs(null); statusLine(null);
+ main.innerHTML="";
+ const w=el("div","wrap");
+ w.innerHTML="<h1>My classes</h1><p class='lede' data-size='sm'>Live from GitHub. A class's gradebook loads when you open it; nothing is stored outside this browser.</p>";
+ const grid=el("div","dashgrid");
+ sections().forEach(sc=>{
+  const s=sectionCached(sc.key);
+  const c=el("a","card dashcard"); c.href=classHref(sc.key); c.dataset.pad="sm";
+  c.innerHTML="<h2>"+esc(sc.subject)+" · "+esc(sc.section)+"</h2><div class='mut'>"+esc(sc.org)+"</div>"+
+   (s?"<div class='stats stats--mini'>"+[["Students",s.stats.students],["Held",s.stats.held],["Activities",s.stats.activities]].map(([l,n])=>"<div class='stat'><span class='stat__value'>"+n+"</span><span class='stat__label'>"+l+"</span></div>").join("")+"</div>"
+     :"<div class='mut'>"+sc.pol.length+" activities · open to load</div>");
+  grid.append(c);
+ });
+ w.append(grid);
+}
+
+route("#/", dashView);
+route("#/settings", ()=>{ setTabs(null); statusLine(null); main.innerHTML="<div class='wrap'><h1>Settings</h1><p class='lede' data-size='sm'>Repos, tokens, and your review-decision backups.</p></div>"; openSettings(false); });
+route("#/scan", ()=>location.replace("./scanner/"));
+route("#/c/:key", p=>classView(p.key,"book"));
+route("#/c/:key/review", p=>classView(p.key,"ai"));
+route("#/c/:key/attendance", p=>classView(p.key,"att"));
+fallback(()=>go("#/"));
+beforeEach(()=>{ setNav(); });
+
+let started=false;
+async function boot(){
+ const c=loadConfig();
+ if(!c){ main.innerHTML="<div class='boot'><h1>Course Console</h1>Live from GitHub - nothing loads until you connect your teacher repos and their tokens.</div>"; openSettings(true); return; }
+ main.innerHTML="<div class='boot'>Discovering classes…</div>";
+ try{
+  const {sections:scs,errors}=await discover(c);
+  if(!scs.length){
+   main.innerHTML="<div class='boot'>No teacher repos reachable."+(errors.length?" "+esc(errors.map(e=>e.url+": "+e.err).join(" · ")):"")+" <a href='#/settings'>Open settings</a></div>";
+   return;
+  }
+  if(errors.length) console.warn("course-console: skipped repos",errors);
+  fillRail();
+  if(started) dispatch(); else { started=true; start(); }
+ }catch(e){
+  if(e instanceof AuthError){ main.innerHTML="<div class='boot'>"+esc(e.message)+"</div>"; openSettings(false); }
+  else{ main.innerHTML="<div class='boot'>Discovery failed: "+esc(e.message)+" · <a href='#/settings'>settings</a></div>"; }
+ }
+}
+
+// static-shell header controls
+$("#reload").onclick=()=>{ const k=curKey(); invalidate(k); dispatch(); };
+$("#theme").onclick=()=>toggleTheme();
 
 function curScheme(){ return document.documentElement.getAttribute("data-color-scheme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"); }
 function cellColor(pct){ if(pct==null)return""; const g=Math.round(pct*120); const dark=curScheme()==="dark"; return "background:hsl("+g+"deg "+(dark?"30%":"55%")+" "+(dark?"24%":"90%")+")"; }
@@ -150,33 +237,9 @@ function importDecisions(file){
   rd.readAsText(file);
 }
 
-function render(){
- stopScanner(); // leaving the Scan tab (or re-rendering) releases the camera
- const s=DATA.sections[cur];
- app.innerHTML="";
- const w=el("div","wrap");
- const head=el("div"); head.innerHTML='<div class="hdr-actions"><button class="btn" data-size="sm" data-variant="soft" id="reload" title="Re-fetch everything from GitHub">↻ Refresh</button><button class="btn" data-size="sm" data-variant="soft" id="cfg" title="Repos & token">⚙ Settings</button><button class="btn" data-size="sm" data-variant="soft" id="expDec" title="Download all review decisions as a JSON backup">⭳ Export decisions</button><button class="btn" data-size="sm" data-variant="soft" id="impDec" title="Merge decisions from a JSON backup file">⭱ Import</button><input type="file" id="impFile" accept="application/json,.json" style="display:none"><button class="btn" data-size="sm" data-variant="soft" id="theme">◐ scheme</button></div><h1>Course Console</h1><div class="muted">loaded '+new Date(DATA.generatedAt).toLocaleString()+' · live from GitHub · <b>read-only - writes go through Intents</b>'+(rate.remaining!=null?' · API '+rate.remaining+'/'+rate.limit:'')+'</div>';
- w.append(head);
- const tabs=el("nav","tab-bar");
- DATA.sections.forEach((x,i)=>{const t=el("div","tab",esc(x.subject)+" · "+x.section);if(i===cur)t.dataset.active="true";t.onclick=()=>{cur=i;q="";revAct=null;render()};tabs.append(t)});
- w.append(tabs);
- // mode toggle
- const mt=el("nav","tab-bar");
- [["book","Gradebook"],["ai","AI Review ("+s.stats.held+")"],["att","Attendance"+(s.stats.sessions?" ("+s.stats.sessions+")":"")],["scan","Scan"]].forEach(([k,l])=>{const b=el("div","tab",l);if(mode===k)b.dataset.active="true";b.onclick=()=>{mode=k;render()};mt.append(b)});
- w.append(mt);
- app.append(w);
- if(mode==="ai") renderAI(s,w); else if(mode==="att") renderAttendance(s,w); else if(mode==="scan") renderScanView(w,DATA.sections,s.key); else renderBook(s,w);
- $("#theme").onclick=toggleTheme;
- $("#reload").onclick=()=>boot();
- $("#cfg").onclick=()=>openSettings(false);
- $("#expDec").onclick=exportDecisions;
- $("#impDec").onclick=()=>$("#impFile").click();
- $("#impFile").onchange=e=>{const f=e.target.files[0];if(f)importDecisions(f);e.target.value="";};
- // the fleet byline (grain's made-with molecule). app.mjs is browser-side under a strict CSP,
- // so the markup is inlined literally rather than imported from @tjakoen/grain/scripts/made-with.js;
- // its CSS is the made-with component baked into theme.css. Keep the string in sync with that helper.
- app.insertAdjacentHTML("beforeend",'<footer class="made-with">made with <a href="https://tjakoen.github.io/grain">GRAIN</a> by <a href="https://tjakoen.github.io">tjakoen</a></footer>');
-}
+// Legacy shim: views call render() after a decision write or theme flip; it
+// re-dispatches the current route (cached section -> instant repaint).
+function render(){ if(started) dispatch(); }
 
 function renderBook(s,w){
  const tiles=el("div","stats");

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en" data-theme="baguette">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://api.github.com 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex">
+<title>Attendance Scanner - Course Console</title>
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../app.css">
+<script type="module" src="../vendor/grain/theme-boot.js"></script>
+</head>
+<body class="scanner-page">
+<header class="appbar">
+  <span class="appbar__title" data-grade="accent">Attendance</span>
+  <span class="spacer"></span>
+  <a class="btn" data-size="sm" data-variant="soft" href="../#/settings">Settings</a>
+  <a class="btn" data-size="sm" data-variant="soft" href="../">Full console</a>
+</header>
+<main id="scanMount"><div class="boot">Loading…</div></main>
+<footer class="made-with">made with <a href="https://tjakoen.github.io/grain">GRAIN</a> by <a href="https://tjakoen.github.io">tjakoen</a></footer>
+<script type="module" src="scanner.mjs"></script>
+</body>
+</html>

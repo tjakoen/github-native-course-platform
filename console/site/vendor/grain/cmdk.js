@@ -2,13 +2,25 @@
 //
 // Self-contained: one <script> tag drops it onto any page. A <link> to cmdk.css
 // must precede it. Injects a native <dialog>, binds ⌘K / Ctrl+K, fetches
-// /search.json once, filters, and navigates. Monochrome e-ink look via the page's
-// design tokens. Today it indexes pages + components; the seam to add tasks/knowledge
-// — and to let a result EMIT an intent through the one door (palette as another
-// action-vocabulary client) — is marked below.
+// the search index once, filters, and navigates. Monochrome e-ink look via the
+// page's design tokens. Today it indexes pages + components; live sources plug in
+// through window.cmdk.register (the seam below made real): a provider is a sync
+// (query) => item[] the host app registers, its items pre-filtered by the app,
+// and an item may carry an action() instead of a url — Enter runs it (palette as
+// another action-vocabulary client).
+//
+// Host config (optional, via <html data-*>; defaults keep old pages working):
+//   data-cmdk-src     URL of the static index (default "/search.json"; set EMPTY
+//                     to skip the fetch entirely — provider-only palettes, or
+//                     project pages served under a subpath where "/" is wrong)
+//   data-cmdk-sprite  base path of the icon sprite (default "/assets/sprite.svg")
 (() => {
   "use strict";
   let data = null, items = [], sel = 0, root, input, list;
+  const providers = [];
+  const CFG = document.documentElement.dataset;
+  const SRC = CFG.cmdkSrc !== undefined ? CFG.cmdkSrc : "/search.json";
+  const SPRITE = CFG.cmdkSprite || "/assets/sprite.svg";
 
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const isOpen = () => !!(root && root.open);
@@ -21,7 +33,7 @@
     root.setAttribute("aria-label", "Search");
     root.innerHTML = `
       <div class="cmdk__row">
-        <svg class="icon cmdk__icon" aria-hidden="true"><use href="/assets/sprite.svg#search"></use></svg>
+        <svg class="icon cmdk__icon" aria-hidden="true"><use href="${SPRITE}#search"></use></svg>
         <input class="cmdk__input" type="text" placeholder="Search pages and components…" aria-label="Search">
       </div>
       <ul class="cmdk__list" role="listbox"></ul>
@@ -38,16 +50,20 @@
 
   async function load() {
     if (data) return;
-    try { data = await (await fetch("/search.json")).json(); }
+    if (!SRC) { data = { pages: [], components: [] }; return; }   // provider-only palette
+    try { data = await (await fetch(SRC)).json(); }
     catch { data = { pages: [], components: [] }; }
   }
 
   const corpus = () => [
     ...(data.pages || []).map((p) => ({ ...p, kind: "Page" })),
     ...(data.components || []).map((c) => ({ ...c, kind: "Component" })),
-    // SEAM: tasks/knowledge entries, and "command" entries that emit an intent
-    // through /intent (palette = another client of the one door) — AI-INTERFACE §6.
   ];
+
+  // Registered live sources (the seam, made real): each provider returns its own
+  // already-filtered items for the query. A throwing provider yields nothing —
+  // the palette never breaks on a bad source.
+  const fromProviders = (q) => providers.flatMap((p) => { try { return p(q) || []; } catch { return []; } });
 
   function paint() {
     [...list.children].forEach((el, i) => el.classList && el.classList.toggle("is-sel", i === sel));
@@ -57,7 +73,10 @@
   function render() {
     const q = input.value.trim().toLowerCase();
     // match on the URL too — Quick Open by path ("notes/ten", "grain/docs") like an editor's ⌘P
-    items = corpus().filter((e) => !q || (e.title + " " + (e.subtitle || "") + " " + (e.url || "")).toLowerCase().includes(q)).slice(0, 30);
+    items = [
+      ...fromProviders(q),
+      ...corpus().filter((e) => !q || (e.title + " " + (e.subtitle || "") + " " + (e.url || "")).toLowerCase().includes(q)),
+    ].slice(0, 30);
     sel = 0;
     list.innerHTML = items.length
       ? items.map((e, i) => `<li class="cmdk__item${i === 0 ? " is-sel" : ""}" role="option" data-i="${i}">
@@ -68,7 +87,12 @@
   }
 
   function move(d) { if (!items.length) return; sel = (sel + d + items.length) % items.length; paint(); }
-  function activate() { const e = items[sel]; if (e && e.url) location.assign(e.url); }
+  function activate() {
+    const e = items[sel];
+    if (!e) return;
+    if (e.action) { close(); e.action(); }         // command entry: run it (door stays the app's)
+    else if (e.url) location.assign(e.url);
+  }
 
   function onKey(ev) {
     if (ev.key === "ArrowDown") { ev.preventDefault(); move(1); }
@@ -105,5 +129,12 @@
     });
     window.addEventListener("resize", () => { if (isOpen()) reposition(); });
   }
+  // Public surface: hosts register live sources and can drive the palette.
+  window.cmdk = {
+    register(provider) { if (typeof provider === "function") providers.push(provider); },
+    open: () => open(),
+    close: () => close(),
+  };
+
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 })();
