@@ -50,6 +50,19 @@ export function buildGenFeedback(s,aid){
 "When done, COMMIT AND PUSH the new notes to the teacher repo. The hosted dashboard reads the repo live - I'll hit Refresh, review each draft and its proposed score, then Approve/Override/Flag there.\n");
 }
 
+// Bulk path: file ONE gen-feedback intent for (s,aid) with no drawer, reusing
+// buildGenFeedback verbatim - no new prompt format, so the golden fixtures and
+// the gen-feedback skill are untouched. Returns the filed intent path. Callers
+// (the dashboard "all classes" + per-class "generate feedback" buttons) loop it.
+export async function fileGenFeedback(s,aid){
+ const txt=buildGenFeedback(s,aid);
+ const ts=new Date().toISOString().replace(/[-:]/g,"").replace(/\..+/,"").replace("T","-");
+ const path="gradebook/intents/"+ts+"-gen-feedback-"+aid+".md";
+ const body=txt+"\n---\n_Filed by Course Console at "+new Date().toISOString()+". When this intent is done, move this file to gradebook/intents/done/ in the same commit as the changes._\n";
+ await putIntent(s.org,s.repo,path,body,":memo: console intent: gen-feedback "+aid);
+ return path;
+}
+
 export function buildApplyAI(s,aid,rows){
  const max=s.assignments.find(a=>a.id===aid).totalPoints;
  const decided=rows.filter(x=>isDecided(x.dec)&&x.dec.status!=="flag");

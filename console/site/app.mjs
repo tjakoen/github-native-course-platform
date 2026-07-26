@@ -20,7 +20,7 @@ import { editAssignments } from "./lib/config-writes.mjs";
 import { $, el, esc, confirmExecute, openDrawer } from "./lib/ui.mjs";
 import { DEC, getDec, setDec, skeyOf, isDecided, finalScore, exportDecisions, importDecisions } from "./lib/decisions.mjs";
 import { hl } from "./lib/hl.mjs";
-import { wireSend, buildGenFeedback, buildApplyAI, buildFinalize, buildApplyGrades, buildDeliver, buildManualAttendance, buildNewActivity } from "./lib/intents.mjs";
+import { wireSend, buildGenFeedback, buildApplyAI, buildFinalize, buildApplyGrades, buildDeliver, buildManualAttendance, buildNewActivity, fileGenFeedback, workFrom } from "./lib/intents.mjs";
 
 let q="", revAct=null;
 // The student filter box (q) is shared state; reset it when the view SCOPE
@@ -408,6 +408,19 @@ function dashView(){
   '<div class="meter" id="laMeter" style="flex:1;max-width:280px" hidden role="meter" aria-label="Load progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="meter__seg" data-tone="ok" style="--seg:0%"></span></div>'+
   '<span class="mut" id="laMsg"></span>';
  w.append(ctl);
+ // Bulk actions: fan a common job across EVERY class so the Ops tab is not a
+ // per-class errand. Only safe fan-outs live here (grade sweep is teacher-side;
+ // feedback is the intent path; audits are read-only) - execute/delivery ops stay
+ // per-class behind their typed confirm.
+ const bulk=el("div","card"); bulk.dataset.pad="sm";
+ bulk.innerHTML="<h2>Bulk actions <span class='mut' style='font-weight:400'>· all classes</span></h2>"+
+  "<p class='mut' data-size='sm'>Fan one job across every class. Execute + delivery ops (publish, Canvas execute, provisioning) stay per-class in each class's Ops tab.</p>"+
+  "<div class='ctl'>"+
+   "<button class='btn' data-size='sm' id='bulkGrade'>Grade sweep — all</button>"+
+   "<button class='btn' data-size='sm' data-variant='soft' id='bulkFb'>Generate feedback — all</button>"+
+   "<button class='btn' data-size='sm' data-variant='soft' id='bulkAudit'>Audit — all (read-only)</button>"+
+  "</div>";
+ w.append(bulk);
  const grid=el("div","dashgrid");
  const cardFor=sc=>{
   const s=sectionCached(sc.key);
@@ -458,6 +471,9 @@ function dashView(){
  // fold engine flags in (cached; two content calls per class, or a cache hit)
  sections().forEach(sc=>getFlagsFiles(sc.key).then(f=>{ const lines=[...flagLines(f.flags),...flagLines(f.flagged)].slice(0,3); if(lines.length){ flagsByKey[sc.key]=lines; paintInbox(); } }).catch(()=>{}));
  main.append(w);
+ $("#bulkGrade").onclick=()=>bulkGradeSweep();
+ $("#bulkFb").onclick=()=>bulkFeedbackAll();
+ $("#bulkAudit").onclick=()=>bulkAudit();
  const la=$("#loadAll");
  const unloaded=()=>sections().filter(sc=>!sectionCached(sc.key));
  if(!unloaded().length) la.hidden=true;
@@ -991,6 +1007,12 @@ function renderOverview(s,w){
  const ctl=el("div","ctl");
  ctl.innerHTML='<a class="btn" data-size="sm" href="'+classHref(s.key,"gradebook")+'">Open gradebook →</a> <button class="btn" data-size="sm" data-variant="soft" id="ovPrompt">Generate apply-grades prompt →</button> <button class="btn" data-size="sm" data-variant="soft" id="ovDeliver">Deliver to Canvas + workspaces →</button>';
  w.append(ctl);
+ // Quick actions: the two common jobs without a trip to the Ops tab. Grade sweep
+ // dispatches grade.yml (dry_run=false, teacher-side); Generate feedback opens the
+ // per-class bulk feedback drawer over this class's un-drafted AI submissions.
+ const qa=el("div","ctl");
+ qa.innerHTML='<button class="btn" data-size="sm" id="ovGrade">Grade sweep →</button> <button class="btn" data-size="sm" data-variant="soft" id="ovGenFb">Generate feedback →</button> <a class="btn" data-size="sm" data-variant="soft" href="'+classHref(s.key,"ops")+'">All ops →</a>';
+ w.append(qa);
  w.append(pendingIntentsCard(s));
  const risk=atRiskCard(s); if(risk)w.append(risk);
  w.append(canvasPanel(s));
@@ -999,6 +1021,8 @@ function renderOverview(s,w){
  w.append(reportsCard(s));
  $("#ovPrompt").onclick=()=>showPrompt(s);
  $("#ovDeliver").onclick=()=>showDeliver(s);
+ $("#ovGrade").onclick=()=>quickGradeSweep(s);
+ $("#ovGenFb").onclick=()=>showBulkFeedback(pendingFeedback(s),"Generate feedback - "+s.key,0);
 }
 
 // Pending intents strip: what the console has filed into gradebook/intents/ but a
@@ -1454,6 +1478,69 @@ function showGenFeedback(s,aid){
   "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>");
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
  if(!noop)wireSend(s,"gen-feedback",aid,txt,path=>drawerSent(s,path,"gen-feedback",aid));
+}
+
+// ---- bulk / fan-out actions (dashboard "all classes" + per-class quick actions) ----
+// AI activities in one LOADED section that still have submissions without a note.
+function pendingFeedback(s){ return heldActs(s).map(a=>({s,aid:a.id,pending:reviewRows(s,a.id).filter(x=>!x.r.note).length})).filter(it=>it.pending>0); }
+
+// One human-readable prompt spanning many (section,activity) pending drafts, for
+// the Copy / Open-in-Claude one-shot path (Send files individual gen-feedback
+// intents instead). Grouped per teacher clone. UI-only: NOT an intent format.
+function batchFeedbackPrompt(items){
+ const byRepo=new Map();
+ items.forEach(it=>{ if(!byRepo.has(it.s.repo))byRepo.set(it.s.repo,{s:it.s,acts:[]}); byRepo.get(it.s.repo).acts.push(it); });
+ const total=items.reduce((n,it)=>n+it.pending,0);
+ let out="# Generate AI feedback drafts - "+total+" pending across "+byRepo.size+" class(es)\n\n"+
+  "For EACH teacher clone below: pull it, then for each listed activity turn every gradebook/notes-input/<id>/<repo>.md that has NO matching gradebook/notes/<id>/<repo>.md into a draft note, following that input file's embedded skeleton and output format EXACTLY (student-facing prose; then a line with only ---; then the instructor-only rubric breakdown, a \"Proposed total: N/<max>\" line, and the \"AI-authored likelihood\" line). Open any listed screenshots to judge design. DRAFTS ONLY - never write grades.csv, flip publish, publish to students, or push Canvas; skip repos that already have a note. Commit and push the new notes to each teacher repo when done.\n\n";
+ for(const {s,acts} of byRepo.values()) out+="## "+s.subject+" section "+s.section+"\nWork from: "+workFrom(s)+"\n"+acts.map(it=>"- "+it.aid+" ("+it.pending+" without a draft)").join("\n")+"\n\n";
+ return out;
+}
+
+// Drawer shared by the dashboard-all and per-class "Generate feedback" buttons.
+// Send files one existing gen-feedback intent per activity (loops fileGenFeedback,
+// no new schema); Copy / Open in Claude carry the combined prompt.
+function showBulkFeedback(items,title,unloaded){
+ const total=items.reduce((n,it)=>n+it.pending,0);
+ const un=unloaded?"<p class='warnline'>"+unloaded+" class(es) not loaded - not included. Load them on the dashboard for full coverage.</p>":"";
+ if(!total){ openDrawer("<h3>"+esc(title)+"</h3>"+un+"<p class='warnline'>No pending drafts: every AI submission already has a note. If you just ran a sweep, hit Refresh and try again.</p>"); return; }
+ const txt=batchFeedbackPrompt(items);
+ openDrawer("<h3>"+esc(title)+"</h3><div class='muted'>"+total+" submission(s) without a note across "+items.length+" activity/ies · runs in a Claude Code session (no GitHub Models)</div>"+un+CONSEQUENCE+
+  "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='bfFile'>Send "+items.length+" intent(s) to repo(s) →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div>"+
+  "<div id='bfOut' class='mut' data-size='sm' style='margin-bottom:8px'></div>"+
+  "<pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>");
+ $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
+ $("#bfFile").onclick=async()=>{
+  const b=$("#bfFile"); b.disabled=true; b.textContent="Filing…"; const out=$("#bfOut"); let ok=0,err=0;
+  for(const it of items){
+   try{ const p=await fileGenFeedback(it.s,it.aid); markSent(it.s.section,"gen-feedback",it.aid); invalidateIntents(it.s.key); out.innerHTML+="✓ "+esc(it.s.key)+" "+esc(it.aid)+" → "+esc(p.split("/").pop())+"<br>"; ok++; }
+   catch(e){ out.innerHTML+="✗ "+esc(it.s.key)+" "+esc(it.aid)+": "+esc(e.message)+"<br>"; err++; }
+  }
+  b.textContent="Filed "+ok+(err?" · "+err+" failed":"")+" ✓ - run pending intents in a Claude Code session";
+ };
+}
+
+// Grade sweep for one section (dry_run=false writes the gradebook, teacher-side).
+async function quickGradeSweep(sc){
+ const ok=await confirmExecute("run the grade sweep (writes the gradebook) on "+sc.key,sc.section);
+ if(ok) runOp(sc,{file:"grade.yml",label:"Grade sweep",execDanger:"write the gradebook on "+sc.key},{dry_run:"false"},true,true);
+}
+
+// ---- dashboard fan-outs (all classes) ----
+async function bulkGradeSweep(){
+ const scs=sections(); if(!scs.length)return;
+ const ok=await confirmExecute("run the grade sweep (writes the gradebook) on ALL "+scs.length+" classes",String(scs.length));
+ if(!ok)return;
+ for(const sc of scs) runOp(sc,{file:"grade.yml",label:"Grade sweep",execDanger:"write the gradebook on "+sc.key},{dry_run:"false"},true,true);
+}
+function bulkAudit(){
+ const scs=sections(); const audits=[{file:"canvas-crosscheck.yml",label:"Canvas cross-check"},{file:"repo-coverage.yml",label:"Repo coverage"}];
+ for(const sc of scs)for(const a of audits) runOp(sc,a,{},false);
+}
+function bulkFeedbackAll(){
+ const scs=sections(); const loaded=scs.filter(sc=>sectionCached(sc.key));
+ let items=[]; loaded.forEach(sc=>{ items=items.concat(pendingFeedback(sectionCached(sc.key))); });
+ showBulkFeedback(items,"Generate feedback - all classes",scs.length-loaded.length);
 }
 
 function showApplyAI(s,aid){
