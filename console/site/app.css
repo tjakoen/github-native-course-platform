@@ -36,6 +36,13 @@ button.tab:disabled{opacity:.4;cursor:not-allowed}
 .matrix th.stu{z-index:3;background:var(--paper-2)}
 .cell{cursor:pointer;text-align:center;font-variant-numeric:tabular-nums}
 .cell:hover,.cell:focus-visible{outline:2px solid var(--color-accent);outline-offset:-2px}
+/* heat cell: hue from the score fraction (--pct, 0..1), computed in CSS so an OS
+   light/dark flip recolors without a repaint (documented monochrome exception) */
+.cell[style*="--pct"]{background:hsl(calc(var(--pct)*120) 55% 90%)}
+@media(prefers-color-scheme:dark){:root:not([data-color-scheme=light]) .cell[style*="--pct"]{background:hsl(calc(var(--pct)*120) 30% 24%)}}
+:root[data-color-scheme=dark] .cell[style*="--pct"]{background:hsl(calc(var(--pct)*120) 30% 24%)}
+/* attendance presence cells are display-only — do not look clickable */
+.attcell{text-align:center;font-variant-numeric:tabular-nums}
 /* sortable column headers (Students) — keyboard-operable, so show the affordance */
 .matrix th.sortable{cursor:pointer;user-select:none}
 .matrix th.sortable:hover{color:var(--color-accent)}
@@ -51,6 +58,11 @@ tr[data-s]{cursor:pointer}
 .badge[data-tone=muted]{color:var(--color-muted)}
 /* override decision — accent hue, distinct from the AI-lane "held" purple */
 .badge[data-tone=ov]{color:var(--color-accent);border-color:var(--color-accent)}
+/* review meter decision-mix segments (grain ships only ok/bad/pending; the
+   grading status hues are the documented monochrome exception) */
+.meter__seg[data-tone=good]{background:var(--good)}
+.meter__seg[data-tone=ov]{background:var(--color-accent)}
+.meter__seg[data-tone=warn]{background:var(--warn)}
 .mut{color:var(--color-muted)}.rt{text-align:right}.center{text-align:center}
 .pill{font-size:var(--text-xs);color:var(--color-muted);font-weight:var(--font-weight-regular)}
 .tot{font-weight:var(--font-weight-bold);font-variant-numeric:tabular-nums}
@@ -133,7 +145,14 @@ textarea.fta.mono{font-family:var(--font-mono);font-size:var(--text-xs);line-hei
 .scan-row--center{align-items:center}
 
 /* ---- app-shell era (LMS layout) ---- */
+/* skip-to-content link: off-screen until focused, then pinned top-left */
+.skip-link{position:fixed;left:var(--space-2);top:-4rem;z-index:100;background:var(--paper);color:var(--color-accent);border:1px solid var(--color-accent);border-radius:var(--radius-sm);padding:var(--space-2) var(--space-3);text-decoration:none;transition:top .12s ease}
+.skip-link:focus{top:var(--space-2)}
+/* the Tour nav-item is a real <button>; reset it to look like the sibling links */
+.nav-item--btn{border:0;background:none;width:100%;cursor:pointer;font:inherit;text-align:left}
 .app-shell__main{overflow:auto}
+/* the SPA route-focus target must not draw a focus ring on the scroll container */
+.app-shell__main:focus{outline:none}
 .app-shell__main .wrap{margin:0;max-width:var(--wrap-max)}
 .app-shell__topbar{display:flex;align-items:center;gap:var(--space-3)}
 .app-shell__topbar .tab-bar{flex:1 1 auto;min-width:0;margin:0;border-bottom:0;background:transparent}
@@ -171,7 +190,7 @@ textarea.fta.mono{font-family:var(--font-mono);font-size:var(--text-xs);line-hei
 /* pin RUN to the end of its line instead of letting it wander after the inputs */
 .opform .oprunbtn{margin-left:auto;align-self:flex-end}
 .confirm-dialog{border:1px solid var(--color-line);border-radius:var(--radius-md);background:var(--paper);color:inherit;padding:var(--space-4);max-width:min(640px,92vw);max-height:85vh;display:flex;flex-direction:column}
-.confirm-dialog::backdrop{background:rgb(0 0 0/.35)}
+.confirm-dialog::backdrop{background:color-mix(in srgb,var(--ink) 35%,transparent)}
 .confirm-dialog h3{margin:0 0 var(--space-2)}
 /* the diff/pre is the only growable part: it scrolls inside the dialog so the
    title, summary, and Commit/Cancel buttons stay on screen at any file size */

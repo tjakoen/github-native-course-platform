@@ -146,7 +146,8 @@ function setNav(){
 function setTabs(key,mode,s){
  const t=$("#ctxTabs");
  if(!key){t.innerHTML="";return;}
- const items=[["","Overview","overview"],["gradebook","Gradebook","book"],["activities","Activities"+(s?" ("+s.stats.activities+")":""),"act"],["students","Students"+(s?" ("+s.stats.students+")":""),"stu"],["review","AI Review"+(s?" ("+heldUnreviewed(s)+")":""),"ai"],["attendance","Attendance"+(s&&s.stats.sessions?" ("+s.stats.sessions+")":""),"att"],["ops","Ops","ops"]];
+ const cnt=n=>n>0?" ("+n+")":"";   // hide zero-count badges rather than showing "(0)"
+ const items=[["","Overview","overview"],["gradebook","Gradebook","book"],["activities","Activities"+(s?cnt(s.stats.activities):""),"act"],["students","Students"+(s?cnt(s.stats.students):""),"stu"],["review","AI Review"+(s?cnt(heldUnreviewed(s)):""),"ai"],["attendance","Attendance"+(s?cnt(s.stats.sessions):""),"att"],["ops","Ops","ops"]];
  t.innerHTML=items.map(([sub,l,m])=>{const on=m===mode||(m==="stu"&&String(mode).startsWith("profile:"))||(m==="ai"&&mode==="revdetail")||(m==="act"&&mode==="actnew");return "<a class='tab' href='"+classHref(key,sub)+"'"+(on?" aria-current='page' data-active='true'":"")+">"+l+"</a>";}).join("");
 }
 
@@ -227,7 +228,9 @@ async function withSection(key,fn){
   fn(s);
  }catch(e){
   if(e instanceof AuthError){ main.innerHTML="<div class='boot'>"+esc(e.message)+"</div>"; openSettings(false); }
-  else main.innerHTML="<div class='boot'>Load failed: "+esc(e.message)+" · <a href='"+classHref(key)+"'>retry</a></div>";
+  // A wrong-scope PAT (403/404) is not an AuthError, so a bare "retry" can never
+  // work - always offer the way to fix the token.
+  else main.innerHTML="<div class='boot'>Load failed: "+esc(e.message)+" · <a href='"+classHref(key)+"'>retry</a> · <a href='#/settings'>check token scope in Settings</a></div>";
  }
 }
 
@@ -501,7 +504,14 @@ route("#/c/:key/review/:aid", p=>classView(p.key,"ai",{aid:p.aid}));
 route("#/c/:key/review/:aid/:skey", p=>classView(p.key,"revdetail",{aid:p.aid,skey:p.skey}));
 route("#/c/:key/attendance", p=>classView(p.key,"att"));
 fallback(()=>go("#/"));
-beforeEach(()=>{ setNav(); if(detailKey){document.removeEventListener("keydown",detailKey);detailKey=null;} document.querySelectorAll(".drawer,.drawer-modal").forEach(d=>d.remove()); });
+let lastFocusHash=null;
+beforeEach(()=>{ setNav(); if(detailKey){document.removeEventListener("keydown",detailKey);detailKey=null;} document.querySelectorAll(".drawer,.drawer-modal").forEach(d=>d.remove());
+ // SPA a11y: on a real route change (not a same-route repaint after a decision
+ // save, which would steal focus from an open textarea), move focus to the main
+ // content region. #main is never replaced (only its innerHTML), so focusing the
+ // stable container survives the async content fill.
+ const h=location.hash||"#/"; if(h!==lastFocusHash){ lastFocusHash=h; const m=$("#main"); if(m){ m.setAttribute("tabindex","-1"); try{m.focus({preventScroll:true});}catch(e){} } }
+});
 
 let started=false;
 async function boot(){
@@ -537,12 +547,19 @@ async function boot(){
 }
 
 // static-shell header controls
+$(".skip-link")?.addEventListener("click",e=>{ e.preventDefault(); const m=$("#main"); if(m){ m.setAttribute("tabindex","-1"); m.focus(); m.scrollTop=0; } });
 $("#reload").onclick=()=>{ const k=curKey(); invalidate(k); dispatch(); };
 $("#theme").onclick=()=>toggleTheme();
 initSearch(()=>dispatch());
 
-function curScheme(){ return document.documentElement.getAttribute("data-color-scheme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"); }
-function cellColor(pct){ if(pct==null)return""; const g=Math.round(pct*120); const dark=curScheme()==="dark"; return "background:hsl("+g+"deg "+(dark?"30%":"55%")+" "+(dark?"24%":"90%")+")"; }
+// Heat cell: emit the score fraction as a --pct custom property; the hsl is
+// computed in CSS (.cell[style*="--pct"]) so an OS light/dark flip mid-session
+// recolors every cell with no repaint. Empty when there is no score.
+function cellColor(pct){ return pct==null?"":"--pct:"+ (Math.round(pct*1000)/1000); }
+// Repaint the current view on an OS scheme flip so anything else that reads the
+// scheme at render time (badges, tint) follows along; the heat cells recolor via
+// CSS regardless. Guarded so an explicit in-app theme choice is not overridden.
+try{ matchMedia("(prefers-color-scheme:dark)").addEventListener("change",()=>{ if(!localStorage.getItem("grain-color-scheme")) render(); }); }catch(e){}
 // review decisions now live in lib/decisions.mjs (same storage key + dkey shape)
 
 // ---- Flags card (in-class, on the Overview). Engine FLAGS.md + reports/FLAGGED.md,
@@ -583,7 +600,7 @@ function reportsCard(s){
    const href=md?reportHref(sc.key,"reports/"+f.name):f.html_url;
    return "<li class='content-index__item'><span class='content-index__title'><a href='"+esc(href)+"'"+(md?"":" target='_blank' rel='noopener'")+">"+esc(f.name)+"</a></span><span class='content-index__meta'>"+(f.size!=null?Math.max(1,Math.round(f.size/1024))+" KB":"")+(md?"":" · on GitHub")+"</span></li>";
   }).join("")+"</ul>";
- }).catch(()=>{ const box=card.querySelector(".rmore"); if(box)box.textContent="reports/ not readable (token scope?)."; });
+ }).catch(()=>{ const box=card.querySelector(".rmore"); if(box)box.innerHTML="reports/ not readable - check this repo's token scope in <a href='#/settings'>Settings</a>."; });
  return card;
 }
 function reportViewer(key,path){
@@ -728,7 +745,7 @@ function materialCard(sc,op){
   const slot=c.querySelector(".oprun"); if(!slot)return;
   const r=runs&&runs[0]; if(!runs){slot.textContent="no runs (or PAT lacks Actions scope)";return;}
   if(!r){slot.textContent="never run";return;}
-  slot.innerHTML="<a href='"+esc(r.html_url)+"' target='_blank' rel='noopener'><span class='badge' data-tone='"+(r.status!=="completed"?"held":r.conclusion==="success"?"good":"bad")+"'>"+esc(r.status!=="completed"?r.status:(r.conclusion||"done"))+"</span></a>";
+  slot.innerHTML="<a href='"+esc(r.html_url)+"' target='_blank' rel='noopener'><span class='badge' data-tone='"+(r.status!=="completed"?"held":r.conclusion==="success"?"good":"bad")+"'>"+esc(r.status!=="completed"?r.status:(r.conclusion||"done"))+"</span></a> <span class='mut'>"+new Date(r.created_at).toLocaleString()+"</span>";
  }).catch(()=>{});
  ghJSON2("/repos/"+sc.org+"/"+sc.repo+"/contents/content").then(list=>{
   const box=c.querySelector(".unitpick"); if(!box)return;
@@ -1068,7 +1085,7 @@ function runsCard(s){
    return "<div class='timeline__entry'><span class='timeline__mark'></span><div class='timeline__head'><span class='timeline__who'>"+esc(label)+"</span> <span class='badge' data-tone='"+tone+"'>"+esc(r.status!=="completed"?r.status:(r.conclusion||"done"))+"</span> <a href='"+esc(r.html_url)+"' target='_blank' rel='noopener'>run →</a></div><div class='timeline__hint'>"+new Date(r.created_at).toLocaleString()+"</div></div>";
   }).join("")+"</div></div>";
  })
- .catch(()=>{ const box=card.querySelector(".runsbox"); if(box)box.textContent="Runs unavailable (token scope?)."; });
+ .catch(()=>{ const box=card.querySelector(".runsbox"); if(box)box.innerHTML="Runs unavailable - this repo's PAT needs Actions: Read (<a href='#/settings'>Settings</a>)."; });
  return card;
 }
 function renderMatrixOnly(s){ const old=$("#matrixcard"); if(old){const n=matrix(s);old.replaceWith(n);} }
@@ -1141,7 +1158,7 @@ function attMatrix(s,dates){
   const nm=esc(st.name||(st.attOnly?"(attendance only)":"(blank)"));
   const nameCell=st.attOnly?nm:"<a href='"+profileHref(s.key,skeyOf(st))+"'>"+nm+"</a>";
   let tds="<td class='stu'>"+nameCell+(st.github?" <span class='pill'>@"+esc(st.github)+"</span>":"")+"</td><td class='mut'>"+esc(st.number||"-")+"</td>";
-  dates.forEach(d=>{tds+=present.has(d)?"<td class='cell'><b>✓</b></td>":"<td class='cell mut'>·</td>";});
+  dates.forEach(d=>{tds+=present.has(d)?"<td class='attcell'><b>✓</b></td>":"<td class='attcell mut'>·</td>";});
   const cnt=a?a.count:0, pct=Math.round((cnt/dates.length)*100);
   // emphasize the at-risk students (warn), do NOT mute them - the muted cell was
   // inverted emphasis, dimming exactly the rows that need a look.
@@ -1266,7 +1283,11 @@ function renderAI(s,w){
    "<div class='revbar__info'><b>"+esc(revAct)+"</b> · reviewed <b>"+done+"/"+rows.length+"</b> · "+badges+sentHint+"</div>"+
    "<div class='revbar__act'>"+(primary?"<button class='btn' data-size='sm'"+(primary.soft?" data-variant='soft'":"")+" id='rvPrimary'>"+esc(primary.label)+"</button>":"")+overflow+"</div>"+
   "</div>"+
-  '<div class="meter" role="meter" aria-label="Review progress" aria-valuenow="'+pct+'" aria-valuemin="0" aria-valuemax="100"><span class="meter__seg" data-tone="ok" style="--seg:'+pct+'%"></span></div>';
+  // the progress meter shows the decision MIX, not just a single reviewed bar:
+  // approved / override / flagged segments (the rest is the unreviewed remainder).
+  '<div class="meter" role="meter" aria-label="Reviewed '+done+' of '+rows.length+'" aria-valuenow="'+done+'" aria-valuemin="0" aria-valuemax="'+rows.length+'">'+
+   [[appr,"good"],[ov,"ov"],[fl,"warn"]].map(([n,t])=>n>0?'<span class="meter__seg" data-tone="'+t+'" style="--seg:'+(n/rows.length*100)+'%"></span>':"").join("")+
+  '</div>';
  w.append(bar);
  // queue table
  const card=el("div","card"); card.dataset.pad="sm"; card.append(el("h2","card__title","Review queue - click a row to read the feedback and decide"));

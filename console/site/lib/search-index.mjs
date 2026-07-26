@@ -22,7 +22,7 @@ export function initSearch(refreshView) {
 
     push("Dashboard", "all classes", "View", "#/");
     push("Settings", "repos, tokens, decision backups", "View", "#/settings");
-    push("Scanner", "attendance QR (phone)", "View", "scanner/");
+    push("Attendance scanner", "QR scanner (phone)", "View", "scanner/");
 
     for (const sc of sections()) {
       const label = sc.subject + " · " + sc.section;

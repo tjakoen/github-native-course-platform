@@ -115,6 +115,8 @@ const shot = async (name, full) => { await page.waitForTimeout(900); await page.
 
 await page.goto("http://localhost:8931/#/");
 await shot("01-dashboard");
+// Phase G (P3): shell a11y + one-name scanner.
+console.log("G skip-link:", await page.evaluate(() => !!document.querySelector("a.skip-link[href='#main']")), "· reload aria:", await page.evaluate(() => !!document.querySelector("#reload[aria-label]")), "· theme aria:", await page.evaluate(() => !!document.querySelector("#theme[aria-label]")), "· scanner one-name:", await page.evaluate(() => [...document.querySelectorAll(".nav-item__label")].some(x => x.textContent === "Attendance scanner")));
 // Phase C: #/c/:key is the Overview (tiles, at-risk, Canvas preview, flags card,
 // runs, Reports card); the grade matrix is one tab deeper at /gradebook.
 await page.goto("http://localhost:8931/#/c/6APSI-2240"); await shot("02-overview");
@@ -122,6 +124,9 @@ await page.goto("http://localhost:8931/#/c/6APSI-2240"); await shot("02-overview
 console.log("overview pending-intents strip:", await page.evaluate(() => !![...document.querySelectorAll(".card h2")].find(h => h.textContent === "Pending intents")));
 await page.waitForTimeout(600); await page.evaluate(() => { const m = document.getElementById("main"); m.scrollTop = m.scrollHeight; }); await shot("02a-overview-bottom");
 await page.goto("http://localhost:8931/#/c/6APSI-2240/gradebook"); await shot("02-gradebook");
+// G: heat cells carry the score fraction as --pct (hsl computed in CSS, so an OS
+// scheme flip recolors with no repaint), not an inline hsl() background.
+console.log("G heat-cell --pct (no inline hsl):", await page.evaluate(() => { const c = document.querySelector("td.cell[style*='--pct']"); return !!c && !/hsl/i.test(c.getAttribute("style") || ""); }));
 await page.waitForTimeout(400); await page.evaluate(() => { const m = document.getElementById("main"); m.scrollTop = m.scrollHeight; }); await shot("02b-gradebook-bottom");
 // Phase D4: openNote splits the note into wrapping student/instructor halves and
 // (for a held/AI cell) links into the review detail. Click the m3a1 held cell.
@@ -174,10 +179,15 @@ console.log("profile alert strip (at-risk student):", await page.evaluate(() => 
 // Phase E3: attendance emphasizes at-risk rows (warn badge, not muted) + row links.
 await page.goto("http://localhost:8931/#/c/6APSI-2240/attendance"); await page.waitForTimeout(500);
 console.log("attendance warn emphasis:", await page.evaluate(() => !!document.querySelector("#attmatrix .badge[data-tone='warn']")), "· row profile link:", await page.evaluate(() => !!document.querySelector("#attmatrix td.stu a")));
+// G: presence cells are display-only (.attcell), no longer the clickable .cell.
+console.log("G attendance cells non-clickable:", await page.evaluate(() => document.querySelectorAll("#attmatrix .attcell").length > 0 && document.querySelectorAll("#attmatrix td.cell").length === 0));
 // Phase D1: AI Review stage header (stepper + one contextual primary + overflow).
 await page.goto("http://localhost:8931/#/c/6APSI-2240/review"); await shot("06-review");
 console.log("review stepper steps:", await page.evaluate(() => document.querySelectorAll(".stepper__step").length), "(want 4)");
 console.log("review has ONE primary:", await page.evaluate(() => !!document.querySelector("#rvPrimary")), "· overflow:", await page.evaluate(() => !!document.querySelector(".ovmenu")));
+// G: the review meter shows decision-mix segments (approved/override/flagged),
+// not a single reviewed bar (none here since nothing is decided in the fixture).
+console.log("G review meter is segmented:", await page.evaluate(() => !!document.querySelector(".card .meter")));
 // D1: overflow menu opens (native <details>)
 await page.evaluate(() => { const d = document.querySelector(".ovmenu"); if (d) d.open = true; });
 await shot("06d-review-overflow");
