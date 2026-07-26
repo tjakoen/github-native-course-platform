@@ -10,9 +10,11 @@ function loadJsQR() {
   if (!jsqrLoading) {
     jsqrLoading = new Promise((resolve, reject) => {
       const s = document.createElement("script");
-      s.src = "vendor/jsQR.js";
+      // Resolve against this module's URL, not the document: the scanner page
+      // lives at /scanner/, so a document-relative "vendor/jsQR.js" 404s there.
+      s.src = new URL("../vendor/jsQR.js", import.meta.url).href;
       s.onload = () => resolve(window.jsQR);
-      s.onerror = () => reject(new Error("could not load vendor/jsQR.js"));
+      s.onerror = () => reject(new Error("could not load " + s.src));
       document.head.append(s);
     });
   }
