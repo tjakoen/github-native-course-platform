@@ -32,7 +32,7 @@ export function confirmExecute(action, word){
   const d=document.createElement("dialog"); d.className="confirm-dialog";
   d.innerHTML="<h3>Execute: are you sure?</h3><p class='muted'>This will "+esc(action)+". Type <b>"+esc(word)+"</b> to confirm.</p>"+
    "<input class='field__input' id='ceWord' autocomplete='off'>"+
-   "<div style='display:flex;gap:8px;margin-top:10px'><button class='btn' data-size='sm' data-status='danger' id='ceOk' disabled>Execute</button><button class='btn' data-size='sm' data-variant='soft' id='ceNo'>Cancel</button></div>";
+   "<div style='display:flex;gap:var(--space-2);margin-top:10px'><button class='btn' data-size='sm' data-status='danger' id='ceOk' disabled>Execute</button><button class='btn' data-size='sm' data-variant='soft' id='ceNo'>Cancel</button></div>";
   document.body.append(d); d.showModal();
   const restore=()=>{ try{ if(prev&&prev.focus)prev.focus(); }catch(e){} };
   const inp=d.querySelector("#ceWord"), ok=d.querySelector("#ceOk");

@@ -53,7 +53,7 @@ const openInClaude=(sel="#ptxt",txt="")=> (txt||"").length>CLAUDE_URL_CAP
 function settingsFormHTML(c){
  // Each teacher repo gets its OWN row: URL + its own fine-grained PAT. One
  // rejected/expired token then only takes down that one section, not all.
- const rowHTML=(r={})=>"<div class='repoRow' style='display:flex;gap:8px;margin-bottom:8px;align-items:flex-start'>"+
+ const rowHTML=(r={})=>"<div class='repoRow' style='display:flex;gap:var(--space-2);margin-bottom:var(--space-2);align-items:flex-start'>"+
    "<div style='flex:1;min-width:0'>"+
     "<input class='field__input rUrl mono' type='text' value='"+esc(r.url||"")+"' placeholder='github.com/org/teacher-subject-section-name'>"+
     "<input class='field__input rTok' type='password' value='"+esc(r.token||"")+"' placeholder='github_pat_… (this repo's PAT)' style='margin-top:6px'>"+
@@ -61,18 +61,18 @@ function settingsFormHTML(c){
    "<button class='btn rDel' data-size='sm' data-variant='soft' title='Remove this repo' style='flex:none'>×</button>"+
   "</div>";
  return "<div class='muted'>Stored in THIS browser's localStorage only - anyone with access to this browser profile can read the tokens. A PAT scoped to just the teacher repo loads gradebooks and lets you file Intents. To also see <b>student code and screenshots</b> (which live in the submission repos), that repo's PAT needs read access to the whole org - use a classic PAT with <code>repo</code> scope, or a fine-grained PAT with <b>All repositories</b> (Contents: Read). Short expiry recommended.</div>"+
-  "<div class='field__label' style='margin-top:12px'>Teacher repos <span class='mut'>- one repo + its own PAT per row</span></div>"+
+  "<div class='field__label' style='margin-top:var(--space-3)'>Teacher repos <span class='mut'>- one repo + its own PAT per row</span></div>"+
   "<div id='sRepos'>"+((c.repos.length?c.repos:[{}]).map(rowHTML).join(""))+"</div>"+
   "<button class='btn' data-size='sm' data-variant='soft' id='sAdd' style='margin-top:2px'>+ Add repo</button>"+
-  "<div style='display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap'><button class='btn' data-size='sm' id='sSave'>Save & load</button> <button class='btn' data-size='sm' data-variant='soft' id='sTest'>Test connection</button> <span class='mut' id='sMsg' style='font-size:12px'></span></div>"+
-  "<div class='field__label' style='margin-top:16px'>Review decisions <span class='mut'>- browser-local; back them up</span></div>"+
-  "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'><button class='btn' data-size='sm' data-variant='soft' id='sExpDec'>↓ Export</button> <button class='btn' data-size='sm' data-variant='soft' id='sImpDec'>↑ Import</button><input type='file' id='sImpFile' accept='application/json,.json' style='display:none'></div>"+
-  "<div class='field__label' style='margin-top:16px'>Cached data <span class='mut'>- gradebooks kept in this browser for fast reloads</span></div>"+
+  "<div style='display:flex;gap:var(--space-2);align-items:center;margin-top:var(--space-4);flex-wrap:wrap'><button class='btn' data-size='sm' id='sSave'>Save & load</button> <button class='btn' data-size='sm' data-variant='soft' id='sTest'>Test connection</button> <span class='mut' id='sMsg' style='font-size:12px'></span></div>"+
+  "<div class='field__label' style='margin-top:var(--space-4)'>Review decisions <span class='mut'>- browser-local; back them up</span></div>"+
+  "<div style='display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap'><button class='btn' data-size='sm' data-variant='soft' id='sExpDec'>↓ Export</button> <button class='btn' data-size='sm' data-variant='soft' id='sImpDec'>↑ Import</button><input type='file' id='sImpFile' accept='application/json,.json' style='display:none'></div>"+
+  "<div class='field__label' style='margin-top:var(--space-4)'>Cached data <span class='mut'>- gradebooks kept in this browser for fast reloads</span></div>"+
   "<div class='muted' data-size='sm'>To make reloads fast, gradebook data (including student names and numbers) is cached in this browser's IndexedDB. It never leaves the machine, is swept after 7 days, and is wiped when you remove all repos. Clear it now if you are on a shared computer.</div>"+
-  "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px'><button class='btn' data-size='sm' data-variant='soft' id='sClearCache'>Clear cached data</button> <span class='mut' id='sCacheMsg' style='font-size:12px'></span></div>";
+  "<div style='display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;margin-top:6px'><button class='btn' data-size='sm' data-variant='soft' id='sClearCache'>Clear cached data</button> <span class='mut' id='sCacheMsg' style='font-size:12px'></span></div>";
 }
 function wireSettingsForm(scope,c,close,firstRun){
- const rowHTML=()=>"<div class='repoRow' style='display:flex;gap:8px;margin-bottom:8px;align-items:flex-start'>"+
+ const rowHTML=()=>"<div class='repoRow' style='display:flex;gap:var(--space-2);margin-bottom:var(--space-2);align-items:flex-start'>"+
    "<div style='flex:1;min-width:0'>"+
     "<input class='field__input rUrl mono' type='text' value='' placeholder='github.com/org/teacher-subject-section-name'>"+
     "<input class='field__input rTok' type='password' value='' placeholder='github_pat_… (this repo's PAT)' style='margin-top:6px'>"+
@@ -328,7 +328,7 @@ function renderStudentProfile(s,w,sk){
  const att=s.attendance&&s.attendance.students[st.number];
  const miss=missingWork(s,st);
  const head=el("div");
- head.innerHTML="<a class='mut' href='"+classHref(s.key,"students")+"'>← Students</a><h1 style='margin-top:4px'>"+esc(st.name||"(blank)")+"</h1>"+
+ head.innerHTML="<a class='mut' href='"+classHref(s.key,"students")+"'>← Students</a><h1 style='margin-top:var(--space-1)'>"+esc(st.name||"(blank)")+"</h1>"+
   "<div class='muted'>#"+esc(st.number||"?")+" · @"+esc(st.github||"?")+" · "+esc(s.subject)+" · "+esc(s.section)+"</div>";
  w.append(head);
  // at-risk alert strip (same rate policy as the rest of the app)
@@ -349,7 +349,7 @@ function renderStudentProfile(s,w,sk){
   const mismatch=st.number&&sj.studentNumber&&String(sj.studentNumber).trim()!==st.number;
   box.innerHTML=
    "<div><a href='"+esc(ws.url)+"' target='_blank' rel='noopener'>"+esc(ws.repo)+"</a></div>"+
-   "<ul class='status-list' data-grade='smooth' style='margin-top:8px'>"+
+   "<ul class='status-list' data-grade='smooth' style='margin-top:var(--space-2)'>"+
     "<li class='status-list__item'><span class='status-list__mark'>"+(sj.studentNumber?"✓":"✗")+"</span><span class='status-list__title'>student.json "+(sj.studentNumber?"filled":"blank")+(mismatch?" <span class='badge' data-tone='bad'>number mismatch vs gradebook</span>":"")+"</span></li>"+
     "<li class='status-list__item'><span class='status-list__mark'>"+(ws.gradesDelivered?"✓":"·")+"</span><span class='status-list__title'>GRADES.md delivered</span></li>"+
     "<li class='status-list__item'><span class='status-list__mark'>"+(ws.feedbackDelivered?"✓":"·")+"</span><span class='status-list__title'>FEEDBACK.md delivered</span></li>"+
@@ -611,7 +611,7 @@ function reportViewer(key,path){
  if(!sc){ w.innerHTML="<div class='boot'>Unknown class "+esc(key)+". <a href='#/'>Dashboard</a></div>"; return; }
  const back=classHref(key);
  if(!/^(reports|gradebook)\/[\w][\w./ -]*$/.test(path)||path.includes("..")){ w.innerHTML="<div class='boot'>Not a report path. <a href='"+back+"'>Back to "+esc(sc.section)+"</a></div>"; return; }
- w.innerHTML="<a class='mut' href='"+back+"'>← "+esc(sc.subject)+" · "+esc(sc.section)+"</a><h1 style='margin-top:4px'>"+esc(path.split("/").pop())+"</h1>"+
+ w.innerHTML="<a class='mut' href='"+back+"'>← "+esc(sc.subject)+" · "+esc(sc.section)+"</a><h1 style='margin-top:var(--space-1)'>"+esc(path.split("/").pop())+"</h1>"+
   "<div class='muted'>"+esc(sc.subject)+" · "+esc(sc.section)+" · <a href='https://github.com/"+esc(sc.org)+"/"+esc(sc.repo)+"/blob/main/"+esc(path)+"' target='_blank' rel='noopener'>open on GitHub</a></div>"+
   "<div class='card' data-pad='sm'><div class='rbody mut'>Loading…</div></div>";
  ghText("/repos/"+sc.org+"/"+sc.repo+"/contents/"+path.split("/").map(encodeURIComponent).join("/")).then(md=>{
@@ -740,7 +740,7 @@ function materialCard(sc,op){
  c.innerHTML="<div class='ophead'><b>"+esc(op.label)+"</b> <span class='mut mono'>"+esc(op.file)+"</span> <span class='oprun mut'>checking…</span></div>"+
   "<p class='mut opdesc'>"+esc(op.desc)+" <em>"+esc(op.note||"")+"</em></p>"+
   "<div class='mut unitpick'>Loading content/ units…</div>"+
-  "<div class='opform' style='margin-top:8px'><button class='btn' data-size='sm' id='pmAll' data-variant='soft'>Select all</button><button class='btn' data-size='sm' id='pmGo'>Publish selected</button><span class='mut' id='pmMsg'></span></div>";
+  "<div class='opform' style='margin-top:var(--space-2)'><button class='btn' data-size='sm' id='pmAll' data-variant='soft'>Select all</button><button class='btn' data-size='sm' id='pmGo'>Publish selected</button><span class='mut' id='pmMsg'></span></div>";
  listRuns(sc.org,sc.repo,op.file,1).then(runs=>{
   const slot=c.querySelector(".oprun"); if(!slot)return;
   const r=runs&&runs[0]; if(!runs){slot.textContent="no runs (or PAT lacks Actions scope)";return;}
@@ -888,7 +888,7 @@ function renderActivityNew(s,w){
  const sc=findSc(s.key)||s;
  const back=classHref(s.key,"activities");
  const head=el("div");
- head.innerHTML="<a class='mut' href='"+back+"'>← Activities</a><h1 style='margin-top:4px'>New activity - "+esc(s.section)+"</h1>"+
+ head.innerHTML="<a class='mut' href='"+back+"'>← Activities</a><h1 style='margin-top:var(--space-1)'>New activity - "+esc(s.section)+"</h1>"+
   "<p class='lede' data-size='sm'>Nothing publishes to students from here. If you commit the entry then refresh, resume from the <b>scaffold</b> button on the activity's Activities row.</p>"+
   "<ol class='stepper' style='margin-bottom:0'>"+
    "<li class='stepper__step' data-state='active' aria-current='step'><span class='stepper__dot'>1</span><span class='stepper__label'>Commit entry</span></li>"+
@@ -916,8 +916,8 @@ function renderActivityNew(s,w){
    "<label class='field opf' data-fam='manual tests ai'><span class='field__label'>content unit <span class='mut'>(folder under content/, optional)</span></span><input class='field__input mono' id='naContent' list='naUnits'><datalist id='naUnits'></datalist></label>"+
    "<label class='chips__chip'><input type='checkbox' id='naLocked' checked><span>locked (scores freeze once graded)</span></label>"+
   "</div>"+
-  "<p class='mut' style='margin:8px 0'>\"publish\" starts false - delivery stays behind review/finalize.</p>"+
-  "<div style='display:flex;gap:8px;align-items:center'><button class='btn' data-size='sm' id='naCommit'>Review diff & commit entry</button><span class='mut' id='naMsg'></span></div>"+
+  "<p class='mut' style='margin:var(--space-2) 0'>\"publish\" starts false - delivery stays behind review/finalize.</p>"+
+  "<div style='display:flex;gap:var(--space-2);align-items:center'><button class='btn' data-size='sm' id='naCommit'>Review diff & commit entry</button><span class='mut' id='naMsg'></span></div>"+
   "<div id='naNext'></div>";
  w.append(card);
  ghJSON2("/repos/"+sc.org+"/"+sc.repo+"/contents/content").then(list=>{
@@ -953,7 +953,7 @@ function renderActivityNew(s,w){
   msg.textContent="Committed ✓";
   const nxt=card.querySelector("#naNext");
   const txt=buildNewActivity(s,e);
-  nxt.innerHTML="<h2 style='margin-top:16px'>2 · Scaffolds (intent for Claude Code)</h2>"+
+  nxt.innerHTML="<h2 style='margin-top:var(--space-4)'>2 · Scaffolds (intent for Claude Code)</h2>"+
    "<div style='margin:10px 0'><button class='btn' data-size='sm' id='send'>Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='naCp'>Copy</button>"+openInClaude("#naPrompt",txt)+"</div>"+
    "<pre class='code-block prompt' id='naPrompt'>"+esc(txt)+"</pre>"+
    "<h2>3 · Set up in Canvas</h2><p class='mut'>Author the Canvas assignment from the new entry (dry-run; execute lives behind Set up in Canvas / Ops).</p>"+
@@ -1201,7 +1201,7 @@ const CONSEQUENCE="<p class='mut consequence' data-size='sm'><b>Send</b> files t
 // the trail does not go cold: name the filed intent and the two things left to do.
 function nextStepCard(path){
  const host=$("#actRow"); if(!host)return;
- host.innerHTML="<div class='card nextstep' data-pad='sm'><h4 style='margin:0 0 4px'>Filed ✓</h4>"+
+ host.innerHTML="<div class='card nextstep' data-pad='sm'><h4 style='margin:0 0 var(--space-1)'>Filed ✓</h4>"+
   "<p class='mut' data-size='sm'>Saved as <span class='mono'>"+esc(path.split("/").pop())+"</span> in gradebook/intents/.</p>"+
   "<ol class='status-list nextstep__steps'>"+
    "<li class='status-list__item'><span class='status-list__mark'>1</span><span class='status-list__title'>In a Claude Code session in the teacher repo, <b>run pending intents</b>.</span></li>"+
@@ -1388,7 +1388,7 @@ function renderReviewDetail(s,w,aid,skey){
      "<div id='lvCode' style='display:"+(lv==='code'?'block':'none')+"'>"+codeHTML(files)+"</div>"+
     "</div>";
   box.innerHTML="<a class='mut' href='"+back+"'>← AI Review · "+esc(aid)+"</a>"+
-   "<div class='rvhead' style='margin-top:4px'><h1 style='margin:0'>"+esc(st.name||"(blank)")+"</h1>"+chip+
+   "<div class='rvhead' style='margin-top:var(--space-1)'><h1 style='margin:0'>"+esc(st.name||"(blank)")+"</h1>"+chip+
      "<div class='rvnav'><button class='btn' data-size='sm' data-variant='soft' id='prev'"+(i<=0?" disabled":"")+">← Prev</button>"+
      "<span class='cnt'>"+(i+1)+" / "+order.length+(leftN?" · "+leftN+" left":" · queue clear")+"</span>"+
      "<button class='btn' data-size='sm' data-variant='soft' id='next'"+(i>=order.length-1?" disabled":"")+">Next →</button></div></div>"+
@@ -1398,19 +1398,19 @@ function renderReviewDetail(s,w,aid,skey){
    "<div class='rev2'"+(mediaEmpty?" data-solo='true'":"")+">"+
     mediaCol+
     "<div class='rvcol'>"+
-     "<div class='card' data-pad='sm' style='margin:0 0 12px'>"+
+     "<div class='card' data-pad='sm' style='margin:0 0 var(--space-3)'>"+
       "<div class='decision'>"+
       "<button class='btn' data-size='sm' id='dApprove'>✓ Approve "+(r.proposed!=null?r.proposed+"/"+max:"")+"</button>"+
       "<span>Override <input id='dOv' class='field__input num' type='number' min='0' max='"+max+"' value='"+(curDec&&curDec.status==='override'?curDec.score:(r.proposed!=null?r.proposed:''))+"'> /"+max+" <button class='btn' data-size='sm' data-variant='soft' id='dOvBtn'>Set</button></span>"+
       "<button class='btn' data-size='sm' data-variant='soft' id='dFlag'>⚑ Flag</button>"+
       "<button class='btn' data-size='sm' data-variant='soft' id='dClear'>Clear</button></div>"+
-      "<input class='field__input' id='dComment' style='width:100%;margin-top:8px' placeholder='Private note to yourself (goes to the apply prompt)…' value='"+esc(curDec&&curDec.comment||"")+"'>"+
+      "<input class='field__input' id='dComment' style='width:100%;margin-top:var(--space-2)' placeholder='Private note to yourself (goes to the apply prompt)…' value='"+esc(curDec&&curDec.comment||"")+"'>"+
      "</div>"+
      "<label class='field'><span class='field__label'>Student-facing feedback <span class='mut'>- delivered as FEEDBACK.md, prose only</span>"+(curDec&&curDec.studentText!=null?" <span class='badge' data-tone='held'>edited</span>":"")+"</span>"+
      "<textarea id='dStudent' class='field__input fta' data-grade='"+(curDec&&curDec.studentText!=null?"smooth":"grain")+"' rows='10'>"+esc(curDec&&curDec.studentText!=null?curDec.studentText:orig.student)+"</textarea></label>"+
      "<label class='field'><span class='field__label'>Instructor-only notes <span class='mut'>- never delivered to the student</span>"+(curDec&&curDec.instructorText!=null?" <span class='badge' data-tone='held'>edited</span>":"")+"</span>"+
      "<textarea id='dInstr' class='field__input fta mono' rows='12'>"+esc(curDec&&curDec.instructorText!=null?curDec.instructorText:orig.instructor)+"</textarea></label>"+
-     "<div style='display:flex;gap:8px;align-items:center;margin-top:8px'><button class='btn' data-size='sm' id='dSave'>Save edits</button> <button class='btn' data-size='sm' data-variant='soft' id='dRevert'>Revert to AI text</button> <span class='mut' id='dSaved' style='font-size:12px'></span></div>"+
+     "<div style='display:flex;gap:var(--space-2);align-items:center;margin-top:var(--space-2)'><button class='btn' data-size='sm' id='dSave'>Save edits</button> <button class='btn' data-size='sm' data-variant='soft' id='dRevert'>Revert to AI text</button> <span class='mut' id='dSaved' style='font-size:12px'></span></div>"+
     "</div>"+
    "</div>";
   const prev=$("#prev"),next=$("#next");
@@ -1524,7 +1524,7 @@ function openNote(s,skey,aid){
  // split the note into its two labelled halves (wrapping, not clipped) and, for a
  // held/AI cell, offer the way into the full review detail instead of a dead end.
  const parts=parseNote(r.note);
- const reviewLink=a.aiGraded?"<div style='margin:8px 0'><a class='btn' data-size='sm' data-variant='soft' href='"+detailHref(s.key,aid,skeyOf(st))+"'>Open in AI Review →</a></div>":"";
+ const reviewLink=a.aiGraded?"<div style='margin:var(--space-2) 0'><a class='btn' data-size='sm' data-variant='soft' href='"+detailHref(s.key,aid,skeyOf(st))+"'>Open in AI Review →</a></div>":"";
  const body=r.note?
    "<div class='notewrap'>"+
     (parts.student?"<section class='notehalf'><h4>Student-facing <span class='mut'>· prose only</span></h4><div class='noteprose'>"+esc(parts.student)+"</div></section>":"")+

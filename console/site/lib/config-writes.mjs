@@ -85,7 +85,7 @@ export async function editAssignments(sc, mutator, title) {
       d.innerHTML = "<h3>" + esc(title) + "</h3>" +
         "<p class='muted'>" + esc(summary) + " - one commit to <code>grader/assignments.json</code> on " + esc(sc.repo) + ".</p>" +
         "<pre class='code-block prompt'>" + esc(shown) + "</pre>" +
-        "<div style='display:flex;gap:8px;margin-top:10px'><button class='btn' data-size='sm' id='cwOk'>Commit</button><button class='btn' data-size='sm' data-variant='soft' id='cwNo'>Cancel</button></div>";
+        "<div style='display:flex;gap:var(--space-2);margin-top:10px'><button class='btn' data-size='sm' id='cwOk'>Commit</button><button class='btn' data-size='sm' data-variant='soft' id='cwNo'>Cancel</button></div>";
       document.body.append(d);
       d.showModal();
       d.querySelector("#cwOk").onclick = () => { d.close(); d.remove(); resolve(true); };
