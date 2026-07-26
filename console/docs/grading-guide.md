@@ -62,6 +62,33 @@ relative, sibling-aware grading with an honest spread.
 
 Each entry is a durable lesson, not a one-off. Newest rounds at the top.
 
+### 2026-07-27 round - m3a6 code capstone (6ADET) + multi-section apply-ai batch
+
+- **Judge the graded file's authorship separately from the demo runner.** A clean,
+  student-authored engine (`lib/`) can sit next to a `bin/main.dart` that carries a
+  second, differently-designed engine and an assistant-style comment ("Corrected the
+  names and typos from your original snippet"). That is real evidence of AI use in the
+  runner, but the differing designs argue the graded engine is the student's own. Do
+  not let a messy runner wipe a correct engine; flag it, ask the student to walk
+  through the runner, and score the engine on its merits (a cleanup issue, not a zero).
+- **Resemblance forced by a tight scaffold is not integrity evidence.** For a heavily
+  constrained activity, "looks like the reference solution" is expected and is not by
+  itself a reason to penalize. Reserve the top mark for work that exceeds the minimum;
+  give clean-but-minimal-plus-residual-nits the honest 17-19, not 20.
+- **A deliberate integrity zero still needs a finalize check.** An override to 0 on an
+  activity whose automated suite passes (e.g. 0/100 with 67/70 tests green) is a valid
+  instructor call, but the Canvas comment would show a passing automated line next to
+  the 0. Confirm the zero and keep the explanation on the stripped "Proposed total"
+  line before delivery.
+- **m3a6 (code flavor, /20) spread:** clean correct engines cluster 17-19; reserve 20
+  for genuinely top-tier; a missing required artifact (`HAUDEX.md`) is a clean -3.
+- **Tooling caveat:** an apply-ai intent's cited "flagged SHA" can be the repo's empty
+  initial commit, not the graded submission. Always grade at the actual graded SHA
+  (the one on the gradebook row); if they differ, the graded row is authoritative.
+- **Scan intents robustly.** `git pull --ff-only` silently no-ops on a diverged clone,
+  so a stale local tree can hide pending intents. Fetch + rebase (or check the tracked
+  file list) before concluding a repo has nothing pending.
+
 ### m3a3 (6APSI section 2240) - proctored quiz, design half
 
 - **A blank preview is not proof of zero design.** For an activity with a real
