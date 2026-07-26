@@ -151,12 +151,13 @@ Paperless attendance runs on the same repo. Two credentials, not to be confused:
 - **`ATTENDANCE_HMAC_SECRET`** - a repo secret (any random string, e.g.
   `openssl rand -hex 32`). GitHub Actions uses it automatically to sign and
   verify QRs; you never type it anywhere else.
-- **A fine-grained PAT** (Contents: read + write on this teacher repo) - you paste
-  this into the scanner page once; it is what actually records attendance, so
-  only you hold it.
+- **A fine-grained PAT** (Contents: read + write on this teacher repo) - you set
+  this once in the Course Console's Settings; it is what actually records
+  attendance, so only you hold it.
 
-The `Deploy attendance scanner` workflow enables Pages itself and serves only
-`scanner.html` (never the gradebook). Full walkthrough: [Attendance](attendance.md).
+Attendance scanning is done in the **Course Console**
+(`https://tjakoen.github.io/github-native-course-platform/scanner/`); there is no
+per-repo scanner to deploy. Full walkthrough: [Attendance](attendance.md).
 
 ## Later, when you have real students
 

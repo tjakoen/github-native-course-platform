@@ -97,7 +97,6 @@ acting only on an explicit `execute` / `publish=true`.
 | `generate-attendance-qrs.yml` | Signs and commits a per-student attendance QR into any workspace missing one; refreshes the teacher-side roster. Dry-run by default. See [Attendance](attendance.md). |
 | `verify-attendance.yml` | On each scanned batch CSV, verifies signatures, flags forgeries, and rebuilds the attendance summaries (including `summary.json`). |
 | `publish-attendance.yml` | Delivers each student their own `attendance/MY-ATTENDANCE.md` receipt; runs automatically after `verify-attendance`, or manually with a dry-run. The only step that writes attendance to student repos. See [Attendance](attendance.md). |
-| `deploy-scanner.yml` | Publishes only `attendance/scanner.html` to GitHub Pages (nothing else is served). |
 
 Repo **deletes and renames stay manual**: the tools flag them, a human performs
 them (they need the `delete_repo` scope).

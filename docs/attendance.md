@@ -18,10 +18,9 @@ instructor can record attendance.
    that URL on a phone home screen; it boots straight into the scanner - the
    console's old `#/scan` hash just redirects there), picks the section, and the
    phone camera becomes a QR reader showing roster names. Each scan is recorded
-   with a timestamp. (The per-repo Pages scanner in each teacher repo still
-   exists and works the same way; it is slated for retirement once the console
-   scanner has proved itself in a couple of real sessions. The CSV format is
-   unchanged either way.)
+   with a timestamp. (The old per-repo Pages scanner in each teacher repo has
+   been retired - the console is the one scanner now. The CSV format is
+   unchanged.)
 3. **Commit batches.** Scans are grouped into a *batch* (one scanning period).
    The instructor commits a batch at any time - safe against a dead phone - and
    starts a new batch for latecomers or a second class the same day. Each batch
@@ -103,7 +102,6 @@ the underlying batch CSV and re-run `Verify attendance`; the receipt follows.
 
 ```
 attendance/
-  scanner.html                         the Pages scanner app (no secret in it)
   roster.json                          studentNumber -> name (names only)
   ATTENDANCE.md                        auto-built roll-up (sessions + per-student tally)
   summary.json                         auto-built machine feed (per-student verified dates)
@@ -121,18 +119,12 @@ separate batches (label them, e.g. `class-a`, `class-b`).
 
 ## Look and feel
 
-The scanner wears the **GRAIN design system** (its Sourdough theme - the same
-editorial, monochrome look as the platform's other surfaces). GRAIN is
-**consumed as a package** (`@tjakoen/grain` on GitHub Packages), never copied
-into the repo: the `Deploy attendance scanner` workflow installs it and runs
-`attendance/build-theme.mjs`, which assembles the design tokens, base styling,
-self-hosted fonts, and only the components the page uses into a single
-`assets/grain.css` published next to the scanner. That file is a build product
-(git-ignored), so a GRAIN update is just a version bump in
-`attendance/package.json` and a re-deploy - nothing to hand-edit and no forked
-CSS to drift. The one local touch is a fast green/red pass/fail cue on each scan
-(a sanctioned token override on top of the package), since a door scanner needs
-that signal at a glance.
+The scanner lives in the **Course Console** (a bookmarkable page at `.../scanner/`),
+so there is nothing per-repo to build or deploy. It wears the console's **GRAIN
+design system**: a size-capped square camera with a reticle that flashes green on
+a good scan (red on a wrong-class or unreadable QR, muted on a duplicate) plus a
+short success beep, so a door scanner gives an at-a-glance and at-an-earshot
+signal.
 
 ## One-time setup
 
@@ -141,29 +133,24 @@ that signal at a glance.
    value = any random string (e.g. `openssl rand -hex 32`). It signs and verifies
    within the one repo; it need not match across repos. Rotating it invalidates
    existing QRs (re-run generate with `force`).
-2. **Enable the scanner site.** The `Deploy attendance scanner` workflow enables
-   Pages itself on its first run, assembles the scanner's look (see *Look and
-   feel* below), and publishes *only* `scanner.html` (as `index.html`) plus that
-   built stylesheet - the gradebook and its PII are never in the Pages artifact,
-   so the public site exposes nothing sensitive. The scanner reaches the repo
-   only through the token you paste at runtime. Site URL after the first deploy:
-   `https://<owner>.github.io/<repo>/`. (If your org disables Pages by default,
-   turn it on once in Settings -> Pages, Source = GitHub Actions, then re-run.)
-3. **Make a scanner token.** A fine-grained PAT scoped to the one teacher repo,
-   Contents: read + write. You paste it into the scanner once; it is kept only in
-   that browser's localStorage.
+2. **Open the Course Console scanner.** It is already hosted at
+   `https://tjakoen.github.io/github-native-course-platform/scanner/` - nothing to
+   deploy per repo. Bookmark it on your phone's home screen.
+3. **Set the repo token.** In the console's Settings, add a fine-grained PAT with
+   Contents: read + write for the teacher repos (the same token the console's
+   grading intents already use). It is kept only in that browser's localStorage;
+   the scanner records batches with it.
 
 ## Day to day
 
 - **New/updated roster** (new students joined): run `Generate attendance QRs`
   (dry-run first, then `execute=true`). It only adds QRs to workspaces missing
   one; use `force=true` to regenerate all.
-- **Take attendance:** open the scanner on your phone, paste the token the first
-  time (org/repo/section auto-fill from the URL), scan students in, tap
-  **Commit batch**. Start a **New batch** for a late group or a different class.
-  The scanner remembers its settings **per repo**, so one phone handles several
-  sections without re-entering anything (the token is remembered per host, so a
-  token covering all of an org's sections is pasted only once).
+- **Take attendance:** open the Course Console scanner on your phone, pick the
+  section from the dropdown, scan students in (green flash and a beep on each good
+  scan), tap **Commit batch**. Start a **New batch** for a late group or a
+  different class. The token is stored once in the console, so one phone handles
+  every section without re-entering anything.
 - **Review:** open `attendance/ATTENDANCE.md` for the roll-up, or a batch's `.md`
   for one session. A red `Verify attendance` run means a scan was flagged - open
   the annotation.
@@ -175,6 +162,6 @@ that signal at a glance.
 - The generate step never deletes or renames anything and is dry-run by default.
 - No student PII leaves the teacher repo except each student's **own** record:
   names live in `roster.json` and the summaries inside the private repo; the
-  scanner fetches them only with your token; the Pages site publishes only the
-  scanner. The one thing delivered outward, `MY-ATTENDANCE.md`, holds only the
-  recipient's own dates - a student never sees a classmate's attendance.
+  console scanner fetches them only with your token and stays data-free. The one
+  thing delivered outward, `MY-ATTENDANCE.md`, holds only the recipient's own
+  dates - a student never sees a classmate's attendance.
