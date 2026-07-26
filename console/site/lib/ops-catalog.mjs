@@ -51,6 +51,8 @@ export const OPS = [
   { file: "audit-names.yml", label: "Audit repo names", group: "Hygiene",
     desc: "Weekly naming/identity audit. A RED run means it FOUND problems (by design).",
     dispatch: false },
+  { file: "repo-coverage.yml", note: "Read-only; commits reports/repo-coverage.md (open it under Reports).", label: "Repo coverage audit", group: "Hygiene",
+    desc: "Every activity submission repo on the org vs the gradebook: flags ungraded repos and activities missing from assignments.json." },
   { file: "generate-attendance-qrs.yml", note: "Skips workspaces that already have a QR unless force.", label: "Generate attendance QRs", group: "Attendance",
     desc: "Sign + commit each student's QR into their workspace; refresh roster.json.",
     inputs: [ { name: "execute", type: "bool", def: "false", gate: true, danger: "write QRs into workspaces" }, { name: "force", type: "bool", def: "false" }, { name: "only", type: "string", def: "", hint: "one student handle" } ] },
