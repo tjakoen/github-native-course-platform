@@ -42,7 +42,11 @@ jobs:
       # NOTE: the @tjakoen/grain package must grant this repo Actions access
       # (package settings -> Manage Actions access), or this install 403s.
       - run: echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
+      # playwright is a devDependency (the local e2e harness); it is never run in
+      # CI, so skip its browser download to keep the deploy install fast.
       - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: node scripts/bake-theme.mjs
       - name: Assemble dist
         run: |

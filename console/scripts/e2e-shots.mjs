@@ -1,14 +1,19 @@
 // E2E screenshot harness (dev-only, run locally: node scripts/e2e-shots.mjs).
 // Serves site/ + stubs api.github.com with SYNTHETIC fixtures (zero PII) +
 // seeded localStorage, walks every view, saves PNGs to /tmp/console-shots.
-// Needs playwright; resolved from the batch-stack checkout (adjust the
-// createRequire path if that moves). serves site/ locally, stubs
-// api.github.com with synthetic fixtures (NO real data), seeds localStorage,
-// walks the views, saves PNGs to the scratchpad.
+// Needs playwright (a devDependency, resolved from THIS package's node_modules -
+// not any sibling checkout). Browsers are not an npm dep: run
+// `npx playwright install chromium` once (cached in a shared dir). Run the
+// harness with `npm run test:e2e` or `node scripts/e2e-shots.mjs`.
 import { createRequire } from "module";
 import { execSync, spawn } from "child_process";
-const require = createRequire("/Users/tjakoenstolk/Local/Development/batch-stack/package.json");
-const { chromium } = require("playwright");
+const require = createRequire(import.meta.url);
+let chromium;
+try { ({ chromium } = require("playwright")); }
+catch {
+  console.error("e2e harness needs playwright. It is a devDependency, so `npm install` here provides it; browsers are separate:\n  npm install && npx playwright install chromium\nThen re-run `npm run test:e2e`.");
+  process.exit(1);
+}
 
 const SITE = new URL("../site", import.meta.url).pathname;
 const OUT = "/tmp/console-shots";

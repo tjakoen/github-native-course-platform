@@ -13,11 +13,13 @@
     "dev": "node scripts/bake-theme.mjs && npx serve site",
     "audit": "node src/audit-students.mjs",
     "fix": "node src/apply-fixes.mjs",
-    "blanks": "node src/check-blanks.mjs"
+    "blanks": "node src/check-blanks.mjs",
+    "test:e2e": "node scripts/e2e-shots.mjs"
   },
   "devDependencies": {
     "@tjakoen/crumb": "^0.1.3",
     "@tjakoen/mill": "^0.1.2",
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "playwright": "^1.62.0"
   }
 }
