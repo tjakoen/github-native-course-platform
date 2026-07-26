@@ -37,6 +37,8 @@ export const OPS = [
   { file: "canvas-export.yml", label: "Canvas grade export", group: "Canvas",
     desc: "Build a Canvas-import CSV from the gradebook (paste the Canvas export in).",
     inputs: [ { name: "canvas_csv", type: "text", def: "" }, { name: "section", type: "string", def: "" } ] },
+  { file: "canvas-crosscheck.yml", note: "Read-only against Canvas; commits reports/canvas-crosscheck.md (open it under Reports).", label: "Canvas cross-check", group: "Canvas",
+    desc: "Audit the gradebook vs Canvas: identity match, submission presence, screenshot readability, and score agreement." },
   { file: "publish-material.yml", note: "Idempotent per unit. Units run ONE AT A TIME (parallel unit runs used to race) - the console dispatches them sequentially.", label: "Publish material", group: "Content",
     desc: "Push one content/ unit into every student workspace (direct course-bot commits). Run units one at a time.",
     inputs: [ { name: "unit", type: "string", def: "", required: true, gateAlways: true, danger: "push this unit to every workspace" } ] },
