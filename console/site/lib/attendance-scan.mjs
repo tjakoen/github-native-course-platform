@@ -23,6 +23,30 @@ const localStamp = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.get
 let ctl = null;          // active camera controller
 export function stopScanner() { if (ctl) { try { ctl.stop(); } catch { /* already stopped */ } ctl = null; } }
 
+// Short success beep, synthesized (no audio file, so script-src 'self' holds and
+// nothing needs vendoring). iOS needs the AudioContext unlocked by a user
+// gesture, so ensureAudio() runs on the Start-camera tap.
+let audioCtx = null;
+function ensureAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  } catch { /* no audio available - vibrate + reticle still fire */ }
+}
+function beep() {
+  if (!audioCtx) return;
+  try {
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.type = "sine"; osc.frequency.value = 880;              // short, clean A5
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.2, t + 0.01);     // fade in (no click)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);  // fade out
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t); osc.stop(t + 0.16);
+  } catch { /* ignore transient audio errors */ }
+}
+
 // Renders the Scan tab into `mount`. `sections` needs only {key, org, repo,
 // section, subject} per entry (both discovery objects and fully loaded sections
 // qualify), so this view also works on the fast #/scan boot path that skips
@@ -53,7 +77,10 @@ export function renderScanView(mount, sections, initialKey) {
       '<p class="muted" id="scBatchInfo"></p>' +
     "</div>" +
     '<div class="card scan-stack" data-pad="sm" id="scCamBox" hidden>' +
-      '<video id="scVideo" class="scan-video"></video>' +
+      '<div class="scan-cam" id="scCam">' +
+        '<video id="scVideo" class="scan-video" playsinline muted></video>' +
+        '<div class="scan-reticle" aria-hidden="true"></div>' +
+      "</div>" +
       '<div id="scStatus" class="scan-status" hidden></div>' +
     "</div>" +
     '<div class="card scan-stack" data-pad="sm" id="scListBox">' +
@@ -96,6 +123,16 @@ export function renderScanView(mount, sections, initialKey) {
   function showStatus(cls, text) {
     const s = $("scStatus");
     s.className = "scan-status " + cls; s.textContent = text; s.hidden = false;
+    // Flash the camera reticle to the status color, then settle back to neutral.
+    const cam = $("scCam");
+    if (cam) {
+      cam.classList.remove("ok", "bad", "dup");
+      void cam.offsetWidth;                 // restart the CSS transition
+      cam.classList.add(cls);
+      clearTimeout(cam._flash);
+      cam._flash = setTimeout(() => cam.classList.remove(cls), 900);
+    }
+    if (cls === "ok") beep();
     if (navigator.vibrate) navigator.vibrate(cls === "ok" ? 60 : 30);
   }
 
@@ -136,6 +173,7 @@ export function renderScanView(mount, sections, initialKey) {
 
   $("scStart").onclick = async () => {
     $("scStart").disabled = true; $("scStart").textContent = "Starting…";
+    ensureAudio();   // unlock the beep on this user gesture (iOS requires it)
     try {
       $("scCamBox").hidden = false;
       startBatch();

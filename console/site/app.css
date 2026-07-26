@@ -127,7 +127,21 @@ textarea.fta.mono{font-family:var(--font-mono);font-size:var(--text-xs);line-hei
    defeating the at-a-glance read. Mirrors the not([data-color-scheme=light])
    guard used for the palette twins above. */
 @media(prefers-color-scheme:dark){:root:not([data-color-scheme=light]) .scanview{--scan-ok:#5cd07a;--scan-bad:#ff6b6b}}
-.scan-video{width:100%;border:1px solid var(--color-line);border-radius:var(--radius-md);background:var(--paper-2)}
+/* Camera: a size-capped SQUARE viewport (not a full-width video), centered,
+   with a reticle overlay - the framing teachers scan against. object-fit:cover
+   only crops the DISPLAY; scan.mjs still decodes the full camera frame. */
+.scan-cam{position:relative;width:100%;max-width:20rem;aspect-ratio:1/1;margin:0 auto;
+  border:1px solid var(--color-line);border-radius:var(--radius-md);overflow:hidden;background:var(--paper-2)}
+.scan-cam .scan-video{width:100%;height:100%;object-fit:cover;display:block}
+/* Centered reticle; flashes to the status color on each scan (green ok / red
+   bad / muted dup) then settles back to a neutral frame. The big spread shadow
+   dims everything outside the square (clipped by the container's overflow). */
+.scan-reticle{position:absolute;inset:16%;border:3px solid color-mix(in srgb,#fff 78%,transparent);
+  border-radius:var(--radius-md);box-shadow:0 0 0 100vmax color-mix(in srgb,#000 26%,transparent);
+  transition:border-color .15s ease,box-shadow .15s ease;pointer-events:none}
+.scan-cam.ok .scan-reticle{border-color:var(--scan-ok);box-shadow:0 0 0 100vmax color-mix(in srgb,var(--scan-ok) 24%,transparent)}
+.scan-cam.bad .scan-reticle{border-color:var(--scan-bad);box-shadow:0 0 0 100vmax color-mix(in srgb,var(--scan-bad) 22%,transparent)}
+.scan-cam.dup .scan-reticle{border-color:var(--color-muted)}
 .scan-status{padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);font-weight:var(--font-weight-semibold)}
 .scan-status.ok{background:var(--scan-ok-soft);color:var(--scan-ok)}
 .scan-status.dup{background:var(--paper-2);color:var(--color-muted)}
