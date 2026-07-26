@@ -26,6 +26,7 @@ export const OPS = [
       { name: "mode", type: "choice", options: ["check", "dry-run", "execute"], def: "dry-run", gate: "execute", danger: "write grades to Canvas" },
       { name: "course_id", type: "string", def: "", hint: "override CANVAS_COURSE_ID" },
       { name: "comment", type: "bool", def: "false" },
+      { name: "override_locked", type: "bool", def: "false", hint: "overwrite locked grades on a disagreement" },
     ] },
   { file: "canvas-sync-assignments.yml", note: "Conservative on existing assignments: points only, unless desc/submit/rename are set. Never touches due dates or published state.", label: "Canvas assignment sync", group: "Canvas",
     desc: "Author/update the Canvas assignment shells from grader/assignments.json (SUBMISSIONS module).",
