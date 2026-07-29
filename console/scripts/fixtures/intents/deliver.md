@@ -1,6 +1,6 @@
-# Deliver reviewed grades - 6DEMO (section 0000) - deterministic activities
+# Deliver reviewed grades - 6xxx (section 0000) - deterministic activities
 
-These are the section's DETERMINISTIC activities (auto-graded tests + quizzes). Their gradebook scores are final - no AI review needed. Deliver them to student workspaces (the "publish": true ones) and to Canvas. Work from: classes/teacher-6demo-0000-tjakoen (the local clone of github.com/HAU-6DEMO/teacher-6demo-0000-tjakoen) - pull it first.
+These are the section's DETERMINISTIC activities (auto-graded tests + quizzes). Their gradebook scores are final - no AI review needed. Deliver them to student workspaces (the "publish": true ones) and to Canvas. Work from: classes/teacher-6xxx-0000-tjakoen (the local clone of github.com/COURSE-ORG-DEMO/teacher-6xxx-0000-tjakoen) - pull it first.
 
 ## Push to Canvas - deterministic activities with graded students (2)
   - m1a1: 7 pts, 2 students graded

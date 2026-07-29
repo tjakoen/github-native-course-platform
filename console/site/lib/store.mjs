@@ -1,7 +1,7 @@
 // App config in this browser's localStorage: one teacher repo PER ROW, each with
 // its OWN fine-grained PAT (repos: [{url, token}]), so a single expired/rejected
 // token can't take down every section. Review decisions live under their own
-// long-standing key (hau-grade-decisions-v1) in app.mjs, byte-compatible with the
+// long-standing key (course-grade-decisions-v1) in app.mjs, byte-compatible with the
 // retired local dashboard so exported backups import cleanly.
 import { clearAll } from "./cache.mjs";
 

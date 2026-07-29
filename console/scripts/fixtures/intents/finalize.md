@@ -1,6 +1,6 @@
-# Finalize and deliver - 6DEMO (section 0000) - m3a1
+# Finalize and deliver - 6xxx (section 0000) - m3a1
 
-The reviewed grades for m3a1 are already written to the gradebook (approved + overrides applied; held/flagged aiScore blanked). Now deliver ONLY the cleared students to their workspaces and to Canvas. Work from: classes/teacher-6demo-0000-tjakoen (the local clone of github.com/HAU-6DEMO/teacher-6demo-0000-tjakoen) - pull it first.
+The reviewed grades for m3a1 are already written to the gradebook (approved + overrides applied; held/flagged aiScore blanked). Now deliver ONLY the cleared students to their workspaces and to Canvas. Work from: classes/teacher-6xxx-0000-tjakoen (the local clone of github.com/COURSE-ORG-DEMO/teacher-6xxx-0000-tjakoen) - pull it first.
 
 ## Cleared to deliver (2)
   - m3a1-0000-juandc: 92/100

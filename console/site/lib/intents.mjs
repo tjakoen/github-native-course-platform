@@ -131,7 +131,7 @@ export function buildApplyGrades(s,generatedAt){
  }).join("\n");
  return (
 "# Apply grades to Canvas - "+s.subject+" (section "+s.section+")\n\n"+
-"You are my grading assistant for the HAU platform. Apply the reviewed grades for this section to Canvas. Work from the teacher repo:\n"+
+"You are my grading assistant for the course platform. Apply the reviewed grades for this section to Canvas. Work from the teacher repo:\n"+
 workFrom(s)+" - pull it first.\n\n"+
 "## Rules (do not violate)\n"+
 "- gradebook/grades.csv is the source of truth. Never hand-edit a grade.\n"+
@@ -204,7 +204,7 @@ export function buildManualAttendance(s,picked,date){
  const already=picked.filter(x=>{const a=att.students[x.num];return a&&a.present&&a.present.includes(date)});
  return (
 "# Manual attendance - "+s.subject+" (section "+s.section+") - "+date+"\n\n"+
-"You are my course assistant for the HAU platform. Record teacher-attested manual attendance for this section. Work from the teacher repo:\n"+
+"You are my course assistant for the course platform. Record teacher-attested manual attendance for this section. Work from the teacher repo:\n"+
 workFrom(s)+" - pull it first.\n\n"+
 "## Rules (do not violate)\n"+
 "- Attendance session CSVs (attendance/sessions/<date>/*.csv) are the record; never edit the generated .md/summary.json by hand (verify-attendance rebuilds them).\n"+

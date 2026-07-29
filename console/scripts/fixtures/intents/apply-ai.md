@@ -1,6 +1,6 @@
-# Apply reviewed AI grades - 6DEMO (section 0000) - m3a1
+# Apply reviewed AI grades - 6xxx (section 0000) - m3a1
 
-I have reviewed the held AI grades for m3a1. Apply my decisions below. Work from: classes/teacher-6demo-0000-tjakoen (the local clone of github.com/HAU-6DEMO/teacher-6demo-0000-tjakoen) - pull it first.
+I have reviewed the held AI grades for m3a1. Apply my decisions below. Work from: classes/teacher-6xxx-0000-tjakoen (the local clone of github.com/COURSE-ORG-DEMO/teacher-6xxx-0000-tjakoen) - pull it first.
 
 ## Reviewed decisions (final score / 100)
   - Dela Cruz, Juan (20260001) · m3a1-0000-juandc: 92/100  [approved; edited student feedback] - note: solid work

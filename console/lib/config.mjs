@@ -18,7 +18,7 @@ export const CLASSES = path.resolve(REPO, cfg.classesDir || "classes");
 export const OUT = path.resolve(REPO, cfg.outDir || "out");
 fs.mkdirSync(OUT, { recursive: true });
 
-const LABELS = cfg.labels || {};             // optional: { "6APSI": "6APSI JavaScript / React" }
+const LABELS = cfg.labels || {};             // optional: { "6xxx": "6xxx JavaScript / React" }
 const EXCLUDE = new Set(cfg.exclude || []);  // optional: repo folder names to skip
 
 // org owner parsed from the clone's origin remote (works for any org, no hardcoding)

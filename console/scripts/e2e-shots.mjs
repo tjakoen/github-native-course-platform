@@ -24,9 +24,9 @@ await new Promise(r => setTimeout(r, 800));
 
 const b64 = s => Buffer.from(s).toString("base64");
 const REPOS = [
-  { org: "HAU-6APSI", repo: "teacher-6apsi-2240-tjakoen", section: "2240" },
-  { org: "HAU-6APSI", repo: "teacher-6apsi-2203-tjakoen", section: "2203" },
-  { org: "HAU-6INTROWEB", repo: "teacher-6introweb-2106-tjakoen", section: "2106" },
+  { org: "COURSE-ORG-A", repo: "teacher-6xxx-0001-tjakoen", section: "0001" },
+  { org: "COURSE-ORG-A", repo: "teacher-6xxx-0002-tjakoen", section: "0002" },
+  { org: "COURSE-ORG-C", repo: "teacher-6xxx-0003-tjakoen", section: "0003" },
 ];
 const ASSIGN = JSON.stringify([
   { id: "m1a1", type: "vitest", namePrefix: "m1a1-", locked: true, publish: true },
@@ -85,9 +85,9 @@ async function stub(route) {
   ]);
   if (rest.startsWith("/contents/reports/FLAGGED.md")) return wantsRaw ? raw("# Flagged for review\n\nTwo submissions share **studentNumber 20250009** - resolve by hand:\n\n- m1a1-" + section + "-dupA\n- m1a1-" + section + "-dupB\n") : json({ content: b64("x") });
   if (rest.startsWith("/contents/gradebook/GRADEBOOK.md")) return wantsRaw ? raw("# Gradebook - section " + section + "\n\n| Student | m1a1 | m2a1 |\n| --- | --- | --- |\n| Dela Cruz, Juan | 7/7 | 3/3 |\n| Santos, Maria | 7/7 | 3/3 |\n") : json({ content: b64("x") });
-  // Phase D: pending-intents listing. 2240 has one filed intent so the Overview
+  // Phase D: pending-intents listing. 0001 has one filed intent so the Overview
   // strip renders; other sections have none (the strip hides itself).
-  if (rest === "/contents/gradebook/intents") return json(section === "2240" ? [
+  if (rest === "/contents/gradebook/intents") return json(section === "0001" ? [
     { type: "file", name: "20260725-140205-apply-ai-m3a1.md" },
     { type: "file", name: "20260725-090012-deliver.md" },
     { type: "dir", name: "done" },
@@ -108,12 +108,12 @@ await ctx.route("**/crumb/tours/first-run.json", async (route) => {
   route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(j) });
 });
 await ctx.addInitScript(() => {
-  localStorage.setItem("hau-crumb-first-run-v1", "1");   // suppress the auto tour; shot it explicitly below
+  localStorage.setItem("course-crumb-first-run-v1", "1");   // suppress the auto tour; shot it explicitly below
   localStorage.setItem("grader-ui-config-v1", JSON.stringify({ repos: [
-    { url: "github.com/HAU-6APSI/teacher-6apsi-2240-tjakoen", token: "fake" },
-    { url: "github.com/HAU-6APSI/teacher-6apsi-2203-tjakoen", token: "fake" },
-    { url: "github.com/HAU-6INTROWEB/teacher-6introweb-2106-tjakoen", token: "fake" },
-  ], labels: { "6APSI": "Application Development", "6INTROWEB": "Intro to Web" } }));
+    { url: "github.com/COURSE-ORG-A/teacher-6xxx-0001-tjakoen", token: "fake" },
+    { url: "github.com/COURSE-ORG-A/teacher-6xxx-0002-tjakoen", token: "fake" },
+    { url: "github.com/COURSE-ORG-C/teacher-6xxx-0003-tjakoen", token: "fake" },
+  ], labels: { "6xxx": "Application Development", "6xxx": "Intro to Web" } }));
 });
 const page = await ctx.newPage();
 const shot = async (name, full) => { await page.waitForTimeout(900); await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: !!full }); console.log("shot", name); };
@@ -124,11 +124,11 @@ await shot("01-dashboard");
 console.log("G skip-link:", await page.evaluate(() => !!document.querySelector("a.skip-link[href='#main']")), "· reload aria:", await page.evaluate(() => !!document.querySelector("#reload[aria-label]")), "· theme aria:", await page.evaluate(() => !!document.querySelector("#theme[aria-label]")), "· scanner one-name:", await page.evaluate(() => [...document.querySelectorAll(".nav-item__label")].some(x => x.textContent === "Attendance scanner")));
 // Phase C: #/c/:key is the Overview (tiles, at-risk, Canvas preview, flags card,
 // runs, Reports card); the grade matrix is one tab deeper at /gradebook.
-await page.goto("http://localhost:8931/#/c/6APSI-2240"); await shot("02-overview");
+await page.goto("http://localhost:8931/#/c/6xxx-0001"); await shot("02-overview");
 // Phase D2: the pending-intents strip shows what the console filed but has not run.
 console.log("overview pending-intents strip:", await page.evaluate(() => !![...document.querySelectorAll(".card h2")].find(h => h.textContent === "Pending intents")));
 await page.waitForTimeout(600); await page.evaluate(() => { const m = document.getElementById("main"); m.scrollTop = m.scrollHeight; }); await shot("02a-overview-bottom");
-await page.goto("http://localhost:8931/#/c/6APSI-2240/gradebook"); await shot("02-gradebook");
+await page.goto("http://localhost:8931/#/c/6xxx-0001/gradebook"); await shot("02-gradebook");
 // G: heat cells carry the score fraction as --pct (hsl computed in CSS, so an OS
 // scheme flip recolors with no repaint), not an inline hsl() background.
 console.log("G heat-cell --pct (no inline hsl):", await page.evaluate(() => { const c = document.querySelector("td.cell[style*='--pct']"); return !!c && !/hsl/i.test(c.getAttribute("style") || ""); }));
@@ -169,25 +169,25 @@ await page.evaluate(() => document.querySelectorAll(".drawer,.drawer-modal").for
 // Phase E1: Activities lock/deliver are b-switch STATES (not verb buttons), each
 // row carries a lifecycle Stage chip, and a per-row scaffold button resumes the
 // New-activity wizard after a refresh.
-await page.goto("http://localhost:8931/#/c/6APSI-2240/activities"); await shot("03-activities");
+await page.goto("http://localhost:8931/#/c/6xxx-0001/activities"); await shot("03-activities");
 console.log("activities switches:", await page.evaluate(() => document.querySelectorAll("table.matrix .switch").length), "· stage col:", await page.evaluate(() => [...document.querySelectorAll("table.matrix th")].some(h => h.textContent === "Stage")), "· delivered col:", await page.evaluate(() => [...document.querySelectorAll("table.matrix th")].some(h => h.textContent === "Delivered")), "· scaffold btn:", await page.evaluate(() => !!document.querySelector(".actScaffold")), "· materialCard reuse:", await page.evaluate(() => !!document.querySelector(".unitpick")));
-await page.goto("http://localhost:8931/#/c/6APSI-2240/activities/new"); await shot("03b-activity-new");
+await page.goto("http://localhost:8931/#/c/6xxx-0001/activities/new"); await shot("03b-activity-new");
 // Phase E2: Students name is a real link (keyboard), headers sort, at-risk +
 // delivered columns from loaded data.
-await page.goto("http://localhost:8931/#/c/6APSI-2240/students"); await shot("04-students");
+await page.goto("http://localhost:8931/#/c/6xxx-0001/students"); await shot("04-students");
 console.log("students name link:", await page.evaluate(() => !!document.querySelector("table.matrix td.stu a")), "· sortable headers:", await page.evaluate(() => document.querySelectorAll("th.sortable").length), "· at-risk col:", await page.evaluate(() => [...document.querySelectorAll("table.matrix th")].some(h => h.textContent === "At risk")));
-await page.goto("http://localhost:8931/#/c/6APSI-2240/students/20250001"); await shot("05-profile");
+await page.goto("http://localhost:8931/#/c/6xxx-0001/students/20250001"); await shot("05-profile");
 console.log("profile review link:", await page.evaluate(() => !!document.querySelector(".wrap table.matrix a[href*='/review/']")));
 // 20250003 is at-risk (1/3 sessions): the profile shows the alert strip.
-await page.goto("http://localhost:8931/#/c/6APSI-2240/students/20250003"); await page.waitForTimeout(400);
+await page.goto("http://localhost:8931/#/c/6xxx-0001/students/20250003"); await page.waitForTimeout(400);
 console.log("profile alert strip (at-risk student):", await page.evaluate(() => [...document.querySelectorAll(".wrap h2")].some(h => h.textContent.includes("At risk"))));
 // Phase E3: attendance emphasizes at-risk rows (warn badge, not muted) + row links.
-await page.goto("http://localhost:8931/#/c/6APSI-2240/attendance"); await page.waitForTimeout(500);
+await page.goto("http://localhost:8931/#/c/6xxx-0001/attendance"); await page.waitForTimeout(500);
 console.log("attendance warn emphasis:", await page.evaluate(() => !!document.querySelector("#attmatrix .badge[data-tone='warn']")), "· row profile link:", await page.evaluate(() => !!document.querySelector("#attmatrix td.stu a")));
 // G: presence cells are display-only (.attcell), no longer the clickable .cell.
 console.log("G attendance cells non-clickable:", await page.evaluate(() => document.querySelectorAll("#attmatrix .attcell").length > 0 && document.querySelectorAll("#attmatrix td.cell").length === 0));
 // Phase D1: AI Review stage header (stepper + one contextual primary + overflow).
-await page.goto("http://localhost:8931/#/c/6APSI-2240/review"); await shot("06-review");
+await page.goto("http://localhost:8931/#/c/6xxx-0001/review"); await shot("06-review");
 console.log("review stepper steps:", await page.evaluate(() => document.querySelectorAll(".stepper__step").length), "(want 4)");
 console.log("review has ONE primary:", await page.evaluate(() => !!document.querySelector("#rvPrimary")), "· overflow:", await page.evaluate(() => !!document.querySelector(".ovmenu")));
 // G: the review meter shows decision-mix segments (approved/override/flagged),
@@ -197,12 +197,12 @@ console.log("G review meter is segmented:", await page.evaluate(() => !!document
 await page.evaluate(() => { const d = document.querySelector(".ovmenu"); if (d) d.open = true; });
 await shot("06d-review-overflow");
 await page.evaluate(() => { const d = document.querySelector(".ovmenu"); if (d) d.open = false; });
-await page.goto("http://localhost:8931/#/c/6APSI-2240/review/m3a1/20250001"); await shot("06b-review-detail");
+await page.goto("http://localhost:8931/#/c/6xxx-0001/review/m3a1/20250001"); await shot("06b-review-detail");
 console.log("detail kbd legend:", await page.evaluate(() => !!document.querySelector(".kbdlegend")), "· N-left counter:", await page.evaluate(() => /left|clear/.test(document.querySelector(".cnt")?.textContent || "")));
 await page.keyboard.press("Meta+k"); await shot("07-cmdk");
 await page.keyboard.press("Escape");
 // Phase C: Ops is a per-class tab now. The old global #/ops/:key redirects here.
-await page.goto("http://localhost:8931/#/c/6APSI-2240/ops"); await shot("08-ops");
+await page.goto("http://localhost:8931/#/c/6xxx-0001/ops"); await shot("08-ops");
 // A1: after a dispatch the docked ops feed must be VISIBLE (data-console-open on
 // .app-shell), not rendered into display:none. Click the first dry-run Run.
 await page.locator(".opcard .opform .btn").first().click().catch(() => {});
@@ -215,10 +215,10 @@ await shot("08b-ops-feed");
 // #/ops/:key redirects into the class tab. Assert each lands where expected.
 await page.goto("http://localhost:8931/#/flags"); await page.waitForTimeout(500);
 console.log("#/flags redirect ->", await page.evaluate(() => location.hash), "(want #/)");
-await page.goto("http://localhost:8931/#/ops/6APSI-2240"); await page.waitForTimeout(500);
-console.log("#/ops/:key redirect ->", await page.evaluate(() => location.hash), "(want #/c/6APSI-2240/ops)");
+await page.goto("http://localhost:8931/#/ops/6xxx-0001"); await page.waitForTimeout(500);
+console.log("#/ops/:key redirect ->", await page.evaluate(() => location.hash), "(want #/c/6xxx-0001/ops)");
 // Reports viewer route still works (the standalone list is retired; card lives on Overview).
-await page.goto("http://localhost:8931/#/reports/6APSI-2240/" + encodeURIComponent("reports/FLAGGED.md")); await shot("12-report-viewer");
+await page.goto("http://localhost:8931/#/reports/6xxx-0001/" + encodeURIComponent("reports/FLAGGED.md")); await shot("12-report-viewer");
 // Real Settings page (no longer a drawer over a blank page).
 await page.goto("http://localhost:8931/#/settings"); await shot("09-settings");
 await page.goto("http://localhost:8931/#/"); await page.click("#loadAll").catch(() => {}); await page.waitForTimeout(1500); await shot("13-dashboard-loaded");
@@ -239,7 +239,7 @@ await page.goto("http://localhost:8931/scanner/"); await shot("10-scanner");
 // whole page. Full-page shot so a horizontal page overflow would be obvious.
 const narrow = await ctx.newPage();
 await narrow.setViewportSize({ width: 390, height: 780 });
-await narrow.goto("http://localhost:8931/#/c/6APSI-2240/gradebook");
+await narrow.goto("http://localhost:8931/#/c/6xxx-0001/gradebook");
 await narrow.waitForTimeout(1200);
 const overflow = await narrow.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
 console.log("390px gradebook page-level horizontal overflow:", overflow, "(want false)");
@@ -259,14 +259,14 @@ const dctx = await browser.newContext({ viewport: { width: 1600, height: 950 } }
 await dctx.route("https://api.github.com/**", stub);
 await dctx.addInitScript(() => {
   localStorage.setItem("grain-color-scheme", "dark");
-  localStorage.setItem("hau-crumb-first-run-v1", "1");
+  localStorage.setItem("course-crumb-first-run-v1", "1");
   localStorage.setItem("grader-ui-config-v1", JSON.stringify({ repos: [
-    { url: "github.com/HAU-6APSI/teacher-6apsi-2240-tjakoen", token: "fake" },
-    { url: "github.com/HAU-6INTROWEB/teacher-6introweb-2106-tjakoen", token: "fake" },
-  ], labels: { "6APSI": "Application Development", "6INTROWEB": "Intro to Web" } }));
+    { url: "github.com/COURSE-ORG-A/teacher-6xxx-0001-tjakoen", token: "fake" },
+    { url: "github.com/COURSE-ORG-C/teacher-6xxx-0003-tjakoen", token: "fake" },
+  ], labels: { "6xxx": "Application Development", "6xxx": "Intro to Web" } }));
 });
 const dpage = await dctx.newPage();
-await dpage.goto("http://localhost:8931/#/c/6APSI-2240/gradebook");
+await dpage.goto("http://localhost:8931/#/c/6xxx-0001/gradebook");
 await dpage.waitForTimeout(1200);
 await dpage.screenshot({ path: `${OUT}/18-gradebook-dark.png` });
 await dpage.keyboard.press("Meta+k");

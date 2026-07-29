@@ -3,9 +3,9 @@
   "classesDir": "classes",
   "outDir": "out",
   "labels": {
-    "6APSI": "6APSI JavaScript / React",
-    "6ADET": "6ADET Flutter / Dart",
-    "6INTROWEB": "6INTROWEB HTML / CSS / JS"
+    "6xxx": "6xxx JavaScript / React",
+    "6xxx": "6xxx Flutter / Dart",
+    "6xxx": "6xxx HTML / CSS / JS"
   },
   "exclude": []
 }

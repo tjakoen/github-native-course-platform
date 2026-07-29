@@ -552,8 +552,8 @@ async function boot(){
   if(started) dispatch(); else { started=true; start(); }
   // first-run CRUMB tour: once per browser, only after a working setup exists
   // (never over the settings drawer). Replay anytime via the rail's Tour button.
-  if(!localStorage.getItem("hau-crumb-first-run-v1")&&window.crumb){
-   localStorage.setItem("hau-crumb-first-run-v1","1");
+  if(!localStorage.getItem("course-crumb-first-run-v1")&&window.crumb){
+   localStorage.setItem("course-crumb-first-run-v1","1");
    window.crumb.start("first-run");
   }
  }catch(e){
@@ -1197,7 +1197,7 @@ function attMatrix(s,dates){
 // pending-intents listing is the real trail, but the stage header needs a
 // synchronous signal to choose the ONE contextual primary, so a successful Send
 // records it here immediately. Monotonic per activity; cleared only by Reset.
-const SENTKEY="hau-intent-sent-v1";
+const SENTKEY="course-intent-sent-v1";
 function sentMap(){ try{return JSON.parse(localStorage.getItem(SENTKEY)||"{}")}catch(e){return {}} }
 function markSent(section,kind,aid){ try{const m=sentMap();m[section+"|"+kind+"|"+(aid||"")]=new Date().toISOString();localStorage.setItem(SENTKEY,JSON.stringify(m));}catch(e){} }
 function wasSent(section,kind,aid){ return !!sentMap()[section+"|"+kind+"|"+(aid||"")]; }

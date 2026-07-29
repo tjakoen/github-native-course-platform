@@ -62,7 +62,7 @@ relative, sibling-aware grading with an honest spread.
 
 Each entry is a durable lesson, not a one-off. Newest rounds at the top.
 
-### 2026-07-27 round - m3a6 code capstone (6ADET) + multi-section apply-ai batch
+### 2026-07-27 round - m3a6 code capstone (6xxx) + multi-section apply-ai batch
 
 - **Judge the graded file's authorship separately from the demo runner.** A clean,
   student-authored engine (`lib/`) can sit next to a `bin/main.dart` that carries a
@@ -81,7 +81,7 @@ Each entry is a durable lesson, not a one-off. Newest rounds at the top.
   the 0. Confirm the zero and keep the explanation on the stripped "Proposed total"
   line before delivery.
 - **m3a6 (code flavor, /20) spread:** clean correct engines cluster 17-19; reserve 20
-  for genuinely top-tier; a missing required artifact (`HAUDEX.md`) is a clean -3.
+  for genuinely top-tier; a missing required artifact (`COURSEDEX.md`) is a clean -3.
 - **Tooling caveat:** an apply-ai intent's cited "flagged SHA" can be the repo's empty
   initial commit, not the graded submission. Always grade at the actual graded SHA
   (the one on the gradebook row); if they differ, the graded row is authoritative.
@@ -89,7 +89,7 @@ Each entry is a durable lesson, not a one-off. Newest rounds at the top.
   so a stale local tree can hide pending intents. Fetch + rebase (or check the tracked
   file list) before concluding a repo has nothing pending.
 
-### m3a3 (6APSI section 2240) - proctored quiz, design half
+### m3a3 (6xxx section 0001) - proctored quiz, design half
 
 - **A blank preview is not proof of zero design.** For an activity with a real
   automated suite, read the tests and the code before trusting a blank
@@ -121,7 +121,7 @@ Each entry is a durable lesson, not a one-off. Newest rounds at the top.
   3/58 crashing app was too high). Name the specific crash or omission so the
   student knows the next concrete step.
 
-### m3a2 (6APSI section 2240) - portfolio, second reviewed round
+### m3a2 (6xxx section 0001) - portfolio, second reviewed round
 
 - **Low outliers on an otherwise-passing submission are usually first-pass
   mis-scores, not weak work.** Two of this round's flags were badly under-scored
@@ -149,7 +149,7 @@ Each entry is a durable lesson, not a one-off. Newest rounds at the top.
   The automated 50 comes from the tests and stays fixed; adjust the design
   criteria so the bullets sum to the final grade (the Canvas comment shows them).
 
-### m3a1 (6APSI section 2240) - first reviewed round
+### m3a1 (6xxx section 0001) - first reviewed round
 
 - **The first pass over-scored simple and minimal designs.** Many "too high for
   a simple design / no UI / too simple" corrections. Calibrate plain or minimal

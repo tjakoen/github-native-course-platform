@@ -1,7 +1,7 @@
-# Manual attendance - 6DEMO (section 0000) - 2026-01-14
+# Manual attendance - 6xxx (section 0000) - 2026-01-14
 
-You are my course assistant for the HAU platform. Record teacher-attested manual attendance for this section. Work from the teacher repo:
-classes/teacher-6demo-0000-tjakoen (the local clone of github.com/HAU-6DEMO/teacher-6demo-0000-tjakoen) - pull it first.
+You are my course assistant for the course platform. Record teacher-attested manual attendance for this section. Work from the teacher repo:
+classes/teacher-6xxx-0000-tjakoen (the local clone of github.com/COURSE-ORG-DEMO/teacher-6xxx-0000-tjakoen) - pull it first.
 
 ## Rules (do not violate)
 - Attendance session CSVs (attendance/sessions/<date>/*.csv) are the record; never edit the generated .md/summary.json by hand (verify-attendance rebuilds them).

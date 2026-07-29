@@ -53,7 +53,7 @@ async function stub(route) {
   const m = p.match(/^\/repos\/([^/]+)\/([^/]+)(\/.*)?$/);
   if (!m) return miss();
   const [, , repo, rest0] = m; const rest = rest0 || "";
-  const section = (repo.match(/-(\d{4})-/) || [])[1] || "2240";
+  const section = (repo.match(/-(\d{4})-/) || [])[1] || "0001";
   if (rest === "") return json({ default_branch: "main" });
   if (rest.startsWith("/contents/grader/assignments.json")) return wantsRaw ? raw(ASSIGN) : json({ content: b64(ASSIGN), sha: "s" });
   if (rest.startsWith("/contents/course.config.json")) return miss();
@@ -75,9 +75,9 @@ const ageSnapshots = page => page.evaluate(() => new Promise(res => {
   rq.onerror = () => res(0);
 }));
 
-const CONFIG = { repos: [{ url: "github.com/HAU-6APSI/teacher-6apsi-2240-tjakoen", token: "fake" }], labels: {} };
+const CONFIG = { repos: [{ url: "github.com/COURSE-ORG-A/teacher-6xxx-0001-tjakoen", token: "fake" }], labels: {} };
 // runs in the browser: takes the config as an arg (can't close over Node scope)
-const seed = cfg => { localStorage.setItem("hau-crumb-first-run-v1", "1"); localStorage.setItem("grader-ui-config-v1", JSON.stringify(cfg)); };
+const seed = cfg => { localStorage.setItem("course-crumb-first-run-v1", "1"); localStorage.setItem("grader-ui-config-v1", JSON.stringify(cfg)); };
 const gradebookRows = async page => page.evaluate(() => document.querySelectorAll("table.matrix tr").length);
 
 const browser = await chromium.launch();
@@ -92,7 +92,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "ok  " : "FAIL ") + 
   const page = await ctx.newPage();
 
   COUNT = { total: 0, blob: 0, notModified: 0 };
-  await page.goto("http://localhost:8932/#/c/6APSI-2240/gradebook");
+  await page.goto("http://localhost:8932/#/c/6xxx-0001/gradebook");
   await page.waitForTimeout(1600);
   const cold = { ...COUNT };
   const coldRows = await gradebookRows(page);
@@ -123,7 +123,7 @@ const check = (name, ok, extra = "") => { console.log((ok ? "ok  " : "FAIL ") + 
   const page = await ctx.newPage();
   const errs = [];
   page.on("pageerror", e => errs.push(e.message));
-  await page.goto("http://localhost:8932/#/c/6APSI-2240/gradebook");
+  await page.goto("http://localhost:8932/#/c/6xxx-0001/gradebook");
   await page.waitForTimeout(1600);
   const rows = await gradebookRows(page);
   check("no-IndexedDB context still loads the gradebook", rows > 1, rows + " rows");

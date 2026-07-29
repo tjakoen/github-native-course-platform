@@ -26,8 +26,8 @@ const UPDATE = process.argv.includes("--update");
 
 // ---- synthetic section (frozen; NEVER real students) ----
 const S = {
-  key: "6DEMO-0000", org: "HAU-6DEMO", repo: "teacher-6demo-0000-tjakoen",
-  subject: "6DEMO", section: "0000",
+  key: "6xxx-0000", org: "COURSE-ORG-DEMO", repo: "teacher-6xxx-0000-tjakoen",
+  subject: "6xxx", section: "0000",
   assignments: [
     { id: "m1a1", kind: "push", totalPoints: 7, publish: true },
     { id: "m2a1", kind: "push", publish: false },

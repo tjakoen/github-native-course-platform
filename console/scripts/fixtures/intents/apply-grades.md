@@ -1,7 +1,7 @@
-# Apply grades to Canvas - 6DEMO (section 0000)
+# Apply grades to Canvas - 6xxx (section 0000)
 
-You are my grading assistant for the HAU platform. Apply the reviewed grades for this section to Canvas. Work from the teacher repo:
-classes/teacher-6demo-0000-tjakoen (the local clone of github.com/HAU-6DEMO/teacher-6demo-0000-tjakoen) - pull it first.
+You are my grading assistant for the course platform. Apply the reviewed grades for this section to Canvas. Work from the teacher repo:
+classes/teacher-6xxx-0000-tjakoen (the local clone of github.com/COURSE-ORG-DEMO/teacher-6xxx-0000-tjakoen) - pull it first.
 
 ## Rules (do not violate)
 - gradebook/grades.csv is the source of truth. Never hand-edit a grade.

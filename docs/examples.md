@@ -1,7 +1,7 @@
 # Live examples: one activity, three stacks
 
-The platform is abstract until you see a real activity in a real org. These are
-**live, public, copyable** example activities running in three example course
+The platform is abstract until you see a real activity in an org. These are
+illustrative example activities running in three example course
 orgs, one per stack. Each is the same "hello world" activity (`m1a1`, the
 standard starter every class begins with), so you can compare how the identical
 engine adapts to JavaScript, Dart, and plain HTML/CSS/JS.
@@ -14,9 +14,11 @@ template, click **Use this template**, and read
 
 | Stack | Course org | Activity template (copy this) | Reference solution (answer key) | Autograder run |
 | --- | --- | --- | --- | --- |
-| JavaScript / Vitest | [HAU-6APSI](https://github.com/HAU-6APSI) | [`m1a1-classcode-yourname`](https://github.com/HAU-6APSI/m1a1-classcode-yourname) | [`m1a1-solution`](https://github.com/HAU-6APSI/m1a1-solution) | [Actions](https://github.com/HAU-6APSI/m1a1-solution/actions) |
-| Dart | [HAU-6ADET](https://github.com/HAU-6ADET) | [`m1a1-classcode-yourname`](https://github.com/HAU-6ADET/m1a1-classcode-yourname) | [`m1a1-solution`](https://github.com/HAU-6ADET/m1a1-solution) | [Actions](https://github.com/HAU-6ADET/m1a1-solution/actions) |
-| HTML / CSS / JS | [HAU-6INTROWEB](https://github.com/HAU-6INTROWEB) | [`m1a1-classcode-yourname`](https://github.com/HAU-6INTROWEB/m1a1-classcode-yourname) | [`m1a1-solution`](https://github.com/HAU-6INTROWEB/m1a1-solution) | [Actions](https://github.com/HAU-6INTROWEB/m1a1-solution/actions) |
+| JavaScript / Vitest | [COURSE-ORG-A](https://github.com/COURSE-ORG-A) | [`m1a1-classcode-yourname`](https://github.com/COURSE-ORG-A/m1a1-classcode-yourname) | [`m1a1-solution`](https://github.com/COURSE-ORG-A/m1a1-solution) | [Actions](https://github.com/COURSE-ORG-A/m1a1-solution/actions) |
+| Dart | [COURSE-ORG-B](https://github.com/COURSE-ORG-B) | [`m1a1-classcode-yourname`](https://github.com/COURSE-ORG-B/m1a1-classcode-yourname) | [`m1a1-solution`](https://github.com/COURSE-ORG-B/m1a1-solution) | [Actions](https://github.com/COURSE-ORG-B/m1a1-solution/actions) |
+| HTML / CSS / JS | [COURSE-ORG-C](https://github.com/COURSE-ORG-C) | [`m1a1-classcode-yourname`](https://github.com/COURSE-ORG-C/m1a1-classcode-yourname) | [`m1a1-solution`](https://github.com/COURSE-ORG-C/m1a1-solution) | [Actions](https://github.com/COURSE-ORG-C/m1a1-solution/actions) |
+
+> The org names above (`COURSE-ORG-A/B/C`) are placeholders. Point them at your own public course orgs to make these links resolve.
 
 **Every activity in these orgs is itself a template repo**, not just `m1a1`. So a
 teacher can copy any activity directly with **Use this template**, or browse an

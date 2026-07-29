@@ -14,7 +14,7 @@ to build one? Jump to [Getting started](getting-started.md).
 **I want to evaluate whether this fits my course**
 1. [Overview](overview.md) - what it is and the problem it solves.
 2. [Core concepts](concepts.md) - the three splits that make it safe.
-3. [Live examples](examples.md) - one activity in three real, public orgs.
+3. [Live examples](examples.md) - one activity in three example orgs (placeholder names).
 4. [Architecture](architecture.md) - the full technical design.
 
 **I am setting up a new course**

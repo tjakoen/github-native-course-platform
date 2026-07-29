@@ -1,6 +1,6 @@
-# Generate AI feedback drafts - 6DEMO (section 0000) - m3a1
+# Generate AI feedback drafts - 6xxx (section 0000) - m3a1
 
-The grade sweep wrote a per-submission input file to gradebook/notes-input/m3a1/ for each submission that opted in. Turn each into a reviewable note draft I can check in this dashboard. Work from: classes/teacher-6demo-0000-tjakoen (the local clone of github.com/HAU-6DEMO/teacher-6demo-0000-tjakoen) - pull it first.
+The grade sweep wrote a per-submission input file to gradebook/notes-input/m3a1/ for each submission that opted in. Turn each into a reviewable note draft I can check in this dashboard. Work from: classes/teacher-6xxx-0000-tjakoen (the local clone of github.com/COURSE-ORG-DEMO/teacher-6xxx-0000-tjakoen) - pull it first.
 
 ## What to do
 For EVERY gradebook/notes-input/m3a1/<repo>.md that does NOT already have a matching gradebook/notes/m3a1/<repo>.md:

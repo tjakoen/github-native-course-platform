@@ -2,7 +2,7 @@
 // "sec|act|skey" dkey shape are a FROZEN CONTRACT with everyone's saved
 // browser state - never rename either. Node-importable (check-intents runs
 // under Node), so localStorage access is guarded at load.
-export const DKEY="hau-grade-decisions-v1";
+export const DKEY="course-grade-decisions-v1";
 export let DEC={}; try{DEC=JSON.parse((globalThis.localStorage&&localStorage.getItem(DKEY))||"{}")}catch(e){DEC={}}
 export const dkey=(sec,act,skey)=>sec+"|"+act+"|"+skey;
 export const getDec=(sec,act,skey)=>DEC[dkey(sec,act,skey)]||null;
@@ -19,7 +19,7 @@ export function exportDecisions(){
   const payload={_meta:{key:DKEY,exportedAt:new Date().toISOString(),count:n},decisions:DEC};
   const a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}));
-  a.download="hau-grade-decisions-"+new Date().toISOString().slice(0,10)+".json";
+  a.download="course-grade-decisions-"+new Date().toISOString().slice(0,10)+".json";
   a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 export function importDecisions(file,onDone){

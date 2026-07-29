@@ -17,7 +17,7 @@ Full documentation lives in **[docs/](docs/)**. Good places to start:
 - **[Overview](docs/overview.md)** - what it is and the problem it solves.
 - **[Core concepts](docs/concepts.md)** - the three splits that make it safe.
 - **[Getting started](docs/getting-started.md)** - set up your own course.
-- **[Live examples](docs/examples.md)** - one activity in three real, public orgs.
+- **[Live examples](docs/examples.md)** - one activity in three example orgs (placeholder names).
 - **[Architecture](docs/architecture.md)** - the full technical design.
 
 The [docs index](docs/README.md) has reading paths for evaluating, setting up,

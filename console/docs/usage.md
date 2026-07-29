@@ -14,7 +14,7 @@ fetched live from `api.github.com` in your browser.
    its own page anytime (rail footer).
 2. Add one row **per teacher repo**, and everything stays in your own browser
    (localStorage), never sent anywhere but `api.github.com`:
-   - The **repo URL** (e.g. `github.com/HAU-6INTROWEB/teacher-6introweb-2106-tjakoen`).
+   - The **repo URL** (e.g. `github.com/COURSE-ORG-C/teacher-6xxx-0003-tjakoen`).
    - That repo's **own fine-grained GitHub PAT**. Each repo carries its own
      token, so one expired or rejected PAT only affects that section.
    - **Contents: Read and write** + **Metadata: Read** is enough to load the
@@ -230,7 +230,7 @@ Writes are tiered, and this doesn't change with the new shell:
 ## Maintenance tools (local CLIs)
 
 These run on your machine against a local `classes/` checkout (clone the
-teacher repos flat into `classes/`, e.g. `classes/teacher-6apsi-2240-tjakoen/`).
+teacher repos flat into `classes/`, e.g. `classes/teacher-6xxx-0001-tjakoen/`).
 They're occasional data-hygiene helpers, separate from the hosted review flow:
 
 - `npm run audit`  -> `out/audit-report.md` (student.json consistency)
