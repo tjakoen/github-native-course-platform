@@ -1,0 +1,7 @@
+{
+  "projectName": "github-native-course-platform",
+  "plansDir": "./plans",
+  "docsDirs": [
+    "./docs"
+  ]
+}
