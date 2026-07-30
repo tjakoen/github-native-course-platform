@@ -18,6 +18,8 @@
 // for free — same pattern as cmdk.js. Monochrome via the page's design tokens.
 (() => {
   "use strict";
+  // patched by scripts/bake-theme.mjs: host-configurable sprite path (subpath hosting)
+  const GRAIN_SPRITE = document.documentElement.dataset.grainSprite || "/assets/sprite.svg";
   if (window.grainLightbox) return;              // idempotent
 
   let root, imgEl, capEl, dotsEl, countEl, prevBtn, nextBtn;
@@ -43,17 +45,17 @@
     root.setAttribute("aria-label", "Image viewer");
     root.innerHTML = `
       <button class="lightbox__close" type="button" aria-label="Close">
-        <svg class="icon" aria-hidden="true"><use href="/assets/sprite.svg#close"></use></svg>
+        <svg class="icon" aria-hidden="true"><use href="${GRAIN_SPRITE}#close"></use></svg>
       </button>
       <button class="lightbox__nav lightbox__nav--prev" type="button" aria-label="Previous image">
-        <svg class="icon" aria-hidden="true"><use href="/assets/sprite.svg#chevron-left"></use></svg>
+        <svg class="icon" aria-hidden="true"><use href="${GRAIN_SPRITE}#chevron-left"></use></svg>
       </button>
       <figure class="lightbox__figure">
         <img class="lightbox__img" alt="">
         <figcaption class="lightbox__caption"></figcaption>
       </figure>
       <button class="lightbox__nav lightbox__nav--next" type="button" aria-label="Next image">
-        <svg class="icon" aria-hidden="true"><use href="/assets/sprite.svg#chevron-right"></use></svg>
+        <svg class="icon" aria-hidden="true"><use href="${GRAIN_SPRITE}#chevron-right"></use></svg>
       </button>
       <div class="lightbox__dots" role="tablist" aria-label="Photos"></div>
       <p class="lightbox__count" aria-live="polite"></p>`;

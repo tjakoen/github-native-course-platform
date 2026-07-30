@@ -10,6 +10,8 @@
 
 Built and run in production across several live university courses (front-end JS/React, Dart/Flutter, and HTML/CSS/JS), covering hundreds of student repositories per term.
 
+**See it working, without setting anything up:** the Course Console has a [demo mode](https://tjakoen.github.io/github-native-course-platform/?demo=1) - the real app on three invented classes generated in your browser. No account, no token, no data of ours or yours involved.
+
 ## 📖 Documentation
 
 Full documentation lives in **[docs/](docs/)**. Good places to start:

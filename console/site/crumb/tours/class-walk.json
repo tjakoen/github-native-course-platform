@@ -1,0 +1,14 @@
+{
+  "id": "class-walk",
+  "title": "Inside a class",
+  "route": "/github-native-course-platform/",
+  "mode": "demo",
+  "intro": "This is one class. The Overview answers 'what needs me today', and the tabs hold the work itself. Start here if you have never used the console.",
+  "steps": [
+    { "surface": "class:tabs", "say": "Seven views on one class. Gradebook is the students-by-activities matrix, Students holds per-student profiles with identity and delivery checks, AI Review is where held AI proposals get decided, Attendance is the scan record, Ops runs the engine. The tab labels carry live counts so you can see where the work is before clicking." },
+    { "surface": "class:quick", "say": "The two everyday jobs, without the trip to Ops. Grade sweep clones and grades every submission against the canonical tests and writes the gradebook: it is teacher-side and never touches a student repo. Generate feedback opens the drafting prompt for AI submissions that have no draft yet." },
+    { "surface": "class:flags", "say": "The engine's own flag files, read straight from the teacher repo. These come from the grade sweep and the audits, not from the console, so they are the engine's opinion of the class rather than the UI's." },
+    { "surface": "class:runs", "say": "Recent workflow runs for this class, newest first. A red audit run is the audit doing its job: it exits non-zero when it FOUND something. Ops has the full catalog, every card dry-run by default." },
+    { "surface": "class:reports", "say": "The engine writes its audits as markdown into the teacher repo (Canvas cross-check, repo coverage, the gradebook itself) and they render here, so you never have to leave for GitHub to read a report." }
+  ]
+}

@@ -2,6 +2,7 @@
 // Dispatch returns 204 with no run id, so the spawned run is found by polling
 // for the newest workflow_dispatch run created after our timestamp.
 import { ghJSON, tokenForRepo, AuthError } from "./gh.mjs";
+import { isDemo, demoDispatch } from "./demo.mjs";
 
 export async function listRuns(org, repo, workflowFile, perPage = 5) {
   const j = await ghJSON(`/repos/${org}/${repo}/actions/workflows/${encodeURIComponent(workflowFile)}/runs?per_page=${perPage}`);
@@ -9,6 +10,10 @@ export async function listRuns(org, repo, workflowFile, perPage = 5) {
 }
 
 export async function dispatch(org, repo, workflowFile, inputs) {
+  // Demo mode: the run is simulated in memory (queued -> in_progress ->
+  // success), so the ops feed, the poller and the wizards behave for real
+  // without dispatching anything.
+  if (isDemo()) return demoDispatch(org, repo, workflowFile, inputs);
   const r = await fetch(`https://api.github.com/repos/${org}/${repo}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`, {
     method: "POST",
     headers: {

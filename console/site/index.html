@@ -1,9 +1,12 @@
 <!doctype html>
-<html lang="en" data-theme="brioche" data-cmdk-src="" data-cmdk-sprite="vendor/grain/sprite.svg" data-crumb-prefix="./crumb">
+<!-- data-grain-sprite: where grain's islands find the icon sprite. They default to
+     the root-absolute /assets/sprite.svg, which 404s under a project-page subpath;
+     scripts/bake-theme.mjs rewrites the vendored copies to read this instead. -->
+<html lang="en" data-theme="brioche" data-cmdk-src="" data-cmdk-sprite="vendor/grain/sprite.svg" data-grain-sprite="vendor/grain/sprite.svg" data-crumb-prefix="./crumb">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://api.github.com 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://api.github.com 'self'; img-src 'self' blob: data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex">
 <title>Course Console</title>
 <link rel="stylesheet" href="theme.css">
@@ -22,13 +25,13 @@
     <div class="side-rail__group" id="railClasses" data-surface="rail:classes"><!-- one nav-item per discovered class --></div>
     <div class="side-rail__spacer"></div>
     <a class="nav-item" href="scanner/" data-surface="rail:scanner"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#send"></use></svg><span class="nav-item__label">Attendance scanner</span></a>
-    <button class="nav-item nav-item--btn" type="button" data-crumb-start="first-run"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#spark"></use></svg><span class="nav-item__label">Tour</span></button>
+    <button class="nav-item nav-item--btn" type="button" data-tour="first-run"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#spark"></use></svg><span class="nav-item__label">Tour</span></button>
     <a class="nav-item" href="#/settings" data-nav="settings"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#settings"></use></svg><span class="nav-item__label">Settings</span></a>
   </aside>
   <div class="app-shell__scrim" data-shell="rail-close"></div>
   <header class="app-shell__topbar">
     <button class="icon-btn" data-shell="rail-toggle" aria-label="Menu" title="Menu"><svg class="icon" aria-hidden="true"><use href="vendor/grain/sprite.svg#menu"></use></svg></button>
-    <nav class="tab-bar" id="ctxTabs"></nav>
+    <nav class="tab-bar" id="ctxTabs" data-surface="class:tabs"></nav>
     <div class="topbar-ctl">
       <button class="window-bar__search" data-cmdk-open type="button" data-surface="topbar:search">Search… <kbd class="kbd">⌘K</kbd></button>
       <button class="btn" data-size="sm" data-variant="soft" id="reload" aria-label="Refresh this view from GitHub" title="Re-fetch this view's data from GitHub" data-surface="topbar:refresh">↻</button>

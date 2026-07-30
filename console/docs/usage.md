@@ -6,6 +6,27 @@ topbar + status bar) with hash routes, deployed at
 class loads until you connect its repo; everything you see after that is
 fetched live from `api.github.com` in your browser.
 
+## Demo mode (look before you connect)
+
+Append **`?demo=1`** to the URL, or press **Open the demo** on the first-run
+screen. The console then runs on three invented classes generated in your
+browser from a fixed seed, with no GitHub connection and no token: gradebooks,
+AI feedback drafts, student code and screenshots, attendance, reports, engine
+runs, and every write surface (filing an intent, flipping a publish flag,
+dispatching a workflow) simulated in memory.
+
+It is the real app on fake data, not a mock-up: only the GitHub transport is
+swapped, so every parser and view below it is the production one. Use it to
+show the platform to someone, to try the review flow before touching a live
+class, or to check a UI change without burning API budget.
+
+- Demo mode is **loud** (a rail tag, a banner, a status-bar chip) and one click
+  to leave: **Exit demo** in the rail footer.
+- It never reads or writes your real setup. Your saved repos and tokens are not
+  touched, review decisions go to a separate storage key, nothing is cached to
+  disk, and the flag lives in sessionStorage so closing the tab ends it.
+- A guided tour starts automatically on the first visit of a tab.
+
 ## Setup (one time)
 
 1. Open the hosted console. With no repos configured yet, it shows a setup
@@ -35,8 +56,10 @@ fetched live from `api.github.com` in your browser.
   subject, then a footer with **Scanner**, **Tour**, and **Settings**. Ops,
   Flags, and Reports are no longer rail items - Ops moved into each class's
   tabs, and Flags/Reports were folded into the Dashboard and each class's
-  Overview (see below). A short guided tour of the shell runs once on your
-  first visit; the Tour button replays it anytime.
+  Overview (see below). The **Tour** button is route-aware: it hands you a
+  guided tour of whichever view you are standing in (the shell, a class, the AI
+  review lane, or the demo), and the shell one also runs once on your first
+  visit. A tour highlights and explains, never changes anything.
 - **Topbar**: per-class tabs when you're inside a class (Overview, Gradebook,
   Activities, Students, AI Review, Attendance, Ops), a global search box
   (**Cmd/Ctrl-K**), the **↻ refresh** button (drops the cached snapshot and

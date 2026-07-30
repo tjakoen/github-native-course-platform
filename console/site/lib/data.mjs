@@ -131,8 +131,11 @@ export function parseIntentName(name) {
   const ts = m[1], rest = m[2];
   const kind = INTENT_KINDS.find(k => rest === k || rest.startsWith(k + "-"));
   const aid = kind && rest.length > kind.length ? rest.slice(kind.length + 1) : null;
-  // ts YYYYMMDD-HHMMSS -> Date (local); NaN-safe (callers guard)
-  const at = ts.replace(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/, "$1-$2-$3T$4:$5:$6");
+  // ts YYYYMMDD-HHMMSS -> ISO instant. The stamp is UTC (wireSend builds the
+  // filename from toISOString), so the "Z" is required: without it this parsed as
+  // local time and a just-filed intent read "8 h ago" in a UTC+8 timezone.
+  // NaN-safe (callers guard).
+  const at = ts.replace(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/, "$1-$2-$3T$4:$5:$6Z");
   return { name, ts, kind: kind || rest, aid, at };
 }
 export async function getPendingIntents(key) {

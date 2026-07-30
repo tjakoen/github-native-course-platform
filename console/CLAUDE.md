@@ -61,6 +61,37 @@ behind the "built with Claude" claim is the README badge + footer and the flagsh
 
 ## Repo-specific rules
 
+- **Demo mode swaps the TRANSPORT, nothing else.** `?demo=1` (or the first-run
+  "Open the demo" button) makes `lib/gh.mjs` route to `lib/demo.mjs`, an in-memory
+  virtual GitHub serving synthetic repos from `lib/demo-fixture.mjs`. Never add an
+  if-demo branch to a view, a parser, or a builder: the whole value of demo mode is
+  that everything above the transport is the production code path, so a demo that
+  renders right is evidence the real one does. When a fixture and a real file shape
+  disagree, the fixture is wrong (it already cost us once: pretty-printed
+  `assignments.json` silently pushed every flag toggle onto config-writes' whole-file
+  fallback instead of its surgical one-line diff). Demo mode must also stay
+  non-persistent and non-destructive: caches bypassed, its own decisions key, the
+  real Settings config never read, and the flag in sessionStorage. Keep the fixture
+  in `.mjs` with invented data only - the Pages tripwire fails the build on a
+  shipped `.json`/`.csv` carrying gradebook identity columns, and a real name in
+  there would be a PII leak in a public artifact. `npm run test:demo` is the gate.
+- **Vendored GRAIN/CRUMB islands assume a ROOT-mounted host; the bake fixes that.**
+  This app lives under a project-page subpath, so `scripts/bake-theme.mjs` rewrites
+  two root-absolute assumptions in the copies it vendors: crumb-live's
+  `/scripts/ai-spotlight.js` import (esbuild resolve plugin) and lightbox.js's
+  `/assets/sprite.svg` (rewritten to read `data-grain-sprite`, declared on
+  `site/index.html`). Both patches throw or fail loudly if the upstream shape
+  changes - do not "simplify" them away, and if you add another grain island, check
+  it for the same class of bug. Related: the CSP needs `font-src 'self' data:`,
+  because the theme embeds its webfonts as data: URLs.
+- **CRUMB tours are per-view, and the host starts them at step 0.** The tour client
+  navigates by PATHNAME (`tour.route`, and any step's `at`), which is wrong for a
+  hash-router SPA under a project-page subpath - it walks the visitor out of the
+  app. So `app.mjs` starts a tour at its first step (no navigation at all), each
+  tour only addresses `data-surface` targets that exist on the route it launches
+  from, and the rail's Tour button picks the tour for the current route. Launch
+  tours with `data-tour="<id>"` (the host's hook), not `data-crumb-start`.
+
 - **Sections are auto-discovered, not hardcoded.** `lib/config.mjs` scans `classes/` and derives each
   section from ground truth (folder name, git remote, `grader/assignments.json`). `grader.config.json`
   is optional overrides only. Never reintroduce absolute paths or a per-tool section array.

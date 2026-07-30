@@ -10,6 +10,17 @@
 
 The platform grades take-home and in-lab work with an AI, then *holds every AI grade for review*. This is where that review happens. AI-proposed grades and feedback show up in *grain* type; the moment you approve or edit one, it flips to *clean* type. Provenance is visible in the page itself, which is the one idea [GRAIN](https://tjakoen.github.io/grain) exists to make real.
 
+## Try it without connecting anything (demo mode)
+
+Add **`?demo=1`** to the URL, or press **Open the demo** on the first-run screen:
+[tjakoen.github.io/github-native-course-platform/?demo=1](https://tjakoen.github.io/github-native-course-platform/?demo=1)
+
+Demo mode runs the whole console on three invented classes generated in your browser from a fixed seed: gradebooks, AI feedback drafts with proposed scores and vibecode flags, student code and screenshots, attendance, audit reports, engine runs. There is no GitHub connection and no token.
+
+It is **not** a mock-up of the UI. Demo mode replaces exactly one thing, the GitHub REST transport, with an in-memory implementation that answers the same endpoints; everything above it (the CSV parsing, the note precedence, the intent builders, the Actions polling) is the real code path. So the demo renders correctly for the same reasons production does, and a fixture that drifts from the real file shapes breaks the demo the way bad real data would.
+
+Nothing leaks in either direction: the transport and snapshot caches are bypassed (so no synthetic row is persisted), review decisions go to their own storage key, your saved repos and tokens are never read, and every write is simulated in memory and gone when you close the tab. The flag lives in sessionStorage, so you cannot get stuck in it. `npm run test:demo` walks every view in demo mode and fails on any page error or any request to `api.github.com`.
+
 ## Data-free by design
 
 The deployed page is an empty shell. **No student data is ever baked into it or stored on any server.** When you open it, it fetches your gradebooks straight from `api.github.com` using a read-only token you paste into Settings, which lives only in your own browser's localStorage. Nothing else leaves the page: the strict Content-Security-Policy allows exactly one outbound host, `api.github.com`. A deploy-time tripwire fails the build if any gradebook data sneaks into the artifact.
@@ -40,7 +51,10 @@ site/       the hosted app (static shell + ES modules)
   app.css         layout on top of GRAIN
   theme.css       baked from @tjakoen/grain at deploy time (gitignored)
   lib/            gh (API adapter), gradebook, config, shots, code, store
+  lib/demo*.mjs   demo mode: the virtual GitHub + its synthetic dataset
+  crumb/tours/    the guided tours (one per view), read by the CRUMB client
 scripts/    bake-theme.mjs - inlines the GRAIN theme into site/theme.css
+            e2e-demo.mjs - walks every view in demo mode (npm run test:demo)
 src/        maintenance tools (audit, fix, blanks) that scan a local classes/
 lib/        config.mjs - section discovery for the maintenance tools
 docs/       grain-for-ai, commands, usage

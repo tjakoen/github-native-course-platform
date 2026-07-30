@@ -21,6 +21,7 @@ import { $, el, esc, confirmExecute, openDrawer } from "./lib/ui.mjs";
 import { DEC, getDec, setDec, skeyOf, isDecided, finalScore, exportDecisions, importDecisions } from "./lib/decisions.mjs";
 import { hl } from "./lib/hl.mjs";
 import { wireSend, buildGenFeedback, buildApplyAI, buildFinalize, buildApplyGrades, buildDeliver, buildManualAttendance, buildNewActivity, fileGenFeedback, workFrom } from "./lib/intents.mjs";
+import { isDemo, enterDemo, exitDemo } from "./lib/demo.mjs";
 
 let q="", revAct=null;
 // The student filter box (q) is shared state; reset it when the view SCOPE
@@ -50,7 +51,17 @@ const openInClaude=(sel="#ptxt",txt="")=> (txt||"").length>CLAUDE_URL_CAP
 // Settings body + wiring, shared by the real page (#/settings) and the interrupt
 // drawer (first run / auth error). `scope` is the element the form lives in;
 // `close` is what "done" does (remove the drawer, or nothing for the page).
-function settingsFormHTML(c){
+// The demo pitch, shown wherever someone might be stuck at the front door: the
+// first-run settings drawer, the Settings page, and (as the exit half) the
+// dashboard while demo mode is on.
+const DEMO_PITCH="<div class='demoOffer'><b>Not set up yet?</b> Open the <b>demo</b> instead: three synthetic classes with grades, AI feedback drafts, attendance and ops, all generated in your browser. No repo, no token, and nothing real is touched. <button class='btn demoGo' data-size='sm' type='button'>Open the demo →</button></div>";
+// A class, not an id: the pitch can legitimately appear twice (the Settings page
+// and an interrupt drawer over it), and duplicate ids break both the markup and
+// whichever copy the user can actually reach.
+function wireDemoOffer(scope){ scope.querySelectorAll(".demoGo").forEach(b=>{ b.onclick=()=>enterDemo(); }); }
+
+function settingsFormHTML(c,firstRun){
+ if(isDemo()) return "<div class='demoOffer'><b>You are in demo mode.</b> The repo list and tokens are simulated, so there is nothing to configure here and nothing was read from your saved settings. Leave the demo to connect real teacher repos. <button class='btn' data-size='sm' type='button' id='leaveDemo'>Exit demo</button></div>";
  // Each teacher repo gets its OWN row: URL + its own fine-grained PAT. One
  // rejected/expired token then only takes down that one section, not all.
  const rowHTML=(r={})=>"<div class='repoRow' style='display:flex;gap:var(--space-2);margin-bottom:var(--space-2);align-items:flex-start'>"+
@@ -60,7 +71,7 @@ function settingsFormHTML(c){
    "</div>"+
    "<button class='btn rDel' data-size='sm' data-variant='soft' title='Remove this repo' style='flex:none'>×</button>"+
   "</div>";
- return "<div class='muted'>Stored in THIS browser's localStorage only - anyone with access to this browser profile can read the tokens. A PAT scoped to just the teacher repo loads gradebooks and lets you file Intents. To also see <b>student code and screenshots</b> (which live in the submission repos), that repo's PAT needs read access to the whole org - use a classic PAT with <code>repo</code> scope, or a fine-grained PAT with <b>All repositories</b> (Contents: Read). Short expiry recommended.</div>"+
+ return (firstRun?DEMO_PITCH:"")+"<div class='muted'>Stored in THIS browser's localStorage only - anyone with access to this browser profile can read the tokens. A PAT scoped to just the teacher repo loads gradebooks and lets you file Intents. To also see <b>student code and screenshots</b> (which live in the submission repos), that repo's PAT needs read access to the whole org - use a classic PAT with <code>repo</code> scope, or a fine-grained PAT with <b>All repositories</b> (Contents: Read). Short expiry recommended.</div>"+
   "<div class='field__label' style='margin-top:var(--space-3)'>Teacher repos <span class='mut'>- one repo + its own PAT per row</span></div>"+
   "<div id='sRepos'>"+((c.repos.length?c.repos:[{}]).map(rowHTML).join(""))+"</div>"+
   "<button class='btn' data-size='sm' data-variant='soft' id='sAdd' style='margin-top:2px'>+ Add repo</button>"+
@@ -69,9 +80,14 @@ function settingsFormHTML(c){
   "<div style='display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap'><button class='btn' data-size='sm' data-variant='soft' id='sExpDec'>↓ Export</button> <button class='btn' data-size='sm' data-variant='soft' id='sImpDec'>↑ Import</button><input type='file' id='sImpFile' accept='application/json,.json' style='display:none'></div>"+
   "<div class='field__label' style='margin-top:var(--space-4)'>Cached data <span class='mut'>- gradebooks kept in this browser for fast reloads</span></div>"+
   "<div class='muted' data-size='sm'>To make reloads fast, gradebook data (including student names and numbers) is cached in this browser's IndexedDB. It never leaves the machine, is swept after 7 days, and is wiped when you remove all repos. Clear it now if you are on a shared computer.</div>"+
-  "<div style='display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;margin-top:6px'><button class='btn' data-size='sm' data-variant='soft' id='sClearCache'>Clear cached data</button> <span class='mut' id='sCacheMsg' style='font-size:12px'></span></div>";
+  "<div style='display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;margin-top:6px'><button class='btn' data-size='sm' data-variant='soft' id='sClearCache'>Clear cached data</button> <span class='mut' id='sCacheMsg' style='font-size:12px'></span></div>"+
+  (firstRun?"":DEMO_PITCH);
 }
 function wireSettingsForm(scope,c,close,firstRun){
+ // In demo mode the form is a single notice with one button, so none of the
+ // real wiring below has anything to bind to.
+ if(isDemo()){ const b=scope.querySelector("#leaveDemo"); if(b)b.onclick=()=>exitDemo(); return; }
+ wireDemoOffer(scope);
  const rowHTML=()=>"<div class='repoRow' style='display:flex;gap:var(--space-2);margin-bottom:var(--space-2);align-items:flex-start'>"+
    "<div style='flex:1;min-width:0'>"+
     "<input class='field__input rUrl mono' type='text' value='' placeholder='github.com/org/teacher-subject-section-name'>"+
@@ -126,6 +142,32 @@ function openSettings(firstRun){
  wireSettingsForm(p,c,close,firstRun);
 }
 
+// ---- demo mode chrome ----
+// Demo mode has to be unmissable (nobody should mistake synthetic data for a real
+// class) and one click to leave: a rail badge + an Exit item, a status-bar chip,
+// and a banner card at the top of the dashboard.
+function demoChrome(){
+ if(!isDemo())return;
+ document.documentElement.setAttribute("data-demo","1");
+ const brand=document.querySelector(".side-rail__brand");
+ if(brand&&!brand.querySelector(".demoTag")) brand.insertAdjacentHTML("beforeend","<span class='badge demoTag' data-tone='held'>demo</span>");
+ if(!$("#exitDemo")){
+  const b=el("button","nav-item nav-item--btn","<svg class='icon' aria-hidden='true'><use href='vendor/grain/sprite.svg#close'></use></svg><span class='nav-item__label'>Exit demo</span>");
+  b.type="button"; b.id="exitDemo"; b.title="Leave demo mode and go back to your own teacher repos";
+  const set=document.querySelector("#rail [data-nav='settings']");
+  if(set) set.parentNode.insertBefore(b,set); else $("#rail").append(b);
+  b.onclick=()=>exitDemo();
+ }
+}
+function demoBanner(){
+ const c=el("div","card demoBanner"); c.dataset.pad="sm"; c.dataset.surface="demo:banner";
+ c.innerHTML="<h2>Demo mode <span class='badge' data-tone='held'>synthetic data</span></h2>"+
+  "<p class='mut' data-size='sm'>Three invented classes generated in this browser from a fixed seed: gradebooks, AI feedback drafts, attendance, reports and engine runs. There is no GitHub connection and no token. Every write (filing an intent, flipping a publish flag, dispatching a workflow) is simulated in memory and gone when you close the tab, and your own saved repos and tokens were not read.</p>"+
+  "<div class='ctl'><button class='btn' data-size='sm' type='button' data-tour='demo-welcome'>Take the tour</button><button class='btn' data-size='sm' data-variant='soft' type='button' id='demoOut'>Exit demo</button></div>";
+ setTimeout(()=>{ const b=$("#demoOut"); if(b)b.onclick=()=>exitDemo(); },0);
+ return c;
+}
+
 // ---- shell wiring + routes ----
 const classHref=(key,sub)=>"#/c/"+encodeURIComponent(key)+(sub?"/"+sub:"");
 function curKey(){ const m=(location.hash||"").match(/^#\/c\/([^/]+)/); return m?decodeURIComponent(m[1]):null; }
@@ -153,6 +195,7 @@ function setTabs(key,mode,s){
 
 function statusLine(key){
  const bits=[];
+ if(isDemo()) bits.push("<span><b>DEMO</b> · synthetic data, no GitHub connection</span>");
  if(rate.remaining!=null) bits.push("<span"+(rate.remaining<500?" style='color:var(--color-danger,inherit);font-weight:var(--font-weight-semibold)'":"")+">API "+rate.remaining+"/"+rate.limit+"</span>");
  if(key){ const age=ageOf(key); if(age!=null){ const reval=isRevalidating(key); bits.push("<span>"+esc(key)+" · "+(reval?"showing cached ":"loaded ")+(age<6e4?"just now":Math.round(age/6e4)+" min ago")+(reval?" · refreshing…":(age>STALE_MS?" · stale (↻ to refresh)":""))+"</span>"); } }
  bits.push("<span>"+Object.keys(DEC).length+" decisions</span>");
@@ -392,7 +435,10 @@ function dashView(){
  setTabs(null); statusLine(null);
  main.innerHTML="";
  const w=el("div","wrap");
- w.innerHTML="<h1>My classes</h1><p class='lede' data-size='sm'>Live from GitHub. A class's gradebook loads when you open it and is cached in this browser for fast reloads; nothing leaves this machine. Clear it anytime in <a href='#/settings'>Settings</a>.</p>";
+ w.innerHTML="<h1>My classes</h1><p class='lede' data-size='sm'>"+(isDemo()
+  ?"Everything below is generated in your browser. The views, the parsing and the write surfaces are the real ones: only the data behind them is invented."
+  :"Live from GitHub. A class's gradebook loads when you open it and is cached in this browser for fast reloads; nothing leaves this machine. Clear it anytime in <a href='#/settings'>Settings</a>.")+"</p>";
+ if(isDemo()) w.append(demoBanner());
  // Discovery drops a repo it cannot read (typo'd URL, expired/under-scoped PAT)
  // instead of failing the whole load; without this banner that section just is
  // not there, silently.
@@ -412,7 +458,7 @@ function dashView(){
  // per-class errand. Only safe fan-outs live here (grade sweep is teacher-side;
  // feedback is the intent path; audits are read-only) - execute/delivery ops stay
  // per-class behind their typed confirm.
- const bulk=el("div","card"); bulk.dataset.pad="sm";
+ const bulk=el("div","card"); bulk.dataset.pad="sm"; bulk.dataset.surface="dash:bulk";
  bulk.innerHTML="<h2>Bulk actions <span class='mut' style='font-weight:400'>· all classes</span></h2>"+
   "<p class='mut' data-size='sm'>Fan one job across every class. Execute + delivery ops (publish, Canvas execute, provisioning) stay per-class in each class's Ops tab.</p>"+
   "<div class='ctl'>"+
@@ -421,7 +467,7 @@ function dashView(){
    "<button class='btn' data-size='sm' data-variant='soft' id='bulkAudit'>Audit — all (read-only)</button>"+
   "</div>";
  w.append(bulk);
- const grid=el("div","dashgrid");
+ const grid=el("div","dashgrid"); grid.dataset.surface="dash:cards";
  const cardFor=sc=>{
   const s=sectionCached(sc.key);
   const c=el("a","card dashcard"); c.href=classHref(sc.key); c.dataset.pad="sm"; c.dataset.dash=sc.key;
@@ -437,7 +483,7 @@ function dashView(){
  // EVERY class: loaded classes show computed alerts + engine FLAGS/FLAGGED lines
  // (cheap 2-call cached read), and every row deep-links; unloaded classes appear
  // as visible "not loaded [load]" rows, never silently absent.
- const inbox=el("div"); w.append(inbox);
+ const inbox=el("div"); inbox.dataset.surface="dash:inbox"; w.append(inbox);
  const flagsByKey={};
  const flagLines=t=>(t||"").split("\n").map(l=>l.replace(/^[-*#>\s]+/,"").trim()).filter(l=>l&&!/^_.*_$/.test(l)).slice(0,3);
  const paintInbox=()=>{
@@ -520,8 +566,46 @@ route("#/c/:key/review/:aid", p=>classView(p.key,"ai",{aid:p.aid}));
 route("#/c/:key/review/:aid/:skey", p=>classView(p.key,"revdetail",{aid:p.aid,skey:p.skey}));
 route("#/c/:key/attendance", p=>classView(p.key,"att"));
 fallback(()=>go("#/"));
+// ---- CRUMB tours, one per view ----
+// Two things to know before touching this.
+//
+// 1. The host starts a tour at STEP 0, never at the intro card. CRUMB's client
+//    navigates by PATHNAME for the intro (tour.route) and for any step carrying
+//    an `at`, which is right for a root-mounted multi-page app and wrong for
+//    this one: the console is a hash-router SPA served under a project-page
+//    subpath, so that navigation walks the visitor straight out of the app (a
+//    404 locally, the wrong site on a fork). Starting at the first step means a
+//    tour never navigates at all. `crumb:active` is crumb-live's documented
+//    sessionStorage contract, and setMode re-renders the current step in place.
+// 2. Because a tour cannot cross views, each one only addresses surfaces that
+//    exist where it is launched, and the rail's Tour button hands you the tour
+//    for whichever view you are standing in.
+function startTour(id){
+ if(!window.crumb) return;
+ try{
+  sessionStorage.setItem("crumb:active",JSON.stringify({id,step:0,mode:"demo",frame:false}));
+  window.crumb.setMode("demo");
+ }catch(e){ try{ window.crumb.start(id); }catch(e2){} }
+}
+document.addEventListener("click",e=>{ const t=e.target.closest&&e.target.closest("[data-tour]"); if(!t)return; e.preventDefault(); startTour(t.getAttribute("data-tour")); });
+
+function tourFor(){
+ const h=location.hash||"#/";
+ if(/^#\/c\/[^/]+\/review/.test(h)) return ["review-walk","Tour: the AI review lane"];
+ if(/^#\/c\//.test(h)) return ["class-walk","Tour: this class"];
+ if(isDemo()) return ["demo-welcome","Tour: what you are looking at"];
+ return ["first-run","Tour: the console shell"];
+}
+function setTourButton(){
+ const b=document.querySelector("#rail [data-tour]");
+ if(!b) return;
+ const [id,label]=tourFor();
+ b.setAttribute("data-tour",id);
+ b.title=label;
+}
+
 let lastFocusHash=null;
-beforeEach(()=>{ setNav(); if(detailKey){document.removeEventListener("keydown",detailKey);detailKey=null;} document.querySelectorAll(".drawer,.drawer-modal").forEach(d=>d.remove());
+beforeEach(()=>{ setNav(); setTourButton(); if(detailKey){document.removeEventListener("keydown",detailKey);detailKey=null;} document.querySelectorAll(".drawer,.drawer-modal").forEach(d=>d.remove());
  // SPA a11y: on a real route change (not a same-route repaint after a decision
  // save, which would steal focus from an open textarea), move focus to the main
  // content region. #main is never replaced (only its innerHTML), so focusing the
@@ -532,7 +616,11 @@ beforeEach(()=>{ setNav(); if(detailKey){document.removeEventListener("keydown",
 let started=false;
 async function boot(){
  sweep();   // one-shot: drop cache entries past their age budget (fire-and-forget)
+ demoChrome();
  const c=loadConfig();
+ // First run: the setup drawer is modal and (until a repo is saved) refuses to
+ // close, so it is the only reachable surface - the demo offer rides in the form
+ // itself rather than on the boot screen behind it.
  if(!c){ main.innerHTML="<div class='boot'><h1>Course Console</h1>Live from GitHub - nothing loads until you connect your teacher repos and their tokens.</div>"; openSettings(true); return; }
  main.innerHTML="<div class='boot'>Discovering classes…</div>";
  try{
@@ -550,11 +638,20 @@ async function boot(){
   await hydrateSnapshots().catch(()=>0);
   fillRail();
   if(started) dispatch(); else { started=true; start(); }
-  // first-run CRUMB tour: once per browser, only after a working setup exists
-  // (never over the settings drawer). Replay anytime via the rail's Tour button.
-  if(!localStorage.getItem("course-crumb-first-run-v1")&&window.crumb){
+  // CRUMB tour on arrival. Demo mode gets its own tour (the visitor came to be
+  // shown around, and it says up front that the data is invented), once per tab
+  // so a reload mid-demo is not a re-tour. The real first-run tour stays once per
+  // browser, only after a working setup exists, never over the settings drawer.
+  // Replay either anytime via the rail's Tour button.
+  setTourButton();
+  if(isDemo()){
+   if(!sessionStorage.getItem("console-demo-toured")&&window.crumb){
+    sessionStorage.setItem("console-demo-toured","1");
+    setTimeout(()=>startTour("demo-welcome"),700);   // let the dashboard paint first
+   }
+  }else if(!localStorage.getItem("course-crumb-first-run-v1")&&window.crumb){
    localStorage.setItem("course-crumb-first-run-v1","1");
-   window.crumb.start("first-run");
+   startTour("first-run");
   }
  }catch(e){
   if(e instanceof AuthError){ main.innerHTML="<div class='boot'>"+esc(e.message)+"</div>"; openSettings(false); }
@@ -1010,15 +1107,15 @@ function renderOverview(s,w){
  // Quick actions: the two common jobs without a trip to the Ops tab. Grade sweep
  // dispatches grade.yml (dry_run=false, teacher-side); Generate feedback opens the
  // per-class bulk feedback drawer over this class's un-drafted AI submissions.
- const qa=el("div","ctl");
+ const qa=el("div","ctl"); qa.dataset.surface="class:quick";
  qa.innerHTML='<button class="btn" data-size="sm" id="ovGrade">Grade sweep →</button> <button class="btn" data-size="sm" data-variant="soft" id="ovGenFb">Generate feedback →</button> <a class="btn" data-size="sm" data-variant="soft" href="'+classHref(s.key,"ops")+'">All ops →</a>';
  w.append(qa);
  w.append(pendingIntentsCard(s));
  const risk=atRiskCard(s); if(risk)w.append(risk);
  w.append(canvasPanel(s));
- w.append(flagsCard(s));
- w.append(runsCard(s));
- w.append(reportsCard(s));
+ const fc=flagsCard(s); fc.dataset.surface="class:flags"; w.append(fc);
+ const rc=runsCard(s); rc.dataset.surface="class:runs"; w.append(rc);
+ const rp=reportsCard(s); rp.dataset.surface="class:reports"; w.append(rp);
  $("#ovPrompt").onclick=()=>showPrompt(s);
  $("#ovDeliver").onclick=()=>showDeliver(s);
  $("#ovGrade").onclick=()=>quickGradeSweep(s);
@@ -1197,7 +1294,7 @@ function attMatrix(s,dates){
 // pending-intents listing is the real trail, but the stage header needs a
 // synchronous signal to choose the ONE contextual primary, so a successful Send
 // records it here immediately. Monotonic per activity; cleared only by Reset.
-const SENTKEY="course-intent-sent-v1";
+const SENTKEY=isDemo()?"course-intent-sent-v1-demo":"course-intent-sent-v1";   // demo pipeline state stays out of the real one
 function sentMap(){ try{return JSON.parse(localStorage.getItem(SENTKEY)||"{}")}catch(e){return {}} }
 function markSent(section,kind,aid){ try{const m=sentMap();m[section+"|"+kind+"|"+(aid||"")]=new Date().toISOString();localStorage.setItem(SENTKEY,JSON.stringify(m));}catch(e){} }
 function wasSent(section,kind,aid){ return !!sentMap()[section+"|"+kind+"|"+(aid||"")]; }
@@ -1301,7 +1398,7 @@ function renderAI(s,w){
    "<button class='ovmenu__item' id='apprAll' role='menuitem'>Approve all unreviewed…</button>"+
    "<button class='ovmenu__item ovmenu__item--danger' id='reset' role='menuitem'>Reset decisions…</button>"+
   "</div></details>";
- const bar=el("div","card"); bar.dataset.pad="sm"; const pct=rows.length?Math.round(done/rows.length*100):0;
+ const bar=el("div","card"); bar.dataset.pad="sm"; bar.dataset.surface="review:stage"; const pct=rows.length?Math.round(done/rows.length*100):0;
  bar.innerHTML=stepper+
   "<div class='revbar'>"+
    "<div class='revbar__info'><b>"+esc(revAct)+"</b> · reviewed <b>"+done+"/"+rows.length+"</b> · "+badges+sentHint+"</div>"+
@@ -1314,7 +1411,7 @@ function renderAI(s,w){
   '</div>';
  w.append(bar);
  // queue table
- const card=el("div","card"); card.dataset.pad="sm"; card.append(el("h2","card__title","Review queue - click a row to read the feedback and decide"));
+ const card=el("div","card"); card.dataset.pad="sm"; card.dataset.surface="review:queue"; card.append(el("h2","card__title","Review queue - click a row to read the feedback and decide"));
  const scr=el("div","table-scroll"); const t=el("table","table");
  const max=s.assignments.find(a=>a.id===revAct).totalPoints;
  t.innerHTML="<tr><th>Student</th><th>#</th><th class='center'>Proposed</th><th class='center'>AI-authored likelihood</th><th class='center'>Decision</th><th class='center'>Final</th></tr>"+

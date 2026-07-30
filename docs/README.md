@@ -12,6 +12,9 @@ to build one? Jump to [Getting started](getting-started.md).
 ## Reading paths by role
 
 **I want to evaluate whether this fits my course**
+0. [Open the console demo](https://tjakoen.github.io/github-native-course-platform/?demo=1) -
+   the real management and review surface on three invented classes, generated in
+   your browser. No account, no token, nothing to install.
 1. [Overview](overview.md) - what it is and the problem it solves.
 2. [Core concepts](concepts.md) - the three splits that make it safe.
 3. [Live examples](examples.md) - one activity in three example orgs (placeholder names).

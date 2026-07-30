@@ -1,0 +1,12 @@
+{
+  "id": "review-walk",
+  "title": "The AI review lane",
+  "route": "/github-native-course-platform/",
+  "mode": "demo",
+  "intro": "This is the part of the platform that matters most: an AI drafts feedback and proposes a score, and none of it reaches a student until a human decides. The lane is a strict state machine, so the console shows you exactly one next action.",
+  "steps": [
+    { "surface": "review:stage", "say": "Generate, then Review, then Apply, then Deliver. The stepper shows which stage this activity is actually in, and the single primary button is whatever that stage needs next; everything else is tucked in the overflow menu so there is no row of five equally-plausible buttons to guess between. The meter underneath shows the decision mix, not just a progress bar: approved, override, flagged." },
+    { "surface": "review:queue", "say": "One row per submission: the AI's proposed score, its own AI-authored likelihood call (the 'did a model write this' flag), your decision, and the final score it resolves to. Click a row to read the draft next to the student's code and screenshots and decide. Unreviewed and flagged rows resolve to no score, so they are held out of delivery rather than quietly shipped." },
+    { "surface": "status:writes", "say": "Your decisions live in this browser, never on the server. When you are done, Apply emits a prompt that a Claude Code session runs against the teacher repo to write the gradebook, and Deliver does the same for publishing and Canvas. The console files intents; a human runs them. That gap is the whole safety model." }
+  ]
+}

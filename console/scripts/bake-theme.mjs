@@ -78,6 +78,24 @@ fs.mkdirSync(vendorDir, { recursive: true });
 for (const f of GRAIN_SCRIPTS) {
   fs.copyFileSync(fileURLToPath(import.meta.resolve("@tjakoen/grain/scripts/" + f)), path.join(vendorDir, f));
 }
+// Grain's islands assume a ROOT-mounted host. cmdk.js takes its sprite path from
+// data-cmdk-sprite, but lightbox.js hardcodes the root-absolute /assets/sprite.svg,
+// which 404s under this project-page subpath - the viewer's close/prev/next icons
+// come up blank (same class of bug as crumb-live's /scripts/ai-spotlight.js import,
+// patched below). Rewrite the vendored copy to read the host's data-grain-sprite,
+// keeping grain's own value as the fallback. This THROWS if the pattern is gone on
+// a grain bump, rather than silently shipping broken icons again.
+{
+  const lb = path.join(vendorDir, "lightbox.js");
+  const src = fs.readFileSync(lb, "utf8");
+  const hits = (src.match(/\/assets\/sprite\.svg#/g) || []).length;
+  if (!hits) throw new Error("bake: lightbox.js no longer references /assets/sprite.svg# - re-check grain's sprite handling and update this patch");
+  if (!src.includes('"use strict";')) throw new Error("bake: lightbox.js shape changed (no \"use strict\") - update the sprite patch");
+  fs.writeFileSync(lb, src
+    .replace(/\/assets\/sprite\.svg#/g, "${GRAIN_SPRITE}#")
+    .replace('"use strict";', '"use strict";\n  // patched by scripts/bake-theme.mjs: host-configurable sprite path (subpath hosting)\n  const GRAIN_SPRITE = document.documentElement.dataset.grainSprite || "/assets/sprite.svg";'));
+  console.log(`patched lightbox.js sprite path (${hits} refs) -> data-grain-sprite`);
+}
 fs.copyFileSync(fileURLToPath(import.meta.resolve("@tjakoen/grain/assets/sprite.svg")), path.join(vendorDir, "sprite.svg"));
 console.log(`vendored ${GRAIN_SCRIPTS.length} grain scripts + sprite -> ${vendorDir}`);
 

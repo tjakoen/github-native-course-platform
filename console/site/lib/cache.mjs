@@ -11,6 +11,12 @@
 // 1.5MB. Degrades to memory-only (no throw) when IndexedDB is unavailable
 // (private mode, disabled, quota denied). No service worker (CSP worker-src + the
 // stale-shell risk make it the wrong tool).
+//
+// Demo mode never persists: synthetic sections must not land in the same
+// IndexedDB stores as real gradebooks (nor survive an exit from the demo), so
+// every read misses and every write is dropped while it is on.
+import { isDemo } from "./demo.mjs";
+
 const DB = "console-cache-v1", SCHEMA_V = 1;
 export const CAP = 50 * 1024 * 1024, MAXBODY = 1.5 * 1024 * 1024;
 const HTTP_TTL = 7 * 24 * 3600 * 1000, MEDIA_TTL = 14 * 24 * 3600 * 1000;
@@ -20,7 +26,7 @@ let dbP = null, disabled = false;
 export const cacheAvailable = () => !disabled;
 
 function open() {
-  if (disabled) return Promise.resolve(null);
+  if (isDemo() || disabled) return Promise.resolve(null);
   if (dbP) return dbP;
   dbP = new Promise(res => {
     let rq;

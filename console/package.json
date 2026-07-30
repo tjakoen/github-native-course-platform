@@ -14,7 +14,8 @@
     "audit": "node src/audit-students.mjs",
     "fix": "node src/apply-fixes.mjs",
     "blanks": "node src/check-blanks.mjs",
-    "test:e2e": "node scripts/e2e-shots.mjs"
+    "test:e2e": "node scripts/e2e-shots.mjs",
+    "test:demo": "node scripts/e2e-demo.mjs"
   },
   "devDependencies": {
     "@tjakoen/crumb": "^0.1.3",

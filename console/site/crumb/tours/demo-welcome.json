@@ -1,0 +1,15 @@
+{
+  "id": "demo-welcome",
+  "title": "The demo, in one minute",
+  "route": "/github-native-course-platform/",
+  "mode": "demo",
+  "intro": "You are looking at the Course Console running on invented data. Three classes, generated in your browser from a fixed seed: no GitHub connection, no token, and nothing stored. The views and the write surfaces are the real ones, so this is a fair look at the product rather than a slideshow.",
+  "steps": [
+    { "surface": "demo:banner", "say": "Demo mode is deliberately loud, because mistaking synthetic data for a real class would be the worst possible bug. Everything a real console would write (a filed intent, a publish flag, a dispatched workflow) is simulated in memory here and gone when you close the tab. Exit demo puts your own repos back." },
+    { "surface": "dash:cards", "say": "One card per class. A class costs API calls to load, so nothing loads until you open it: an unopened class shows its activity count, an opened one shows students, how many AI grades are waiting on you, and its activity total. Hover a card and it warms up in the background so the click is instant." },
+    { "surface": "dash:inbox", "say": "The inbox that replaced hunting through tabs: held AI grades, blank student identities, students below 50% attendance, plus the engine's own flag files, folded together across every class. Classes you have not loaded appear as visible 'not loaded' rows rather than quietly missing, because a silent gap in a to-do list is worse than a slow one." },
+    { "surface": "dash:bulk", "say": "Fan one job across every class at once. Only the safe fan-outs live here: grading is teacher-side, feedback goes through the intent path, audits are read-only. Anything that writes to students or to Canvas stays per class, behind that class's own typed confirm." },
+    { "surface": "rail:classes", "say": "Open a class from here to see the real depth: gradebook matrix, per-student profiles, the AI review lane, attendance, and ops. The Tour button hands you a tour for whichever view you are standing in, so press it again once you are inside a class." },
+    { "surface": "status:writes", "say": "The rule the whole design hangs on: grades, feedback and delivery only ever leave this console as intent prompts that a human runs in a Claude Code session. The console never writes a grade by itself, in demo mode or in production." }
+  ]
+}

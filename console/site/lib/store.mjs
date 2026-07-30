@@ -4,6 +4,7 @@
 // long-standing key (course-grade-decisions-v1) in app.mjs, byte-compatible with the
 // retired local dashboard so exported backups import cleanly.
 import { clearAll } from "./cache.mjs";
+import { isDemo, demoConfig } from "./demo.mjs";
 
 const CKEY = "grader-ui-config-v1"; // legacy key name kept on purpose: same-origin carry-over from the old grader-ui Pages path
 
@@ -19,7 +20,11 @@ function migrate(c) {
   return { repos, labels: c.labels || {} };
 }
 
+// Demo mode answers with its three synthetic classes and NEVER touches the
+// stored config, so a teacher who opens the demo on their own machine still has
+// their real repos and tokens waiting when they leave it.
 export function loadConfig() {
+  if (isDemo()) return demoConfig();
   try { return migrate(JSON.parse(localStorage.getItem(CKEY) || "null")); }
   catch { return null; }
 }

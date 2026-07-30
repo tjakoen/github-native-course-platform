@@ -37,6 +37,7 @@ function tokenForURL(url) {
 export class AuthError extends Error {}
 
 import { httpGet, httpPut, httpTouch, isMedia } from "./cache.mjs";
+import { isDemo, demoAPI, demoPut } from "./demo.mjs";
 
 // Two-layer ETag cache. HOT: this in-memory Map (per tab). COLD: IndexedDB
 // (cache.mjs), so a conditional GET can revalidate cheaply even on the FIRST load
@@ -47,7 +48,13 @@ import { httpGet, httpPut, httpTouch, isMedia } from "./cache.mjs";
 const CACHE = new Map(); // url|accept -> { etag, body }
 export const rate = { remaining: null, limit: null };
 
-async function req(url, accept, parse) {
+async function req(url, accept, parse, wantsBuffer) {
+  // Demo mode swaps the transport for the in-memory virtual GitHub and nothing
+  // else: no fetch, no ETag cache (so no synthetic body is persisted), and no
+  // rate counter (there is no budget to spend, and inventing one would be a
+  // fabricated number in the status bar). Everything above this line is the real
+  // code path. See lib/demo.mjs.
+  if (isDemo()) return demoAPI(url, accept, !!wantsBuffer);
   const key = url + "|" + accept;
   let hit = CACHE.get(key);
   if (!hit) {
@@ -78,7 +85,7 @@ async function req(url, accept, parse) {
 
 export const ghJSON = url => req(url, "application/vnd.github+json", r => r.json());
 export const ghText = url => req(url, "application/vnd.github.raw", r => r.text());
-export const ghBuf  = url => req(url, "application/vnd.github.raw", r => r.arrayBuffer());
+export const ghBuf  = url => req(url, "application/vnd.github.raw", r => r.arrayBuffer(), true);
 
 // authenticated image fetch -> object URL (a bare <img src> can't send the token)
 const BLOBURLS = new Map();
@@ -103,6 +110,7 @@ function b64(s) {
 // teacher repo. New files only (no sha handling on purpose - an intent is never
 // edited, only executed + archived by Claude Code).
 export async function putIntent(org, repo, path, content, message) {
+  if (isDemo()) return demoPut(org, repo, path, content);
   const r = await fetch(`https://api.github.com/repos/${org}/${repo}/contents/${path}`, {
     method: "PUT",
     headers: {
@@ -128,6 +136,7 @@ export async function putIntent(org, repo, path, content, message) {
 // diff and confirmed). Grades, notes, and delivery still flow through intents -
 // keep it that way.
 export async function putFile(org, repo, path, content, message, sha) {
+  if (isDemo()) return demoPut(org, repo, path, content);
   const body = { message, content: b64(content) };
   if (sha) body.sha = sha;
   const r = await fetch(`https://api.github.com/repos/${org}/${repo}/contents/${path}`, {
