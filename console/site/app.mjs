@@ -18,7 +18,7 @@ import { OPS } from "./lib/ops-catalog.mjs";
 import { listRuns, dispatch as dispatchWf, findDispatchedRun, pollRun } from "./lib/actions.mjs";
 import { editAssignments } from "./lib/config-writes.mjs";
 import { $, el, esc, confirmExecute, openDrawer } from "./lib/ui.mjs";
-import { DEC, getDec, setDec, skeyOf, isDecided, finalScore, exportDecisions, importDecisions } from "./lib/decisions.mjs";
+import { DEC, getDec, setDec, skeyOf, isDecided, finalScore, exportDecisions, importDecisions, adoptLegacy } from "./lib/decisions.mjs";
 import { hl } from "./lib/hl.mjs";
 import { wireSend, buildGenFeedback, buildApplyAI, buildFinalize, buildApplyGrades, buildDeliver, buildManualAttendance, buildNewActivity, fileGenFeedback, workFrom } from "./lib/intents.mjs";
 import { isDemo, enterDemo, exitDemo } from "./lib/demo.mjs";
@@ -1295,6 +1295,10 @@ function attMatrix(s,dates){
 // synchronous signal to choose the ONE contextual primary, so a successful Send
 // records it here immediately. Monotonic per activity; cleared only by Reset.
 const SENTKEY=isDemo()?"course-intent-sent-v1-demo":"course-intent-sent-v1";   // demo pipeline state stays out of the real one
+// Same 2026-07-29 rename as the decisions key: without this, a pipeline mid-flight
+// forgets which intents were already filed and the stage header offers the wrong
+// contextual primary.
+if(!isDemo()) adoptLegacy(SENTKEY,"hau-intent-sent-v1");
 function sentMap(){ try{return JSON.parse(localStorage.getItem(SENTKEY)||"{}")}catch(e){return {}} }
 function markSent(section,kind,aid){ try{const m=sentMap();m[section+"|"+kind+"|"+(aid||"")]=new Date().toISOString();localStorage.setItem(SENTKEY,JSON.stringify(m));}catch(e){} }
 function wasSent(section,kind,aid){ return !!sentMap()[section+"|"+kind+"|"+(aid||"")]; }
