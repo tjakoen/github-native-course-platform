@@ -289,6 +289,24 @@ quizzes/q1/
   input re-grades everyone (use after changing a key/test). Per-assignment
   policy: activities re-grade on a new push; quizzes lock after the first graded
   submission (one-submission policy).
+- **The skip decision is made before cloning.** A settled section is nearly all
+  frozen rows, so cloning first and deciding second meant paying a clone for
+  every repo to grade almost none of them (measured: 23 of one 28-minute run's
+  minutes). The sweep batches a GraphQL lookup of each repo's branch head and
+  `student.json` (40 repos per request) and clones only what it will actually
+  grade. It is a pure fast path: a repo the lookup cannot resolve falls through
+  to the original clone-first logic, a frozen locked grade never depended on the
+  SHA anyway, and an unlocked skip requires the stored SHA to *be* the branch
+  head, so the verdicts are identical to the clone-first ones.
+- **Canonical tests are fingerprinted.** Reusing a stored grade is only sound
+  while the tests that produced it are unchanged, so each sweep records a hash of
+  every `grader/<id>/` in `gradebook/grader-hashes.json`. When an activity's tests
+  change, an unlocked activity re-grades automatically and a locked one is
+  reported but stays frozen (a delivered grade must not move on its own; use
+  `force` with `only=<id>`).
+- **Trusting a student's own autograde run is not an option.** The student owns
+  their submission repo, including its workflow file, so a result reported from
+  there is not evidence. Only the teacher-side run against canonical tests counts.
 - **Existing activities fold in untouched.** The current per-activity repos
   (`m1a1…m1a4`) keep working; the sweep grades them off-repo using canonical
   tests kept in `grader/`. Their in-repo autograde workflow can remain for

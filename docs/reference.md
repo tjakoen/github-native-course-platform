@@ -126,6 +126,7 @@ The shared tools are **byte-identical across all teacher repos**; only
 | `gradebook/grades.csv` | Machine-readable source of truth. |
 | `GRADEBOOK.md` | Human-readable table, commit-linked. |
 | `gradebook/notes/<id>/<repo>.md` | Instructor-only AI notes (proposed grade + likelihood flag). |
+| `gradebook/grader-hashes.json` | Fingerprint per activity of the canonical tests its grades were computed against, so the sweep can tell "unchanged, safe to reuse" from "test was edited". Written by the sweep. |
 | `gradebook/points-mismatch.md` | Written when a `totalPoints` disagrees with Canvas. |
 | `gradebook/FLAGS.md` | Recorded ambiguities for the instructor to resolve. |
 
