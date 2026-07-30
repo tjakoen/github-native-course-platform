@@ -1,7 +1,7 @@
 {
   "id": "review-walk",
   "title": "The AI review lane",
-  "route": "/github-native-course-platform/",
+  "route": null,
   "mode": "demo",
   "intro": "This is the part of the platform that matters most: an AI drafts feedback and proposes a score, and none of it reaches a student until a human decides. The lane is a strict state machine, so the console shows you exactly one next action.",
   "steps": [

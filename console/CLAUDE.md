@@ -91,6 +91,14 @@ behind the "built with Claude" claim is the README badge + footer and the flagsh
   tour only addresses `data-surface` targets that exist on the route it launches
   from, and the rail's Tour button picks the tour for the current route. Launch
   tours with `data-tour="<id>"` (the host's hook), not `data-crumb-start`.
+  **All four tours declare `"route": null` on purpose, and need crumb >= 0.1.4.**
+  That version made `route` nullable and added the client-side gate that skips
+  navigation when the target is not an absolute pathname; before it, a missing route
+  was coerced to "/" and there was no way to opt out, so Back from step 0 forced a
+  navigation to `tour.route`. Do not "fix" a null route back to the Pages path: it
+  looks harmless because it equals the deployed pathname, but it 404s in local dev
+  and lands on the wrong site on a fork. Verified by serving `site/` from a
+  throwaway subdirectory and pressing Back at step 0.
 
 - **Sections are auto-discovered, not hardcoded.** `lib/config.mjs` scans `classes/` and derives each
   section from ground truth (folder name, git remote, `grader/assignments.json`). `grader.config.json`

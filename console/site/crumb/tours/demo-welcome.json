@@ -1,7 +1,7 @@
 {
   "id": "demo-welcome",
   "title": "The demo, in one minute",
-  "route": "/github-native-course-platform/",
+  "route": null,
   "mode": "demo",
   "intro": "You are looking at the Course Console running on invented data. Three classes, generated in your browser from a fixed seed: no GitHub connection, no token, and nothing stored. The views and the write surfaces are the real ones, so this is a fair look at the product rather than a slideshow.",
   "steps": [

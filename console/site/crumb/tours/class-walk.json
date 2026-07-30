@@ -1,7 +1,7 @@
 {
   "id": "class-walk",
   "title": "Inside a class",
-  "route": "/github-native-course-platform/",
+  "route": null,
   "mode": "demo",
   "intro": "This is one class. The Overview answers 'what needs me today', and the tabs hold the work itself. Start here if you have never used the console.",
   "steps": [

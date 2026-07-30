@@ -1,7 +1,7 @@
 {
   "id": "first-run",
   "title": "Course Console tour",
-  "route": "/github-native-course-platform/",
+  "route": null,
   "mode": "demo",
   "intro": "Welcome to the Course Console. Everything reads your teacher repos live from GitHub, and nothing is stored outside this browser. Here is a one-minute walk of the shell.",
   "steps": [
