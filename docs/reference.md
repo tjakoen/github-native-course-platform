@@ -72,6 +72,7 @@ Each activity is one object in `grader/assignments.json`. Only `id`, `type`, and
 | `submit` | Canvas submission type for the sync tool: `"repo"` (default), `"url"` (manual/badge), `"canvas"` (quiz). Grading-neutral. |
 | `content` | The `content/` unit folder that teaches the activity; renders the workspace-relative lesson pointer in the Canvas description. |
 | `title` | Human title; the Canvas assignment name becomes `<ID>: <title>`. |
+| `canvasName` | Exact name of an EXISTING Canvas assignment to adopt, when that name carries no id token (e.g. `"Final Project Proposal Submission"`). Without it the sync would create a duplicate. Case- and space-insensitive; a trailing `(12345)` in a gradebook CSV header is ignored. |
 
 See [Authoring activities](authoring-activities.md), [Canvas
 activities](canvas-activities.md) (the Canvas-shell authoring standard), and

@@ -60,6 +60,7 @@ read them.
 | `content` | The `content/` unit folder that teaches the activity, e.g. `"publish-portfolio"`. Renders the workspace-relative lesson pointer. |
 | `title` | Human title. The Canvas name becomes `<ID>: <title>` (id-only if absent). |
 | `manual` | `true` marks a hand-graded activity: never swept, never pushed, graded in Canvas. |
+| `canvasName` | Adopt an existing Canvas assignment whose name carries no id token. See "Adopting an assignment that already exists" below. |
 | `totalPoints` | Canvas Points Possible. For manual/AI activities this equals the rubric total. |
 
 A manual/badge activity therefore looks like:
@@ -68,6 +69,39 @@ A manual/badge activity therefore looks like:
 { "id": "m6a3", "type": "manual", "manual": true, "submit": "url",
   "content": "publish-portfolio", "title": "Publish Your Portfolio", "totalPoints": 20 }
 ```
+
+
+## Adopting an assignment that already exists in Canvas
+
+Every Canvas tool maps a Canvas assignment to one of our activities **by name**,
+through `tokenToId`, which only recognizes `m<N>a<N>`, `q<N>`, `prelim` and
+`midterm`. An assignment you created by hand, named something like "Final Project
+Proposal Submission", matches nothing. The sync then treats the activity as
+missing and **creates a duplicate** next to the live one your students have
+already submitted to.
+
+Set `canvasName` to the exact live name to adopt it instead:
+
+```jsonc
+{ "id": "m6a1", "type": "manual", "manual": true, "submit": "url",
+  "content": "final-project-planning", "title": "Final Project Proposal",
+  "totalPoints": 25, "canvasName": "Final Project Proposal Submission" }
+```
+
+Matching ignores case, surrounding space, and the trailing `(12345)` that Canvas
+adds in gradebook CSV headers. It is exact otherwise, on purpose: "Prelim Journal
+Submission" and "Prelims Journal Submission" are different assignments in
+different courses, and neither should be swallowed by the `prelim` activity.
+
+**Always dry-run the sync after adding an alias and read the create count.** A
+correct adoption reports the activity as *unchanged* (or *update*, if points
+drift). A single line under **Create** means the alias does not match the live
+name, and executing would duplicate the assignment.
+
+The alternative is renaming the Canvas assignment to an id-leading name
+("M6A1: Final Project Proposal"), which needs no alias. Prefer that for
+assignments with no submissions yet; prefer `canvasName` once students have
+submitted, so nothing changes under them.
 
 ## Running the sync
 
