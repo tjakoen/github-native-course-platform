@@ -103,6 +103,14 @@ The alternative is renaming the Canvas assignment to an id-leading name
 assignments with no submissions yet; prefer `canvasName` once students have
 submitted, so nothing changes under them.
 
+> **Never pass `--rename` in a section that carries `canvasName` aliases.** It
+> renames each adopted assignment to its id-leading form, which is exactly the
+> change the alias existed to avoid, and it lands on assignments students have
+> already submitted to. In one live section a `--rename` dry run wanted to turn
+> "Final Project Proposal Submission" into "M7A1: Final Project Proposal" for all
+> four planning documents, and to strip two other assignments down to bare ids.
+> `--rename` is opt-in, so the default sync is safe.
+
 ## Running the sync
 
 `tools/canvas-sync-assignments.mjs` is **dry-run by default** and conservative,
