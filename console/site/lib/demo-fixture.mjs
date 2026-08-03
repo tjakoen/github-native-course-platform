@@ -67,8 +67,13 @@ const CLASSES = [
         engine: { id: "m1a1", type: "dart", namePrefix: "m1a1-", locked: true, publish: true } },
       { id: "m2a1", label: "Lists and maps", tests: 8, part: 0.95, band: [0.5, 1],
         engine: { id: "m2a1", type: "dart", namePrefix: "m2a1-", totalPoints: 10, locked: true, publish: true } },
-      { id: "m3a6", label: "Monster battler", tests: 11, part: 0.86, band: [0.5, 1], notes: 0.9, cleared: 0.35,
-        engine: { id: "m3a6", type: "dart", namePrefix: "m3a6-", totalPoints: 100, "ai-grading": true, feedback: "code", locked: true, publish: false } },
+      // A FINISHED AI activity: every note cleared into aiScore and publish:true.
+      // That pair is what a delivered activity looks like in a real teacher repo,
+      // and it is the case the review lane has to recognize from the repo alone -
+      // a browser with no saved decisions must still see this as delivered rather
+      // than offering to finalize it again.
+      { id: "m3a6", label: "Monster battler", tests: 11, part: 0.86, band: [0.5, 1], notes: 1, cleared: 1,
+        engine: { id: "m3a6", type: "dart", namePrefix: "m3a6-", totalPoints: 100, "ai-grading": true, feedback: "code", locked: true, publish: true } },
       { id: "m4a4", label: "Monster detail screen", tests: 8, part: 0.68, band: [0.45, 1], notes: 0.8, shots: true,
         engine: { id: "m4a4", type: "flutter", namePrefix: "m4a4-", totalPoints: 100, "ai-grading": true, feedback: "project", locked: false, publish: false } },
     ],

@@ -63,6 +63,35 @@ await view("report", "#/reports/CS401-1101/" + encodeURIComponent("reports/canva
 await view("attendance-empty", "#/c/WEB101-3303/attendance", ".card");
 await view("review-flutter", "#/c/MOB210-2202/review", "table.table tr[data-s]");
 
+// A DELIVERED activity must be recognized from the repo alone. MOB210's m3a6 is
+// publish:true with every aiScore written, and this profile has no saved
+// decisions, so the lane is reading ground truth or nothing. Guards the exact
+// failure this replaced: the stage header ran off localStorage, showed Deliver as
+// still pending, and re-armed Finalize on an activity students already had.
+try {
+  await page.goto(U("#/c/MOB210-2202/review/m3a6"), { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("table.table tr[data-s]", { timeout: 25000 });
+  const st = await page.evaluate(() => {
+    const steps = [...document.querySelectorAll(".stepper__step")].map(s => s.dataset.state);
+    return {
+      steps,
+      // the activity tabs are the SECOND .tab-bar on the route (the first is the
+      // class nav), so read them all rather than guessing an index
+      delivered: [...document.querySelectorAll(".tab-bar")].some(b => /delivered/i.test(b.textContent || "")),
+      truth: /written to/i.test(document.body.textContent || ""),
+      primary: document.querySelector("#rvPrimary")?.textContent || "",
+    };
+  });
+  if (!st.delivered) fail.push("delivered activity: no delivered mark in the activity tabs");
+  if (st.steps[3] !== "done") fail.push(`delivered activity: Deliver step is '${st.steps[3]}', expected 'done'`);
+  if (!st.truth) fail.push("delivered activity: no gradebook truth line rendered");
+  if (/finalize/i.test(st.primary)) fail.push("delivered activity: Finalize is still the armed primary action");
+  console.log("ok  review-delivered (steps " + st.steps.join(",") + ", primary " + JSON.stringify(st.primary) + ")");
+} catch (e) {
+  fail.push("review-delivered: " + e.message.split("\n")[0]);
+}
+await page.screenshot({ path: `${OUT}/review-delivered.png` });
+
 // The review detail is the deep one: student code + generated screenshots + the
 // split note (student-facing prose vs the instructor-only block) + a decision.
 // Reached by a FULL document load (about:blank first) rather than a hash-only

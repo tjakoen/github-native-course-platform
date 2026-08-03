@@ -175,6 +175,23 @@ Review next while decisions remain, Apply reviewed once everything is decided,
 Finalize once the apply intent is filed). The other actions - Generate,
 Apply, Finalize, Approve all, Reset - live in the **⋯ overflow menu**.
 
+**The stepper reads the repo, not just this browser.** Decisions live in
+localStorage, so on a second machine (or after clearing site data) the lane
+would otherwise look untouched even for an activity that already shipped. Two
+signals from the teacher repo override that: a reviewed score written into
+`grades.csv` (`aiScore`) marks Apply done, and `"publish": true` in
+`assignments.json` marks Deliver done and puts a **delivered** chip on the
+activity tab plus a line stating how many scores are written. On a delivered
+activity with nothing in dispute there is **no primary button at all** -
+Finalize stays in the overflow menu, for repairs.
+
+The queue also carries a **Gradebook** column: the score actually written to
+`grades.csv`. When it disagrees with the decision saved in this browser the
+cell turns amber, the stage header names the rows, and the Finalize drawer
+warns before you send. That disagreement is the dangerous one - the emitted
+prompt carries the browser's number, so a stale local override can otherwise
+overwrite a score the instructor deliberately changed later.
+
 Approve / override / flag from the queue, or click a row to open the
 **full-page review detail**: screenshots (with lightbox zoom) or code tabs on
 the left (the media pane collapses when a submission has neither), the

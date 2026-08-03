@@ -101,6 +101,11 @@ export async function loadSection(sc) {
     }
     st.activities[id] = {
       repo: f[gi("repo")], passed, total, raw: `${passed}/${total}`,
+      // `proposed` collapses the written aiScore and the note's proposal into one
+      // display number, so keep the raw CSV aiScore too: it is the only signal that
+      // says "this reviewed score is IN the gradebook", which is what the review
+      // lane compares the browser's local decision against.
+      aiScore,
       canvasPts, proposed, proposedMax: (a.totalPoints ?? a.autoPoints ?? total),
       held, kind, note: note || null, aiFlag, triage,
       sha: (f[gi("sha")]||"").slice(0,7), late: f[gi("late")]==="true",

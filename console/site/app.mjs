@@ -1340,6 +1340,26 @@ function drawerSent(s,path,kind,aid){ markSent(s.section,kind,aid); invalidateIn
 // ================= AI REVIEW =================
 function heldActs(s){return s.assignments.filter(a=>a.aiGraded)}
 function reviewRows(s,aid){return s.students.filter(st=>st.activities[aid]).map(st=>({st,r:st.activities[aid],dec:getDec(s.section,aid,skeyOf(st))}))}
+// ---- delivery state read from the REPO, not from this browser ----------------
+// The stage header used to run purely off localStorage (wasSent), so a cleared
+// store, a second machine, or a delivery run outside the console left every step
+// looking undone - and the Finalize button happily re-filed an intent for work
+// already shipped. These three read ground truth instead:
+//   written   - the reviewed score is IN grades.csv (aiScore), i.e. an apply ran
+//   delivered - assignments.json says publish:true AND scores are written; that
+//               flag is only ever flipped by a finalize run, so it is the closest
+//               proxy the browser has for "students and Canvas have this"
+//   conflicts - this browser's decision disagrees with what is already written,
+//               which is exactly how a stale local override (84) can overwrite a
+//               deliberate redraft (92) if it gets re-filed as an intent
+const writtenRows=rows=>rows.filter(x=>x.r.aiScore!=null);
+function isApplied(rows){
+ const w=writtenRows(rows); if(!w.length) return false;
+ const cleared=rows.filter(x=>isDecided(x.dec)&&x.dec.status!=="flag");
+ return cleared.length?cleared.every(x=>x.r.aiScore!=null):true;
+}
+const isDelivered=(a,rows)=>!!a.publish&&writtenRows(rows).length>0;
+const conflictRows=rows=>rows.filter(x=>x.r.aiScore!=null&&finalScore(x)!=null&&finalScore(x)!==x.r.aiScore);
 // decision-state -> product badge tone (hue is the documented monochrome exception).
 // "override" gets its own tone (accent), NOT held: "held" is reserved for the AI
 // lane (an activity kind), so a review decision must never wear that same purple.
@@ -1363,7 +1383,13 @@ function renderAI(s,w){
  if(!acts.length){const c=el("div","card",'<p class="card__body">No AI-graded activities in this section.</p>');c.dataset.pad="sm";w.append(c);return;}
  if(!revAct||!acts.find(a=>a.id===revAct)) revAct=acts[0].id;
  const sub=el("nav","tab-bar");
- acts.forEach(a=>{const rows=reviewRows(s,a.id);const done=rows.filter(x=>isDecided(x.dec)).length;const b=el("a","tab",esc(a.id)+" <span class='pill'>"+done+"/"+rows.length+"</span>");b.href=classHref(s.key,"review")+"/"+encodeURIComponent(a.id);if(revAct===a.id){b.dataset.active="true";b.setAttribute("aria-current","page");}sub.append(b)});
+ acts.forEach(a=>{const rows=reviewRows(s,a.id);const done=rows.filter(x=>isDecided(x.dec)).length;
+  // A delivered activity is marked from the REPO (publish:true + scores written),
+  // not from this browser's decision store, so the mark survives a different
+  // machine, a cleared localStorage, and a delivery run outside the console.
+  const dlv=isDelivered(a,rows);
+  const b=el("a","tab",esc(a.id)+" <span class='pill'>"+done+"/"+rows.length+"</span>"+(dlv?" <span class='badge' data-tone='good' title='publish:true and reviewed scores are written to grades.csv'>delivered</span>":""));
+  b.href=classHref(s.key,"review")+"/"+encodeURIComponent(a.id);if(revAct===a.id){b.dataset.active="true";b.setAttribute("aria-current","page");}sub.append(b)});
  w.append(sub);
  const rows=reviewRows(s,revAct);
  const done=rows.filter(x=>isDecided(x.dec)).length, appr=rows.filter(x=>x.dec&&x.dec.status==="approve").length, ov=rows.filter(x=>x.dec&&x.dec.status==="override").length, fl=rows.filter(x=>x.dec&&x.dec.status==="flag").length;
@@ -1376,24 +1402,46 @@ function renderAI(s,w){
  const empty=rows.length===0;
  const applySent=wasSent(s.section,"apply-ai",revAct);
  const finSent=wasSent(s.section,"finalize",revAct);
+ // repo truth beats the local decision store: a step the gradebook says is done
+ // stays done even in a browser that never filed it.
+ const actMeta=s.assignments.find(a=>a.id===revAct);
+ const written=writtenRows(rows), applied=isApplied(rows), delivered=isDelivered(actMeta,rows);
+ const conflicts=conflictRows(rows);
  let gen="todo",rev="todo",app="todo",del="todo";
  if(!empty){
   gen=pending>0?"active":"done";
-  rev=pending>0?"todo":(notReviewed>0?"active":"done");
-  app=(pending===0&&notReviewed===0)?(applySent?"done":"active"):"todo";
-  del=applySent?(finSent?"done":"active"):"todo";
+  rev=(delivered||applied)?"done":(pending>0?"todo":(notReviewed>0?"active":"done"));
+  app=(delivered||applied)?"done":((pending===0&&notReviewed===0)?(applySent?"done":"active"):"todo");
+  del=delivered?"done":((applySent||applied)?(finSent?"done":"active"):"todo");
  }
  // the single contextual primary follows the active stage
  let primary=null;
  if(empty)primary=null;
+ // Already delivered and nothing disagrees: offer no primary at all. Re-filing a
+ // finalize intent here is how an already-shipped activity gets re-delivered from
+ // a stale local decision. Finalize stays reachable in the overflow menu.
+ else if(delivered&&!conflicts.length)primary=null;
+ else if(delivered)primary={label:"Resolve "+conflicts.length+" gradebook conflict"+(conflicts.length===1?"":"s"),act:()=>go(detailHref(s.key,revAct,skeyOf(conflicts[0].st))),soft:true};
  else if(pending>0)primary={label:"Generate feedback → prompt",act:()=>showGenFeedback(s,revAct)};
  else if(notReviewed>0){const un=rows.find(x=>!isDecided(x.dec));primary={label:"Review next → "+notReviewed+" left",act:()=>go(detailHref(s.key,revAct,skeyOf(un.st)))};}
- else if(!applySent)primary={label:"Apply reviewed → prompt",act:()=>showApplyAI(s,revAct)};
+ else if(!applySent&&!applied)primary={label:"Apply reviewed → prompt",act:()=>showApplyAI(s,revAct)};
  else primary={label:"Finalize → deliver",act:()=>showFinalize(s,revAct),soft:finSent};
  const STEPS=[["Generate",gen],["Review",rev],["Apply",app],["Deliver",del]];
  const stepper="<ol class='stepper'>"+STEPS.map(([l,st],i)=>"<li class='stepper__step' data-state='"+st+"'"+(st==="active"?" aria-current='step'":"")+"><span class='stepper__dot'>"+(st==="done"?"✓":i+1)+"</span><span class='stepper__label'>"+l+"</span></li>").join("")+"</ol>";
  const badges='<span class="badge" data-tone="good">'+appr+' approved</span> <span class="badge" data-tone="held">'+ov+' override</span> <span class="badge" data-tone="warn">'+fl+' flagged</span>';
  const sentHint=applySent&&!finSent?" <span class='mut' data-size='sm'>· apply intent filed, run it then finalize</span>":"";
+ // Ground-truth line: what the REPO says, next to what this browser thinks.
+ const truthLine=(delivered||written.length)
+  ? "<p class='mut' data-size='sm'>Gradebook: <b>"+written.length+"/"+rows.length+"</b> reviewed score"+(written.length===1?"":"s")+" written to <span class='mono'>grades.csv</span>"+
+    (delivered
+      ? " · <span class='badge' data-tone='good'>delivered</span> <span class='mono'>publish: true</span> in assignments.json, so students and Canvas already have this - finalize again only to repair something"
+      : (actMeta.publish?" · <span class='mono'>publish: true</span>":" · not published yet"))+"</p>"
+  : "";
+ const conflictLine=conflicts.length
+  ? "<p class='warnline'><b>"+conflicts.length+" row"+(conflicts.length===1?"":"s")+" disagree with the gradebook.</b> This browser's decision is not what is written in <span class='mono'>grades.csv</span>"+
+    (delivered?" and already delivered":"")+": "+conflicts.slice(0,3).map(x=>esc(x.st.name||x.r.repo)+" local "+finalScore(x)+" vs written "+x.r.aiScore).join(", ")+(conflicts.length>3?", …":"")+
+    ". Filing an intent now would push the local number over the written one - check which is right first.</p>"
+  : "";
  const overflow="<details class='ovmenu'><summary class='btn' data-size='sm' data-variant='soft' aria-label='More review actions'>⋯</summary>"+
   "<div class='ovmenu__list' role='menu'>"+
    "<button class='ovmenu__item' id='genFb' role='menuitem'>Generate feedback → prompt</button>"+
@@ -1405,9 +1453,13 @@ function renderAI(s,w){
  const bar=el("div","card"); bar.dataset.pad="sm"; bar.dataset.surface="review:stage"; const pct=rows.length?Math.round(done/rows.length*100):0;
  bar.innerHTML=stepper+
   "<div class='revbar'>"+
-   "<div class='revbar__info'><b>"+esc(revAct)+"</b> · reviewed <b>"+done+"/"+rows.length+"</b> · "+badges+sentHint+"</div>"+
+   // the reviewed tally is per-BROWSER (it counts saved decisions), so say so once
+   // an activity is delivered - otherwise "reviewed 0/20" under four ticked steps
+   // reads as a contradiction rather than as "decided on another machine".
+   "<div class='revbar__info'><b>"+esc(revAct)+"</b> · reviewed <b>"+done+"/"+rows.length+"</b>"+(delivered&&done<rows.length?" <span class='mut' data-size='sm'>in this browser</span>":"")+" · "+badges+sentHint+"</div>"+
    "<div class='revbar__act'>"+(primary?"<button class='btn' data-size='sm'"+(primary.soft?" data-variant='soft'":"")+" id='rvPrimary'>"+esc(primary.label)+"</button>":"")+overflow+"</div>"+
   "</div>"+
+  truthLine+conflictLine+
   // the progress meter shows the decision MIX, not just a single reviewed bar:
   // approved / override / flagged segments (the rest is the unreviewed remainder).
   '<div class="meter" role="meter" aria-label="Reviewed '+done+' of '+rows.length+'" aria-valuenow="'+done+'" aria-valuemin="0" aria-valuemax="'+rows.length+'">'+
@@ -1418,15 +1470,23 @@ function renderAI(s,w){
  const card=el("div","card"); card.dataset.pad="sm"; card.dataset.surface="review:queue"; card.append(el("h2","card__title","Review queue - click a row to read the feedback and decide"));
  const scr=el("div","table-scroll"); const t=el("table","table");
  const max=s.assignments.find(a=>a.id===revAct).totalPoints;
- t.innerHTML="<tr><th>Student</th><th>#</th><th class='center'>Proposed</th><th class='center'>AI-authored likelihood</th><th class='center'>Decision</th><th class='center'>Final</th></tr>"+
+ t.innerHTML="<tr><th>Student</th><th>#</th><th class='center'>Proposed</th><th class='center'>AI-authored likelihood</th><th class='center'>Decision</th><th class='center' title='The reviewed score actually written to grades.csv'>Gradebook</th><th class='center'>Final</th></tr>"+
  rows.map(row=>{
    const stt=decStatus(row), fin=finalScore(row);
    const flag=row.r.aiFlag||"-"; const fl=/high/i.test(flag)?"bad":/medium/i.test(flag)?"warn":"good";
    const skey=esc(skeyOf(row.st));
+   // The written column is the anti-stale-override guard: when the gradebook holds
+   // a different number than this browser decided, say so on the row instead of
+   // silently preferring the local one at intent time.
+   const wr=row.r.aiScore, clash=wr!=null&&fin!=null&&fin!==wr;
+   const wcell=wr==null
+     ? "<span class='mut'>-</span>"
+     : (clash?"<span class='badge' data-tone='warn' title='local decision "+fin+", written "+wr+"'>"+wr+"/"+max+"</span>":wr+"/"+max);
    return "<tr data-s='"+skey+"'><td><a href='"+detailHref(s.key,revAct,skeyOf(row.st))+"'>"+esc(row.st.name||"(blank)")+"</a>"+(row.r.triage?" <span class='badge' data-tone='warn' title='"+esc(row.r.triage)+"'>triage</span>":"")+"</td><td class='mut'>"+esc(row.st.number||"-")+"</td>"+
      "<td class='center'>"+(row.r.proposed!=null?row.r.proposed+"/"+max:"<span class='badge' data-tone='warn'>no score</span>")+"</td>"+
      "<td class='center'><span class='badge' data-tone='"+fl+"'>"+esc(flag.split(" - ")[0])+"</span></td>"+
      "<td class='center'><span class='badge' data-tone='"+TONE[stt.k]+"'>"+stt.l+"</span></td>"+
+     "<td class='center'>"+wcell+"</td>"+
      "<td class='center tot'>"+(fin!=null?fin+"/"+max:"-")+"</td></tr>";
  }).join("");
  scr.append(t); card.append(scr); w.append(card);
@@ -1665,8 +1725,16 @@ function showFinalize(s,aid){
  const rows=reviewRows(s,aid);
  const {txt,delivered,heldOut}=buildFinalize(s,aid,rows);
  const noop=delivered.length===0;   // nothing cleared to deliver
+ // Two repo-truth guards before this prompt goes anywhere. Both were paid for:
+ // a re-filed finalize on an already-delivered activity, carrying two stale local
+ // overrides that would have LOWERED grades the instructor had deliberately raised.
+ const actMeta=s.assignments.find(a=>a.id===aid);
+ const already=isDelivered(actMeta,rows);
+ const clash=conflictRows(rows);
  openDrawer("<h3>Finalize and deliver - "+esc(aid)+"</h3><div class='muted'>"+delivered.length+" cleared to deliver · "+heldOut.length+" held out</div>"+
   (noop?"<p class='warnline'>No cleared students yet. Approve or override at least one submission (and apply those grades) before delivering.</p>":"")+
+  (already?"<p class='warnline'><b>Already delivered.</b> <span class='mono'>"+esc(aid)+"</span> is flagged <span class='mono'>publish: true</span> and "+writtenRows(rows).length+" reviewed score"+(writtenRows(rows).length===1?" is":"s are")+" written to <span class='mono'>grades.csv</span>, so students and Canvas most likely already have this. Send again only to repair something specific.</p>":"")+
+  (clash.length?"<p class='warnline'><b>"+clash.length+" score"+(clash.length===1?"":"s")+" in this prompt disagree with the gradebook:</b> "+clash.slice(0,3).map(x=>esc(x.st.name||x.r.repo)+" "+finalScore(x)+" vs written "+x.r.aiScore).join(", ")+(clash.length>3?", …":"")+". The prompt carries this browser's number. Confirm which is right before sending - a stale local override silently overwrites a deliberate redraft.</p>":"")+
   CONSEQUENCE+
   "<div id='actRow' style='margin:10px 0'><button class='btn' data-size='sm' id='send'"+(noop?" disabled":"")+">Send to repo →</button> <button class='btn' data-size='sm' data-variant='soft' id='cp'>Copy prompt</button>"+openInClaude("#ptxt",txt)+"</div><pre class='code-block prompt' id='ptxt'>"+esc(txt)+"</pre>");
  $("#cp").onclick=()=>navigator.clipboard.writeText(txt).then(()=>$("#cp").textContent="Copied ✓");
