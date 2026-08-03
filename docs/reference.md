@@ -111,7 +111,7 @@ The shared tools are **byte-identical across all teacher repos**; only
 | --- | --- |
 | `grade-sweep.mjs` | The grader (per-repo; renders previews where a class needs them). |
 | `publish-grades.mjs` | Delivers grades/feedback to student repos. |
-| `provision-workspaces.mjs`, `prune-gradebook.mjs`, `audit-repo-names.mjs` | Roster/repo hygiene. |
+| `provision-workspaces.mjs`, `prune-gradebook.mjs`, `audit-repo-names.mjs` | Roster/repo hygiene. `audit-repo-names.mjs` scopes itself to its own section (the workflow pipes the whole org listing in) and exits non-zero only for mismatches that can actually lose a delivery; pure casing drift is reported as a note. |
 | `org-audit.mjs` | Read-only cross-org hygiene plus an access audit. |
 | `canvas-push.mjs`, `canvas-export.mjs`, `canvas-pull-points.mjs` | Canvas sync and points reconcile. |
 | `build-quiz-qti.mjs`, `canvas-quiz-import.mjs`, `canvas-pull-quiz-grades.mjs` | Quiz-to-Canvas: build the QTI package (offline, deterministic) from `quiz.json`, import it via Content Migrations, and pull Canvas quiz grades back into the gradebook. See [LMS and Canvas](lms-canvas.md). |
@@ -128,6 +128,7 @@ The shared tools are **byte-identical across all teacher repos**; only
 | `GRADEBOOK.md` | Human-readable table, commit-linked. |
 | `gradebook/notes/<id>/<repo>.md` | Instructor-only AI notes (proposed grade + likelihood flag). |
 | `gradebook/grader-hashes.json` | Fingerprint per activity of the canonical tests its grades were computed against, so the sweep can tell "unchanged, safe to reuse" from "test was edited". Written by the sweep. |
+| `gradebook/UNMATCHED.md` | Repos that look like submissions for the section but that no activity claimed, so they were never graded. Written every sweep. This is the only place a misnamed SUBMISSION repo is reported: `audit-repo-names.mjs` covers `student-`/`teacher-` names only. |
 | `gradebook/points-mismatch.md` | Written when a `totalPoints` disagrees with Canvas. |
 | `gradebook/FLAGS.md` | Recorded ambiguities for the instructor to resolve. |
 
