@@ -109,7 +109,7 @@ The shared tools are **byte-identical across all teacher repos**; only
 
 | Tool | What it does |
 | --- | --- |
-| `grade-sweep.mjs` | The grader (per-repo; renders previews where a class needs them). |
+| `grade-sweep.mjs` | The grader (per-repo; renders previews where a class needs them). Grades several submissions at once; `--jobs=<n>` overrides the default of `min(4, cores)`. |
 | `publish-grades.mjs` | Delivers grades/feedback to student repos. |
 | `provision-workspaces.mjs`, `prune-gradebook.mjs`, `audit-repo-names.mjs` | Roster/repo hygiene. `audit-repo-names.mjs` scopes itself to its own section (the workflow pipes the whole org listing in) and exits non-zero only for mismatches that can actually lose a delivery; pure casing drift is reported as a note. |
 | `org-audit.mjs` | Read-only cross-org hygiene plus an access audit. |
