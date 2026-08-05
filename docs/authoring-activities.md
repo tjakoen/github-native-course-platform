@@ -177,13 +177,64 @@ The engine is identical; only the test layout and runner differ.
 | JS / React | `vitest` | `grader/<id>/hello.test.js` or `grader/<id>/test/*.test.jsx` | Vitest + `@testing-library/react` | Design activities use `previews: "branch"`. |
 | HTML/CSS/JS | `vitest` | `grader/<id>/test/*.test.js` | Vitest + `jsdom` (parses `src/index.html`) | Grades DOM structure. Previews rendered locally by its grade sweep, not from a branch. |
 | Dart (logic) | `dart` | `grader/<id>/test/<name>_test.dart` | `dart pub get` + `dart test --reporter json` | Pure-Dart logic; student code in `bin/`/`lib/`; needs the Dart SDK (CI uses `setup-dart`). |
-| Flutter (front-end) | `flutter` | `grader/<id>/test/<name>_test.dart` (+ a `capture:` golden test) | `flutter pub get` + `flutter test --update-goldens --reporter json` | Widget tests score behaviour; a `capture:`-named golden test renders the screen in a `device_frame` phone at a mobile size and writes a PNG (the sweep excludes `capture:` tests from the score, copies the PNG into `previewDir`, and hands it to AI feedback exactly like the web local-render path). Needs Flutter (CI uses `subosito/flutter-action`). No `previews: "branch"` - the screenshot is produced in the test. |
+| Flutter (front-end) | `flutter` | `grader/<id>/test/<name>_test.dart` (+ a `capture:` golden test) | `flutter pub get` + `flutter test --update-goldens --reporter json` | Widget tests score behaviour; a `capture:`-named golden test walks the app in a `device_frame` phone and writes one PNG per state (the sweep excludes `capture:` tests from the score, copies every PNG into `previewDir` in filename order, and hands them to AI feedback exactly like the web local-render path). Needs Flutter (CI uses `subosito/flutter-action`). No `previews: "branch"` - the screenshots are produced in the test. See "Capturing a Flutter flow" below. |
 | Quiz (any) | `quiz` | `grader/<id>/key.json` | Answer match (case-insensitive, trimmed) | Student answers in `quizzes/<id>/answers.json`. |
 
 Two grading paths, one shape: JS and HTML both run under Vitest (HTML via jsdom
 against `src/index.html`); Dart runs under `dart test`. In all three, the
 canonical test is overlaid onto the clone so students cannot tamper with it, and
 every activity carries the standard `student.json` check.
+
+### Capturing a Flutter flow
+
+A single screenshot of an app's first screen says almost nothing about an app
+whose whole point is that it responds: an activity about `setState`, a text
+field, or `Navigator.push` looks identical in that one frame whether the student
+implemented it or not. So a capture test **walks** the app and shoots a frame at
+each interesting state. Three helpers in the canonical
+`grader/<id>/test/support/haudex_golden.dart` do this:
+
+- `pumpHaudex(tester, screen)` mounts the screen inside the phone frame.
+- `shoot(tester, '01-home')` writes the current frame.
+- `step(tester, '02-detail', () async { ... })` runs an interaction and then
+  shoots the result.
+
+```dart
+testWidgets('capture: tap through to detail', (tester) async {
+  await pumpHaudex(tester, const DexHome(monsters: _monsters));
+  await shoot(tester, '01-home');
+
+  await step(tester, '02-detail', () async {
+    await tester.tap(find.text('Aquaphin').first);
+  });
+
+  await step(tester, '03-back-home', () async {
+    await tester.pageBack();
+  });
+});
+```
+
+Four rules make this hold up against real, half-finished student code:
+
+1. **Number the shots** (`01-`, `02-`). The sweep sorts the files, so the
+   filenames are what put the flow in order for the reader.
+2. **`step` swallows failures.** A student with no Attack button still keeps the
+   shots taken before it, and the later steps still get their chance. The capture
+   test itself must never be the thing that fails - it is not scored, and a
+   screenshot of a broken state is exactly the evidence a grader wants.
+3. **The frame wraps the app's `Navigator`**, via `MaterialApp.builder` rather
+   than a nested `MaterialApp`. There is then exactly one Navigator and it lives
+   inside the phone, which is what keeps pushed routes AND root-navigator
+   overlays (`showDialog`, bottom sheets, snackbars) inside the picture. Nest a
+   second `MaterialApp` instead and `showDialog` - which defaults to
+   `useRootNavigator: true` - escapes to a full-window overlay the camera cannot
+   see, so the shot silently comes back identical to the previous one.
+4. **Shoot states that differ, and stress the data.** For a static screen there
+   is nothing to tap, so vary the input instead: each type's colour, a
+   nearly-fainted progress bar, a name long enough to test the app bar.
+
+Two consecutive shots that look identical are themselves a finding, and the
+feedback input says so: it means the interaction did not work.
 
 ## The one-shot way (ask the assistant)
 
