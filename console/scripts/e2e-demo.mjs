@@ -80,9 +80,21 @@ try {
       delivered: [...document.querySelectorAll(".tab-bar")].some(b => /delivered/i.test(b.textContent || "")),
       truth: /written to/i.test(document.body.textContent || ""),
       primary: document.querySelector("#rvPrimary")?.textContent || "",
+      // the m3a6 activity tab's own pill, e.g. "22/22" once the gradebook settles it
+      pill: [...document.querySelectorAll(".tab")].find(t => /^m3a6/.test(t.textContent || ""))?.querySelector(".pill")?.textContent || "",
+      // the class nav's "AI Review (n)" count
+      navReview: [...document.querySelectorAll("#ctxTabs .tab")].find(t => /AI Review/.test(t.textContent || ""))?.textContent || "",
+      rows: document.querySelectorAll("table.table tr[data-s]").length,
     };
   });
   if (!st.delivered) fail.push("delivered activity: no delivered mark in the activity tabs");
+  // The counts must drain from the GRADEBOOK, not from saved decisions - this
+  // profile has none. A delivered activity that still reads "0/22" and keeps its
+  // rows in the AI Review badge is the stale-badge bug this guards.
+  const [pillDone, pillAll] = st.pill.split("/").map(Number);
+  if (!(pillDone > 0 && pillDone === pillAll)) fail.push(`delivered activity: tab pill is '${st.pill}', expected every row settled`);
+  const navN = Number((st.navReview.match(/\((\d+)\)/) || [])[1] || 0);
+  if (navN >= st.rows) fail.push(`delivered activity: AI Review badge is ${navN}, still counting the ${st.rows} delivered row(s)`);
   if (st.steps[3] !== "done") fail.push(`delivered activity: Deliver step is '${st.steps[3]}', expected 'done'`);
   if (!st.truth) fail.push("delivered activity: no gradebook truth line rendered");
   if (/finalize/i.test(st.primary)) fail.push("delivered activity: Finalize is still the armed primary action");

@@ -232,17 +232,23 @@ function railHeld(key,held){
  const b=document.querySelector("[data-classnav='"+key.replace(/'/g,"")+"'] .navheld");
  if(b){ if(held>0){b.textContent=held;b.hidden=false;} else b.hidden=true; }
 }
-// The held badge counts UNREVIEWED submissions awaiting a decision (Canvas
+// A held row is SETTLED when either this browser decided it (approve / override /
+// flagged) or the gradebook already carries a written aiScore. The second half is
+// repo truth and it is the important one: an apply that ran on another machine, in
+// a cleared store, or straight from a Claude Code session leaves no local decision
+// at all, so a localStorage-only count kept a fully delivered section badged
+// forever. Same rule the stage header uses (isApplied / isDelivered below).
+const isSettled=x=>isDecided(x.dec)||x.r.aiScore!=null;
+// The held badge counts UNSETTLED submissions awaiting a decision (Canvas
 // "needs grading" convention), not the number of AI activities. It drains to
-// zero as the reviewer decides each one (approve/override/flagged all count as
-// decided). Computed live here because decisions live in this browser, not in
-// the cached section load.
+// zero as each one is decided or written.
 function heldUnreviewed(s){
  if(!s) return 0;
  let n=0;
  const held=s.assignments.filter(a=>a.kind==="held");
  for(const st of s.students){ const sk=skeyOf(st);
-  for(const a of held){ if(st.activities[a.id] && !isDecided(getDec(s.section,a.id,sk))) n++; } }
+  for(const a of held){ const r=st.activities[a.id];
+   if(r && !isSettled({r,dec:getDec(s.section,a.id,sk)})) n++; } }
  return n;
 }
 
@@ -901,7 +907,7 @@ function renderActivities(s,w){
  const stageOf=a=>{
   const graded=s.students.filter(st=>st.activities[a.id]).length;
   if(a.publish)return{l:"Delivered",t:"good"};
-  if(a.aiGraded){ const pend=s.students.filter(st=>st.activities[a.id]&&!isDecided(getDec(s.section,a.id,skeyOf(st)))).length;
+  if(a.aiGraded){ const pend=s.students.filter(st=>st.activities[a.id]&&!isSettled({r:st.activities[a.id],dec:getDec(s.section,a.id,skeyOf(st))})).length;
    if(pend>0)return{l:"In review",t:"held"}; if(graded>0)return{l:"Reviewed",t:"ov"}; return{l:"Draft",t:"muted"}; }
   if(graded>0)return{l:"Graded",t:"quiz"};
   return{l:"Draft",t:"muted"};
@@ -1383,7 +1389,7 @@ function renderAI(s,w){
  if(!acts.length){const c=el("div","card",'<p class="card__body">No AI-graded activities in this section.</p>');c.dataset.pad="sm";w.append(c);return;}
  if(!revAct||!acts.find(a=>a.id===revAct)) revAct=acts[0].id;
  const sub=el("nav","tab-bar");
- acts.forEach(a=>{const rows=reviewRows(s,a.id);const done=rows.filter(x=>isDecided(x.dec)).length;
+ acts.forEach(a=>{const rows=reviewRows(s,a.id);const done=rows.filter(isSettled).length;
   // A delivered activity is marked from the REPO (publish:true + scores written),
   // not from this browser's decision store, so the mark survives a different
   // machine, a cleared localStorage, and a delivery run outside the console.
@@ -1392,7 +1398,11 @@ function renderAI(s,w){
   b.href=classHref(s.key,"review")+"/"+encodeURIComponent(a.id);if(revAct===a.id){b.dataset.active="true";b.setAttribute("aria-current","page");}sub.append(b)});
  w.append(sub);
  const rows=reviewRows(s,revAct);
- const done=rows.filter(x=>isDecided(x.dec)).length, appr=rows.filter(x=>x.dec&&x.dec.status==="approve").length, ov=rows.filter(x=>x.dec&&x.dec.status==="override").length, fl=rows.filter(x=>x.dec&&x.dec.status==="flag").length;
+ // rows settled by the gradebook alone (a score is written, this browser holds no
+ // decision) - the tally and meter show them separately so "reviewed" never
+ // implies a decision that was actually made somewhere else.
+ const wrOnly=rows.filter(x=>!isDecided(x.dec)&&x.r.aiScore!=null).length;
+ const done=rows.filter(isSettled).length, appr=rows.filter(x=>x.dec&&x.dec.status==="approve").length, ov=rows.filter(x=>x.dec&&x.dec.status==="override").length, fl=rows.filter(x=>x.dec&&x.dec.status==="flag").length;
  // ---- stage header: Generate -> Review -> Apply -> Deliver (Phase D1) ----
  // The AI Review lane is a strict state machine; expose it as a stepper with ONE
  // contextual primary and everything else in an overflow menu, instead of five
@@ -1423,7 +1433,7 @@ function renderAI(s,w){
  else if(delivered&&!conflicts.length)primary=null;
  else if(delivered)primary={label:"Resolve "+conflicts.length+" gradebook conflict"+(conflicts.length===1?"":"s"),act:()=>go(detailHref(s.key,revAct,skeyOf(conflicts[0].st))),soft:true};
  else if(pending>0)primary={label:"Generate feedback → prompt",act:()=>showGenFeedback(s,revAct)};
- else if(notReviewed>0){const un=rows.find(x=>!isDecided(x.dec));primary={label:"Review next → "+notReviewed+" left",act:()=>go(detailHref(s.key,revAct,skeyOf(un.st)))};}
+ else if(notReviewed>0){const un=rows.find(x=>!isSettled(x));primary={label:"Review next → "+notReviewed+" left",act:()=>go(detailHref(s.key,revAct,skeyOf(un.st)))};}
  else if(!applySent&&!applied)primary={label:"Apply reviewed → prompt",act:()=>showApplyAI(s,revAct)};
  else primary={label:"Finalize → deliver",act:()=>showFinalize(s,revAct),soft:finSent};
  const STEPS=[["Generate",gen],["Review",rev],["Apply",app],["Deliver",del]];
@@ -1453,17 +1463,19 @@ function renderAI(s,w){
  const bar=el("div","card"); bar.dataset.pad="sm"; bar.dataset.surface="review:stage"; const pct=rows.length?Math.round(done/rows.length*100):0;
  bar.innerHTML=stepper+
   "<div class='revbar'>"+
-   // the reviewed tally is per-BROWSER (it counts saved decisions), so say so once
-   // an activity is delivered - otherwise "reviewed 0/20" under four ticked steps
-   // reads as a contradiction rather than as "decided on another machine".
-   "<div class='revbar__info'><b>"+esc(revAct)+"</b> · reviewed <b>"+done+"/"+rows.length+"</b>"+(delivered&&done<rows.length?" <span class='mut' data-size='sm'>in this browser</span>":"")+" · "+badges+sentHint+"</div>"+
+   // the tally counts saved decisions PLUS rows the gradebook already holds a score
+   // for, so a delivered activity reads "reviewed 20/20" in a browser that never
+   // decided one of them. Name the second source when it is carrying the count,
+   // otherwise four ticked steps over "reviewed 0/20" reads as a contradiction.
+   "<div class='revbar__info'><b>"+esc(revAct)+"</b> · reviewed <b>"+done+"/"+rows.length+"</b>"+(wrOnly?" <span class='mut' data-size='sm'>("+wrOnly+" from the gradebook, not this browser)</span>":"")+" · "+badges+sentHint+"</div>"+
    "<div class='revbar__act'>"+(primary?"<button class='btn' data-size='sm'"+(primary.soft?" data-variant='soft'":"")+" id='rvPrimary'>"+esc(primary.label)+"</button>":"")+overflow+"</div>"+
   "</div>"+
   truthLine+conflictLine+
   // the progress meter shows the decision MIX, not just a single reviewed bar:
-  // approved / override / flagged segments (the rest is the unreviewed remainder).
+  // approved / override / flagged segments, then the rows settled by the gradebook
+  // alone (the rest is the unreviewed remainder).
   '<div class="meter" role="meter" aria-label="Reviewed '+done+' of '+rows.length+'" aria-valuenow="'+done+'" aria-valuemin="0" aria-valuemax="'+rows.length+'">'+
-   [[appr,"good"],[ov,"ov"],[fl,"warn"]].map(([n,t])=>n>0?'<span class="meter__seg" data-tone="'+t+'" style="--seg:'+(n/rows.length*100)+'%"></span>':"").join("")+
+   [[appr,"good"],[ov,"ov"],[fl,"warn"],[wrOnly,"muted"]].map(([n,t])=>n>0?'<span class="meter__seg" data-tone="'+t+'" style="--seg:'+(n/rows.length*100)+'%"></span>':"").join("")+
   '</div>';
  w.append(bar);
  // queue table
@@ -1493,7 +1505,9 @@ function renderAI(s,w){
  setTimeout(()=>{
    t.querySelectorAll("tr[data-s]").forEach(tr=>tr.onclick=e=>{ if(e.target.closest("a"))return; go(detailHref(s.key,revAct,tr.dataset.s)); });
    if(primary)$("#rvPrimary").onclick=primary.act;
-   $("#apprAll").onclick=()=>{const t=rows.filter(row=>!isDecided(row.dec)&&row.r.proposed!=null);if(!t.length){alert("No unreviewed submissions with a proposed score to approve.");return;}if(!confirm("Approve "+t.length+" unreviewed submission(s) at the AI's proposed score for "+revAct+"? This records an approve decision for each - review them individually to catch a bad proposal."))return;t.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),Object.assign({},row.dec,{status:"approve"})));render()};
+   // never sweep a row the gradebook already settled into an approve: that would
+   // manufacture a local decision to disagree with a written score later
+   $("#apprAll").onclick=()=>{const t=rows.filter(row=>!isSettled(row)&&row.r.proposed!=null);if(!t.length){alert("No unreviewed submissions with a proposed score to approve.");return;}if(!confirm("Approve "+t.length+" unreviewed submission(s) at the AI's proposed score for "+revAct+"? This records an approve decision for each - review them individually to catch a bad proposal."))return;t.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),Object.assign({},row.dec,{status:"approve"})));render()};
    $("#reset").onclick=()=>{if(confirm("Clear all decisions for "+revAct+"? This also clears the filed-step memory so the stage header restarts at Generate.")){rows.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),null));clearSent(s.section,revAct);render()}};
    $("#genFb").onclick=()=>showGenFeedback(s,revAct);
    $("#applyAI").onclick=()=>showApplyAI(s,revAct);
@@ -1529,7 +1543,7 @@ function renderReviewDetail(s,w,aid,skey){
  const sk=skey, r=st.activities[aid];
  const orig=parseNote(r.note);
  const here=detailHref(s.key,aid,skey);
- const leftN=reviewRows(s,aid).filter(x=>!isDecided(x.dec)).length;   // unreviewed still in the queue
+ const leftN=reviewRows(s,aid).filter(x=>!isSettled(x)).length;   // unsettled still in the queue
  const box=el("div"); w.append(box);
  // Keyboard nav: skip when focus is on an interactive control (INPUT/TEXTAREA/
  // SELECT/BUTTON) so an arrow press never navigates away and discards unsaved
@@ -1617,7 +1631,7 @@ function renderReviewDetail(s,w,aid,skey){
     return d; };
   // record the decision, confirm it in a toast (the advance is otherwise silent),
   // then move to the next submission (or repaint the last one in place)
-  const save=v=>{setDec(s.section,aid,sk,v);const lbl=v.status==="approve"?"Approved":v.status==="override"?("Override "+v.score):v.status==="flag"?"Flagged":"Saved";const rem=reviewRows(s,aid).filter(x=>!isDecided(x.dec)).length;toast(lbl+(rem?" · "+rem+" left":" · queue clear"));if(i<order.length-1)go(detailHref(s.key,aid,order[i+1]));else paint();};
+  const save=v=>{setDec(s.section,aid,sk,v);const lbl=v.status==="approve"?"Approved":v.status==="override"?("Override "+v.score):v.status==="flag"?"Flagged":"Saved";const rem=reviewRows(s,aid).filter(x=>!isSettled(x)).length;toast(lbl+(rem?" · "+rem+" left":" · queue clear"));if(i<order.length-1)go(detailHref(s.key,aid,order[i+1]));else paint();};
   $("#dApprove").onclick=()=>save(collect(r.proposed!=null?{status:"approve"}:{status:"override",score:+$("#dOv").value}));
   $("#dOvBtn").onclick=()=>save(collect({status:"override",score:+$("#dOv").value}));
   $("#dFlag").onclick=()=>save(collect({status:"flag"}));
