@@ -112,7 +112,7 @@ The shared tools are **byte-identical across all teacher repos**; only
 | `grade-sweep.mjs` | The grader (per-repo; renders previews where a class needs them). Grades several submissions at once; `--jobs=<n>` overrides the default of `min(4, cores)`. |
 | `publish-grades.mjs` | Delivers grades/feedback to student repos. |
 | `provision-workspaces.mjs`, `prune-gradebook.mjs`, `audit-repo-names.mjs` | Roster/repo hygiene. `audit-repo-names.mjs` scopes itself to its own section (the workflow pipes the whole org listing in) and exits non-zero only for mismatches that can actually lose a delivery; pure casing drift is reported as a note. |
-| `org-audit.mjs` | Read-only cross-org hygiene plus an access audit. |
+| `org-audit.mjs` | Read-only cross-org hygiene, a **visibility** pass, and an access audit. Reports a drifted repo name as already graded when the sweep's own matching recovers it, so the action list holds only names that actually cost a grade. **Do not rename a recovered repo:** the gradebook row is keyed on the repo name and a rename never 404s, so `prune-gradebook.mjs` can never clear the stranded row. Reads `student.json` in batched GraphQL (40 repos per request), because one REST call per repo exhausted the hourly quota mid-run and left the access pass unable to complete. |
 | `canvas-push.mjs`, `canvas-export.mjs`, `canvas-pull-points.mjs` | Canvas sync and points reconcile. |
 | `build-quiz-qti.mjs`, `canvas-quiz-import.mjs`, `canvas-pull-quiz-grades.mjs` | Quiz-to-Canvas: build the QTI package (offline, deterministic) from `quiz.json`, import it via Content Migrations, and pull Canvas quiz grades back into the gradebook. See [LMS and Canvas](lms-canvas.md). |
 | `canvas-sync-assignments.mjs` | Authors the Canvas assignment shell from `assignments.json` (name, description, points, submission type) and places it in the `SUBMISSIONS` module. Dry-run by default. See [Canvas activities](canvas-activities.md). |
@@ -140,7 +140,18 @@ Student-side (delivered on publish): `GRADES.md`, `grades/<id>.json`, `FEEDBACK.
 - **No em dashes** in prose or generated content.
 - **No AI co-author trailers** in commits. AI involvement is disclosed openly in
   the README, not in git trailers.
-- **No student PII** anywhere public.
+- **No student PII** anywhere public. Enforced in the platform repo by
+  `scripts/check-public-hygiene.mjs` and the **Public hygiene** workflow, which
+  scan this repo and both template submodules for live org names, live class
+  codes, student-number patterns, real email addresses and em dashes. It exists
+  because the public teacher template once shipped real student GitHub handles
+  in tool comments: the Pages tripwire only inspects the built console artifact,
+  so it can never see a tool's source. When it fires on something legitimate,
+  fix the text rather than widening the pattern.
+- **Repo visibility is a grading-data concern.** Students are admin on their own
+  repos, so they can publish one; a public workspace exposes that student's
+  grades, feedback and `student.json`. Only the activity templates, the published
+  solutions and the demos belong public. `org-audit.mjs` flags the rest.
 - Always `node --check` a changed `.mjs`; prefer a dry run before any write to a
   live gradebook or student repo.
 - `gh repo list` calls must use a `--limit` larger than the org's repo count, or
