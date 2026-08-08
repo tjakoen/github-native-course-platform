@@ -1,0 +1,33 @@
+name: Public hygiene
+
+# This repo and its two template submodules are the public, sanitized face of a
+# platform that also runs live classes. Sanitization has failed silently before
+# (real student handles and section codes sat in the public teacher template's
+# code comments for months), and the Pages tripwire cannot catch it because that
+# one only inspects the built console artifact. This scans the source instead.
+#
+# Submodules must be checked out, or the templates are empty directories and the
+# check passes on nothing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Scan for live identifiers and em dashes
+        run: node scripts/check-public-hygiene.mjs

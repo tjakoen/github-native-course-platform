@@ -1,4 +1,4 @@
-# plans/README.md — the PROOF contract
+# plans/README.md - the PROOF contract
 
 This folder is a PROOF plan board. Each file is one plan: a markdown document with a small
 frontmatter block, followed by prose and a task checklist. The board renders these files; it

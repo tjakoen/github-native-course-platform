@@ -53,7 +53,7 @@ for (const sc of SECTIONS) {
     // non-8-digit "winner" like a 7-digit truncation) it is ambiguous -> hold.
     const obvious = distinctNums.length>1 && !nameConflict && domC>=2 && domC>=2*runC && domN.length===8;
     if(nameConflict){
-      for(const r of list) changes.push({ org:sc.org, section:sc.key, repo:r.repo, name:r.name, oldNum:r.num||"(blank)", newNum:distinctNums.join(" | "), reason:"conflict", skip:"MULTI-IDENTITY (collision — verify whose)" });
+      for(const r of list) changes.push({ org:sc.org, section:sc.key, repo:r.repo, name:r.name, oldNum:r.num||"(blank)", newNum:distinctNums.join(" | "), reason:"conflict", skip:"MULTI-IDENTITY (collision - verify whose)" });
       continue;
     }
     if(distinctNums.length>1 && !obvious){
@@ -73,7 +73,7 @@ for (const sc of SECTIONS) {
 // report
 const doIt = changes.filter(c=>!c.skip);
 const skipped = changes.filter(c=>c.skip);
-let rep=["# studentNumber normalization plan",`Generated ${new Date().toISOString()} — mode: ${APPLY?"APPLY":"DRY RUN"}`,"",
+let rep=["# studentNumber normalization plan",`Generated ${new Date().toISOString()} - mode: ${APPLY?"APPLY":"DRY RUN"}`,"",
  `${doIt.length} repos to fix, ${skipped.length} skipped (needs manual review).`,"",
  "| section | repo | field: studentNumber | new value | reason |","| --- | --- | --- | --- | --- |",
  ...doIt.map(c=>`| ${c.section} | \`${c.repo}\` | ${c.oldNum} | ${c.newNum} | ${c.reason} |`)];

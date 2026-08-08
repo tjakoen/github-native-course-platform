@@ -23,7 +23,7 @@ for(const sc of SECTIONS){
       num, name:f[gi("fullName")]||"", gh:f[gi("githubAccount")]||"", passed, total, ai:f[gi("aiScore")]||""});
   }
 }
-console.log("rows with blank/invalid studentNumber:",blanks.length,"— fetching live student.json…");
+console.log("rows with blank/invalid studentNumber:",blanks.length,"- fetching live student.json…");
 
 // fetch live student.json per unique repo
 const uniq=[...new Map(blanks.map(b=>[b.org+"/"+b.repo,b])).values()];

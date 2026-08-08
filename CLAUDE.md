@@ -72,6 +72,11 @@ manual (demoting an org owner needs the `admin:org` scope).
 - **No AI co-author trailers in commits.** AI involvement is disclosed openly in
   the README badge + footer instead, not in git trailers.
 - **No student PII** (names, numbers, emails) anywhere public. This is a public,
-  sanitized project; live instances with real data stay private.
+  sanitized project; live instances with real data stay private. This is
+  enforced: `node scripts/check-public-hygiene.mjs` scans this repo and both
+  template submodules for live org names, live section codes, student-number
+  patterns, real email addresses and em dashes, and the **Public hygiene**
+  workflow fails the build on a hit. Run it before pushing. When it fires on
+  something legitimate, fix the text rather than widening the pattern.
 - Always `node --check` a changed `.mjs`; prefer a dry run before any write to a
   live gradebook or student repo.

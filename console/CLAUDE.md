@@ -20,7 +20,7 @@ kinds: filing those intent files, and committing attendance scan batch CSVs from
 (validated server-side by the per-repo verify-attendance workflow). Keep every new mutation either
 behind an intent or behind an existing dry-run-gated repo workflow - never an unreviewed in-app
 grade write. (The local static build was retired 2026-07-24 in favor of the hosted shell; the
-maintenance CLIs under `src/` — audit/fix/blanks — stay. The per-repo attendance scanner was
+maintenance CLIs under `src/` - audit/fix/blanks - stay. The per-repo attendance scanner was
 absorbed as the Scan tab 2026-07-25.)
 
 ## How I work here (non-negotiables)

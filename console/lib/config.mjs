@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url)); // grader-ui/lib
+const HERE = path.dirname(fileURLToPath(import.meta.url)); // console/lib
 export const REPO = path.resolve(HERE, "..");              // grader-ui
 
 const cfgPath = path.join(REPO, "grader.config.json");

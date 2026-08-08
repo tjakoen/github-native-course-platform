@@ -28,7 +28,7 @@ concatenates it into `site/theme.css`, which the Pages shell links:
   / `--font-grain` / `--font-accent` grade families, spacing, radius) and the
   light/dark scheme. Its optional flavor `@import`s are stripped and its
   `@font-face` `url("/fonts/*.woff2")` are rewritten to embedded `data:` URIs, so
-  the baked stylesheet is self-contained (no CDN or node_modules at view time — the
+  the baked stylesheet is self-contained (no CDN or node_modules at view time - the
   deployed page is a static shell).
 - `styles/grain.css` - the grade-as-signal MECHANISM: `[data-grade="grain"]`,
   `.field` (grain at rest, clean on focus), `[data-commit="pending"]`.
@@ -36,7 +36,7 @@ concatenates it into `site/theme.css`, which the Pages shell links:
   base typography, links, `.muted`, the focus ring.
 - `styles/themes/baguette.css` - the active flavor (crisp near-white / near-black
   with a soft-blue accent), applied via `data-theme="baguette"` on the root.
-  Sourdough is grain's hueless default; grader-ui opts into Baguette. Light and dark
+  Sourdough is grain's hueless default; the console opts into Baguette. Light and dark
   still follow grain's `data-color-scheme` axis.
 - `components/**/*.css` - the REAL component CSS for every grain component the
   dashboard composes (the `GRAIN_COMPONENTS` list in `scripts/bake-theme.mjs`).
@@ -51,12 +51,12 @@ The fleet byline (`made with GRAIN by tjakoen`) is mounted last in `<body>` via 
 `made-with.css` in the shipped set, so provenance reads the same as every other
 GRAIN app.
 
-The grade cells (green pass to red fail) are grader-ui's own, not grain's, since
+The grade cells (green pass to red fail) are the console's own, not grain's, since
 grain is monochrome by doctrine. Their tint is scheme-aware (`curScheme()` reads
 the live `data-color-scheme`, so a manual theme toggle recolors them, and dark uses
 a softer hsl so the colors do not go muddy).
 
-grader-ui's own CSS (the block after `${GRAIN}` in `CSS()`) is limited to two things:
+the console's own CSS (the block after `${GRAIN}` in `CSS()`) is limited to two things:
 layout/composition grain leaves to the parent (the wide page column, the stats grid,
 the review drawer, the matrix's sticky column) and the few things grain is monochrome
 about on purpose but a grading matrix genuinely needs (status hues on `.badge` via a
@@ -75,4 +75,4 @@ mode follows grain's `data-color-scheme` axis.
 3. **Keep the offline guarantee.** Anything grain references externally (fonts)
    must be embedded at build time. No CDN or node_modules reference may survive
    into the generated HTML.
-4. **Only grain.** grader-ui needs `@tjakoen/grain`, not batch/mill/proof.
+4. **Only grain.** the console needs `@tjakoen/grain`, not batch/mill/proof.

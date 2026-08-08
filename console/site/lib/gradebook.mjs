@@ -7,8 +7,8 @@ import { ghJSON, ghText, pool } from "./gh.mjs";
 export const parse = (line) => { const o=[];let c="",q=false;for(let i=0;i<line.length;i++){const ch=line[i];if(q){if(ch==='"'&&line[i+1]==='"'){c+='"';i++;}else if(ch==='"')q=false;else c+=ch;}else if(ch==='"')q=true;else if(ch===','){o.push(c);c="";}else c+=ch;}o.push(c);return o;};
 const dec = (s) => { try { if(!s) return ""; const bin = atob(s); const bytes = Uint8Array.from(bin, c => c.charCodeAt(0)); return new TextDecoder().decode(bytes); } catch { return ""; } };
 const pointsFor = (passed, total, pp) => (!total ? null : Math.round((passed/total)*pp));
-// Drop a "2026-" style year prefix so the same student entered as "2026-20950301"
-// in one submission and "20950301" in another groups as one row (matches the
+// Drop a "2026-" style year prefix so the same student entered as "2026-00000001"
+// in one submission and "00000001" in another groups as one row (matches the
 // engine's normNum in tools/lib/gradebook.mjs). Grouping only - the displayed
 // number stays the raw first-seen value so attendance/roster lookups are unchanged.
 const normNum = (s) => String(s ?? "").trim().replace(/^\d{4}-/, "");

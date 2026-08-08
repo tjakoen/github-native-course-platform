@@ -468,9 +468,9 @@ function dashView(){
  bulk.innerHTML="<h2>Bulk actions <span class='mut' style='font-weight:400'>· all classes</span></h2>"+
   "<p class='mut' data-size='sm'>Fan one job across every class. Execute + delivery ops (publish, Canvas execute, provisioning) stay per-class in each class's Ops tab.</p>"+
   "<div class='ctl'>"+
-   "<button class='btn' data-size='sm' id='bulkGrade'>Grade sweep — all</button>"+
-   "<button class='btn' data-size='sm' data-variant='soft' id='bulkFb'>Generate feedback — all</button>"+
-   "<button class='btn' data-size='sm' data-variant='soft' id='bulkAudit'>Audit — all (read-only)</button>"+
+   "<button class='btn' data-size='sm' id='bulkGrade'>Grade sweep - all</button>"+
+   "<button class='btn' data-size='sm' data-variant='soft' id='bulkFb'>Generate feedback - all</button>"+
+   "<button class='btn' data-size='sm' data-variant='soft' id='bulkAudit'>Audit - all (read-only)</button>"+
   "</div>";
  w.append(bulk);
  const grid=el("div","dashgrid"); grid.dataset.surface="dash:cards";

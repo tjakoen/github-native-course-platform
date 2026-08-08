@@ -1,4 +1,4 @@
-# Live instance data (PII) — never commit
+# Live instance data (PII) - never commit
 classes/
 out/
 grader.config.json
