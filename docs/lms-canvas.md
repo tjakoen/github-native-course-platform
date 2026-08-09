@@ -84,6 +84,26 @@ unzipped XML, so the package diffs cleanly in review).
   `--force`. Short-answer questions map to case-insensitive fill-in-the-blank with
   multiple accepted answers; multiple choice is supported too.
 
+- `tools/canvas-quiz-verify.mjs <q>` (read-only) compares what Canvas stored
+  against `quiz.json` item by item: stem, type, points, the full choice set, which
+  option is weighted correct, and every accepted fill-in-the-blank spelling. Run it
+  after an import. The migration log reports only that it completed, which says
+  nothing about whether the questions survived the round trip.
+- `tools/canvas-quiz-configure.mjs <q>` finishes the job the import leaves
+  deliberately undone: the availability window, attempts, time limit, answer
+  shuffle, when correct answers appear, and publish. It reads every setting back
+  from Canvas and reports drift. Normally you would do this in the Canvas UI; this
+  exists for when that UI is not reachable.
+
+> **Write the end of a day as `23:59`, never `00:00`.** Canvas silently rewrites
+> midnight to 23:59:59 of the *same* day, so a lock written as the next day at
+> 00:00 hands out an extra day. `canvas-quiz-configure.mjs` and
+> `canvas-assignment-dates.mjs` both refuse that time outright.
+
+> **Classic Quizzes shuffles ANSWERS, not question order.** Question-order
+> shuffling needs question groups or an item bank, which the QTI package does not
+> create. Do not promise students shuffled questions on one of these.
+
 Because Canvas hosts and grades a Canvas-native quiz, **Canvas is the grade source
 for that quiz**. To keep a unified local record, `tools/canvas-pull-quiz-grades.mjs
 <q>` pulls each student's Canvas quiz score back into `gradebook/grades.csv`
