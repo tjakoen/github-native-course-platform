@@ -94,6 +94,12 @@ unzipped XML, so the package diffs cleanly in review).
   shuffle, when correct answers appear, and publish. It reads every setting back
   from Canvas and reports drift. Normally you would do this in the Canvas UI; this
   exists for when that UI is not reachable.
+- `tools/canvas-assignment-publish.mjs --only=<ids>` is the same idea for a plain
+  assignment: `canvas-sync-assignments.mjs` always creates one unpublished and
+  never publishes, because making work visible to a class is a decision rather
+  than a sync. Dry-run by default, and the dry run prints the dates next to the
+  flag, since an assignment with no unlock date opens the instant it is published.
+  It refuses to unpublish anything students have already submitted to.
 
 > **Write the end of a day as `23:59`, never `00:00`.** Canvas silently rewrites
 > midnight to 23:59:59 of the *same* day, so a lock written as the next day at

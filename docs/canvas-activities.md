@@ -5,8 +5,12 @@ teacher repo (`grader/assignments.json` plus, where they apply, `grader/<id>/RUB
 and `grader/<id>/CANVAS.md`), and `tools/canvas-sync-assignments.mjs` projects it
 onto Canvas: it creates or updates the matching Canvas assignment's name,
 description, Points Possible, and submission type, and drops it into your
-`SUBMISSIONS` module. On Canvas you then do exactly two things by hand: **set the
-due date** and **publish**. The sync tool never touches either.
+`SUBMISSIONS` module. Two things remain a decision rather than a sync: **the
+dates** and **publishing**. The sync tool never touches either, and creates every
+assignment unpublished. Make those two calls in the Canvas UI, or, when that UI is
+not reachable, with `tools/canvas-assignment-dates.mjs` and then
+`tools/canvas-assignment-publish.mjs`. Dates first: publishing an assignment that
+has no unlock date opens it to the class the instant it runs.
 
 This page is the standard the tool follows, so every activity reads the same way
 in Canvas whether it is authored by a person or generated.
