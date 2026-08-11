@@ -141,6 +141,7 @@ The shared tools are **byte-identical across all teacher repos**; only
 | `gradebook/notes/<id>/<repo>.md` | Instructor-only AI notes (proposed grade + likelihood flag). |
 | `gradebook/grader-hashes.json` | Fingerprint per activity of the canonical tests its grades were computed against, so the sweep can tell "unchanged, safe to reuse" from "test was edited". Written by the sweep. |
 | `gradebook/UNMATCHED.md` | Repos that look like submissions for the section but that no activity claimed, so they were never graded. Written every sweep. This is the only place a misnamed SUBMISSION repo is reported: `audit-repo-names.mjs` covers `student-`/`teacher-` names only. |
+| `gradebook/ANOMALIES.md` | Submissions that look like a student failing but are usually the toolchain, written every sweep and never changing a grade. Two tripwires: a test TOTAL that differs from the rest of the class (the suite did not fully run, or the student's own tests pad the denominator), and the same framework exception across two or more submissions. Read it before delivering grades. |
 | `gradebook/points-mismatch.md` | Written when a `totalPoints` disagrees with Canvas. |
 | `gradebook/FLAGS.md` | Recorded ambiguities for the instructor to resolve. |
 
