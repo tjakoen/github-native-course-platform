@@ -13,6 +13,7 @@ import { codeFor, codeCached } from "./lib/code.mjs";
 import { route, start, go, dispatch, beforeEach, fallback } from "./lib/router.mjs";
 import { discover, sections, findSc, getSection, sectionCached, invalidate, ageOf, STALE_MS, getFlagsFiles, discoErrors, getPendingIntents, invalidateIntents, hydrateSnapshots, setRevalidateHook, isRevalidating } from "./lib/data.mjs";
 import { missingWork, workspaceInfo } from "./lib/students.mjs";
+import { contentCoverage, needsPublish, orgRepoInventory, repoState, templateVerdict, solutionVerdict, isExposedSolution } from "./lib/repos.mjs";
 import { initSearch } from "./lib/search-index.mjs";
 import { OPS } from "./lib/ops-catalog.mjs";
 import { listRuns, dispatch as dispatchWf, findDispatchedRun, pollRun } from "./lib/actions.mjs";
@@ -548,7 +549,97 @@ function dashView(){
  };
 }
 
+// ---- Templates & solutions (org-wide, not per class) ----------------------
+// Activity template and solution repos are shared by every section in an org, so
+// this is the one view that is NOT scoped to a class. It answers two questions
+// that nothing else in the estate could: which activities are actually released
+// (their template repo is public), and whether any worked solution is exposed.
+//
+// Those are two different policies and the board keeps them apart. A private
+// template is a normal "not released yet". A public solution is a leak, except
+// the m1a1 ones that docs/examples.md deliberately publishes as the authoring
+// examples. tools/org-audit.mjs passes ANY public solution repo, so nothing else
+// would notice a real one.
+function templatesView(){
+ scopeQ("templates");
+ setTabs(null); statusLine(null);
+ main.innerHTML=""; const w=el("div","wrap"); main.append(w);
+ const orgs=[...new Set(sections().map(sc=>sc.org))];
+ w.innerHTML="<h1>Templates &amp; solutions</h1><p class='lede' data-size='sm'>The repos students copy, and the worked answers. These are <b>org-wide</b>: one template serves every class in the org, so a flip here is visible to all of them. Discovered by name search, so a repo that follows no naming convention will not appear.</p>";
+ if(!orgs.length){ w.innerHTML+="<div class='boot'>No classes configured. <a href='#/settings'>Settings</a></div>"; return; }
+ orgs.forEach(org=>{
+  const card=el("div","card"); card.dataset.pad="sm"; card.dataset.surface="templates:org";
+  card.innerHTML="<h2>"+esc(org)+"</h2><div class='mut tbody'>Searching for template and solution repos…</div>";
+  w.append(card);
+  paintInventory(card,org);
+ });
+}
+
+async function paintInventory(card,org){
+ const sc=sections().find(x=>x.org===org);
+ let inv;
+ try{ inv=await orgRepoInventory(org); }
+ catch(e){ card.querySelector(".tbody").textContent="Search failed: "+e.message; return; }
+ const box=card.querySelector(".tbody");
+ if(!inv.rows.length){ box.textContent="No template or solution repos found in "+org+"."; return; }
+ box.classList.remove("mut");
+ const exposed=inv.rows.filter(r=>isExposedSolution(r.solution,r.id));
+ const released=inv.rows.filter(r=>r.template&&!r.template.private).length;
+ const cell=(rec,v)=>rec
+  ? "<a href='"+esc(rec.url)+"' target='_blank' rel='noopener'><span class='badge' data-tone='"+v.tone+"'>"+esc(v.label)+"</span></a> <span class='mut' data-size='sm'>"+esc(v.note)+"</span>"
+  : "<span class='badge' data-tone='muted'>none</span>";
+ box.innerHTML=
+  (exposed.length?"<p style='border-left:3px solid var(--warn);padding-left:var(--space-2)'><b>"+exposed.length+" worked solution(s) are public:</b> "+exposed.map(r=>esc(r.solution.name)).join(", ")+". Anyone can read the answers. The org audit does not flag these.</p>":"")+
+  "<p class='mut' data-size='sm'>"+released+" of "+inv.rows.filter(r=>r.template).length+" templates released (public) · run from <span class='mono'>"+esc(sc?sc.repo:"?")+"</span></p>"+
+  "<div class='table-scroll'><table class='matrix'><tr><th>Activity</th><th>Template</th><th>Solution</th><th></th></tr>"+
+  inv.rows.map(r=>{
+   const tv=templateVerdict(r.template), sv=solutionVerdict(r.solution,r.id);
+   // The two buttons act on DIFFERENT repos, and one of them can expose a worked
+   // answer, so each says which repo it means. Two buttons both reading "make
+   // public" is how the wrong one gets clicked.
+   const btn=(rec,kind)=>rec?"<button class='btn tvis' data-size='sm' data-variant='soft' data-repo='"+esc(rec.name)+"' data-kind='"+kind+"' data-id='"+esc(r.id)+"' data-to='"+(rec.private?"public":"private")+"' title='"+esc(rec.name)+"'>"+kind+" &rarr; "+(rec.private?"public":"private")+"</button>":"";
+   return "<tr data-row='"+esc(r.id)+"'><td><b>"+esc(r.id)+"</b></td>"+
+    "<td class='tcell' data-cell='template'>"+cell(r.template,tv)+"</td>"+
+    "<td class='tcell' data-cell='solution'>"+cell(r.solution,sv)+"</td>"+
+    "<td>"+btn(r.template,"template")+" "+btn(r.solution,"solution")+"</td></tr>";
+  }).join("")+"</table></div>";
+ box.querySelectorAll(".tvis").forEach(b=>{ b.onclick=()=>flipVisibility(sc,org,b,inv); });
+}
+
+// One flip, through the repo's own dry-run-gated workflow. The console never
+// PATCHes a repo itself: Administration: write is a far bigger scope than the rest
+// of the app uses, and keeping it in the ORG_PAT secret means the flip also leaves
+// an Actions log behind. After it goes green the repo is re-read DIRECTLY (not via
+// search, whose index lags a write by about a minute) so the board cannot show a
+// stale answer as if it were the new one.
+async function flipVisibility(sc,org,btn,inv){
+ if(!sc){ alert("No teacher repo configured for "+org+" - the workflow runs from one."); return; }
+ const name=btn.dataset.repo, to=btn.dataset.to, kind=btn.dataset.kind, id=btn.dataset.id;
+ const exposing=kind==="solution"&&to==="public";
+ const what="make "+name+" "+to.toUpperCase()+" in "+org
+  +(to==="public"?" (readable by anyone on the internet)":"")
+  +(exposing?" - THIS IS A WORKED SOLUTION, publishing it gives away the answers":"")
+  +". Every class in this org sees the same repo";
+ const ok=await confirmExecute(what,sc.section);
+ if(!ok) return;
+ const op=OPS.find(o=>o.file==="template-visibility.yml");
+ btn.disabled=true;
+ const conc=await runOp(sc,{...op,execDanger:""},{repo:name,visibility:to,mode:"execute",allow_solution_public:exposing?"true":"false"},true,true);
+ if(conc!=="success"){ opFeed("Visibility flip STOPPED: "+esc(name)+" came back "+esc(String(conc))+"."); btn.disabled=false; return; }
+ const fresh=await repoState(org,name);
+ if(!fresh){ opFeed("Flipped "+esc(name)+", but it is not readable now - check it on GitHub."); btn.disabled=false; return; }
+ const row=btn.closest("tr"), cellEl=row&&row.querySelector("[data-cell='"+kind+"']");
+ const v=kind==="solution"?solutionVerdict(fresh,id):templateVerdict(fresh);
+ if(cellEl) cellEl.innerHTML="<a href='"+esc(fresh.url)+"' target='_blank' rel='noopener'><span class='badge' data-tone='"+v.tone+"'>"+esc(v.label)+"</span></a> <span class='mut' data-size='sm'>"+esc(v.note)+"</span>";
+ btn.dataset.to=fresh.private?"public":"private";
+ btn.innerHTML=esc(kind)+" &rarr; "+esc(btn.dataset.to);
+ btn.disabled=false;
+ const rec=inv.rows.find(r=>r.id===id); if(rec) rec[kind]=fresh;
+ opFeed(esc(name)+" is now "+(fresh.private?"private":"public")+" ✓");
+}
+
 route("#/", dashView);
+route("#/templates", templatesView);
 route("#/settings", settingsView);
 route("#/scan", ()=>location.replace("./scanner/"));
 // Retired global views (IA rework Phase C): Flags folded into the Dashboard
@@ -847,19 +938,28 @@ function renderOps(s,w){
  w.innerHTML="<h1>Ops · "+esc(sc.subject)+" · "+esc(sc.section)+"</h1><p class='lede' data-size='sm'>Run the engine for this class. Everything defaults to a dry run; a real write needs the class code typed back. A red audit run means the audit FOUND something.</p>";
  [...new Set(OPS.map(o=>o.group))].forEach(g=>{
   w.append(el("h2","opgroup",esc(g)));
-  OPS.filter(o=>o.group===g).forEach(op=>w.append(op.file==="publish-material.yml"?materialCard(sc,op):opCard(sc,op)));
+  OPS.filter(o=>o.group===g).forEach(op=>w.append(op.file==="publish-material.yml"?materialCard(sc,op,s):opCard(sc,op)));
  });
 }
 
 // Publish-material gets a real unit picker: the repo's content/ folders as a
 // multiselect. Selected units dispatch SEQUENTIALLY (each run polled to green
 // before the next starts) - the safe habit, now enforced by the UI.
-function materialCard(sc,op){
+//
+// The picker lists the TEACHER side, which says nothing about what actually
+// reached the students. "Check status" answers that: publish-material copies a
+// unit verbatim, so a workspace whose content/<unit> tree SHA matches the teacher
+// repo's is current, and anything else is stale or missing. It costs one call per
+// workspace, so it is a button and not something that runs on render.
+function materialCard(sc,op,s){
  const c=el("div","card opcard"); c.dataset.pad="sm";
  c.innerHTML="<div class='ophead'><b>"+esc(op.label)+"</b> <span class='mut mono'>"+esc(op.file)+"</span> <span class='oprun mut'>checking…</span></div>"+
   "<p class='mut opdesc'>"+esc(op.desc)+" <em>"+esc(op.note||"")+"</em></p>"+
   "<div class='mut unitpick'>Loading content/ units…</div>"+
-  "<div class='opform' style='margin-top:var(--space-2)'><button class='btn' data-size='sm' id='pmAll' data-variant='soft'>Select all</button><button class='btn' data-size='sm' id='pmGo'>Publish selected</button><span class='mut' id='pmMsg'></span></div>";
+  "<div class='cov'></div>"+
+  "<div class='opform' style='margin-top:var(--space-2)'><button class='btn' data-size='sm' id='pmAll' data-variant='soft'>Select all</button>"+
+   (s?"<button class='btn' data-size='sm' data-variant='soft' id='pmCheck'>Check status</button><button class='btn' data-size='sm' data-variant='soft' id='pmStale' hidden>Select stale + missing</button>":"")+
+   "<button class='btn' data-size='sm' id='pmGo'>Publish selected</button><span class='mut' id='pmMsg'></span></div>";
  listRuns(sc.org,sc.repo,op.file,1).then(runs=>{
   const slot=c.querySelector(".oprun"); if(!slot)return;
   const r=runs&&runs[0]; if(!runs){slot.textContent="no runs (or PAT lacks Actions scope)";return;}
@@ -870,9 +970,10 @@ function materialCard(sc,op){
   const box=c.querySelector(".unitpick"); if(!box)return;
   const units=(list||[]).filter(x=>x.type==="dir").map(x=>x.name);
   if(!units.length){ box.textContent="No content/ units found."; return; }
-  box.innerHTML="<fieldset class='chips' data-select='multi' style='border:0;padding:0;margin:0'>"+units.map(u=>"<label class='chips__chip'><input type='checkbox' value='"+esc(u)+"'><span>"+esc(u)+"</span></label>").join("")+"</fieldset>";
+  box.innerHTML="<fieldset class='chips' data-select='multi' style='border:0;padding:0;margin:0'>"+units.map(u=>"<label class='chips__chip' data-unit='"+esc(u)+"'><input type='checkbox' value='"+esc(u)+"'><span>"+esc(u)+"</span><span class='unitstat mut'></span></label>").join("")+"</fieldset>";
  }).catch(()=>{ const box=c.querySelector(".unitpick"); if(box)box.textContent="content/ not readable."; });
  c.querySelector("#pmAll").onclick=()=>c.querySelectorAll(".unitpick input").forEach(i=>{i.checked=true;});
+ if(s) wireCoverage(c,s);
  c.querySelector("#pmGo").onclick=async()=>{
   const picked=[...c.querySelectorAll(".unitpick input:checked")].map(i=>i.value);
   const msg=c.querySelector("#pmMsg");
@@ -887,6 +988,61 @@ function materialCard(sc,op){
   msg.textContent="Done: "+picked.length+" unit(s) published sequentially.";
  };
  return c;
+}
+
+// "Check status" for the unit picker: one contents/content listing per workspace,
+// compared against the teacher repo's. Marks each unit chip with how many
+// workspaces are current, and lets the teacher select exactly the ones that are
+// not. Orphans are listed separately - sync-unit overwrites but never deletes, so
+// a unit the teacher repo dropped survives in every workspace that already had it,
+// and republishing can never clean that up.
+function wireCoverage(c,s){
+ const btn=c.querySelector("#pmCheck"), stale=c.querySelector("#pmStale"), out=c.querySelector(".cov");
+ if(!btn) return;
+ btn.onclick=async()=>{
+  btn.disabled=true;
+  out.innerHTML="<div class='meter' style='max-width:280px;margin:var(--space-2) 0' role='meter' aria-label='Checking workspaces' aria-valuemin='0' aria-valuemax='100' aria-valuenow='0'><span class='meter__seg' data-tone='ok' style='--seg:0%'></span></div><span class='mut covmsg'>Reading workspaces…</span>";
+  const seg=out.querySelector(".meter__seg"), meter=out.querySelector(".meter"), cm=out.querySelector(".covmsg");
+  try{
+   const cov=await contentCoverage(s,(done,total)=>{
+    const pct=total?Math.round(done/total*100):100;
+    meter.setAttribute("aria-valuenow",pct); seg.style.setProperty("--seg",pct+"%");
+    cm.textContent="Reading workspaces… "+done+"/"+total;
+   });
+   let behind=0;
+   cov.units.forEach(u=>{
+    const chip=c.querySelector(".unitpick [data-unit='"+u.name.replace(/'/g,"")+"']");
+    if(!chip) return;
+    const slot=chip.querySelector(".unitstat");
+    const tone=needsPublish(u)?(u.current?"held":"bad"):"good";
+    if(needsPublish(u)) behind++;
+    chip.dataset.behind=needsPublish(u)?"1":"";
+    slot.innerHTML=" <span class='badge' data-tone='"+tone+"'>"+u.current+"/"+cov.workspaces+"</span>"
+     +(u.stale?" <span class='mut'>"+u.stale+" stale</span>":"")
+     +(u.missing?" <span class='mut'>"+u.missing+" missing</span>":"");
+   });
+   // The count that matters is workspaces READ, not workspaces expected: a repo
+   // with no content/ yet reads as missing everywhere, which is true and is
+   // exactly what republishing fixes, but an unreachable one is a different
+   // problem and must not hide inside a coverage number.
+   const bits=[cov.workspaces+" workspace(s) checked"];
+   if(cov.unreachable) bits.push(cov.unreachable+" with no readable content/ (never published, or the repo is missing)");
+   bits.push(behind?behind+" unit(s) behind in at least one workspace":"every unit is current everywhere");
+   out.innerHTML="<p class='mut' data-size='sm'>"+esc(bits.join(" · "))+"</p>";
+   if(cov.orphans.length){
+    out.innerHTML+="<p class='mut' data-size='sm'>Orphan units in workspaces (no longer in this repo's content/, and publishing cannot remove them): "
+     +cov.orphans.map(o=>esc(o.name)+" ("+o.count+")").join(", ")+"</p>";
+   }
+   stale.hidden=!behind;
+   btn.textContent="Re-check status";
+  }catch(e){ out.innerHTML="<p class='mut' data-size='sm'>Status check failed: "+esc(e.message)+"</p>"; }
+  btn.disabled=false;
+ };
+ stale.onclick=()=>{
+  c.querySelectorAll(".unitpick [data-unit]").forEach(chip=>{
+   const i=chip.querySelector("input"); if(i) i.checked=chip.dataset.behind==="1";
+  });
+ };
 }
 
 // ---- Activities management ----
@@ -953,7 +1109,7 @@ function renderActivities(s,w){
  // dropped that safety. Canvas dry-runs sit beside it; execute lives in Ops.
  const ch=el("div"); ch.innerHTML="<h2 class='opgroup'>Content & Canvas</h2><p class='mut'>Publish content units to every workspace (multi-select, sequential - the safe path) or dry-run the Canvas tools. Execute variants live in <a href='"+classHref(s.key,"ops")+"'>Ops</a>, behind the typed confirm.</p>";
  w.append(ch);
- w.append(materialCard(sc,OPS.find(o=>o.file==="publish-material.yml")));
+ w.append(materialCard(sc,OPS.find(o=>o.file==="publish-material.yml"),s));
  const cv=el("div","card"); cv.dataset.pad="sm";
  cv.innerHTML="<div class='opform'><button class='btn' data-size='sm' data-variant='soft' id='csDry'>Canvas sync (dry-run)</button><button class='btn' data-size='sm' data-variant='soft' id='cpDry'>Canvas push (dry-run)</button></div>";
  w.append(cv);

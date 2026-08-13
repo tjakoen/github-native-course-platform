@@ -99,6 +99,41 @@ alerts (held AI grades to review, blank `student.json`, sub-50% attendance)
 plus any folded-in engine flag lines, and classes you haven't opened yet
 show as a visible "not loaded [load]" row instead of being silently absent.
 
+## Templates & solutions
+
+The one view that is not scoped to a class, because the repos it shows are not
+either: one activity template serves every section in its org, so a change here
+is visible to all of them. That is the design, and the page says so.
+
+Per org, one row per activity with two columns:
+
+- **Template** (the repo students copy). Public means released. Private means
+  not released yet, which is a perfectly normal mid-term state, not a fault. A
+  template repo whose template flag is off is flagged, because students are not
+  offered "Use this template" on it.
+- **Solution** (the worked answer). Private is the expected state. Public is the
+  answers being world-readable, and the page leads with a warning listing every
+  one it finds. The `m1a1` solutions are the deliberate exception, published as
+  the platform's authoring examples, so they read as such instead of as a leak.
+
+Worth knowing why this exists: `org-audit.mjs` treats every solution repo as
+allowed to be public, so an accidentally exposed one passes the estate's own
+audit. This board is what catches it.
+
+Discovery is by name search rather than by listing the org, because the live orgs
+hold one to two thousand repos each and that listing has already timed out during
+a publish. The tradeoff is that a repo following no naming convention will not
+appear here at all.
+
+Each row's buttons flip that repo, and each one names the repo it acts on: two
+buttons reading "make public" is how the wrong one gets clicked. A flip runs the
+teacher repo's own `template-visibility.yml` behind the typed confirm, and the
+console re-reads that repo directly afterwards (the search index lags a write by
+about a minute, so trusting a fresh search would show you the old answer). The
+console never changes a repo's visibility itself: that needs `Administration:
+write`, a far bigger scope than the rest of the app uses, and keeping it in the
+`ORG_PAT` secret also means every flip leaves an Actions log behind.
+
 ## A class: Overview
 
 The class landing page (opens when you click into a class): stat tiles, a
@@ -135,6 +170,23 @@ unpublished; due date and publish stay manual in Canvas). Below the table, the
 Content & Canvas card reuses the Ops **publish-material** control (unit
 multiselect, dispatched **sequentially**, each polled green before the next)
 plus Canvas sync/push dry-run buttons.
+
+The unit multiselect lists what is in the teacher repo, which says nothing about
+what the students actually have. **Check status** answers that. Publishing copies
+a unit verbatim, so a workspace whose `content/<unit>` matches the teacher repo's
+tree SHA is current, and anything else is stale or missing. Each unit gets a
+current-over-total count, and **Select stale + missing** ticks exactly the units
+that need republishing, which you then publish with the button beside it. It
+costs one API call per workspace, so it is a button rather than something that
+runs every time the tab opens.
+
+Two things it reports that publishing cannot fix. A workspace with no readable
+`content/` at all is counted separately rather than folded into the coverage
+number, because "never published to" and "repo is missing" are different
+problems. And **orphan units** are units sitting in workspaces that the teacher
+repo no longer has: publishing overwrites but never deletes, so once a unit is
+retired, every workspace that already had it keeps it forever. Clearing those is
+manual.
 
 **+ New activity** opens a 3-step wizard (the steps are shown up front):
 

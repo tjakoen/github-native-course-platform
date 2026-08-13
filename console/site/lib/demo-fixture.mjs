@@ -522,12 +522,59 @@ function workspaceFiles(cls, handle) {
       pcNumber: "", room: "",
     }, null, 2) + "\n");
     put("README.md", "# " + st.name + " - " + cls.courseName + " " + cls.section + "\n");
+    // Published course material. publish-material copies each unit verbatim, so a
+    // current workspace holds byte-identical files and the content-coverage check
+    // sees matching tree shas. The drift below is deliberate and is what makes the
+    // check worth having: some workspaces never got the newest unit, some hold an
+    // older copy of one, and a few still carry a unit the teacher repo has since
+    // dropped (publishing overwrites but never deletes, so nothing can clean it up).
+    const newest = cls.units[cls.units.length - 1];
+    for (const u of cls.units) {
+      if (u === newest && st.seed % 4 === 0) continue;
+      const stale = st.seed % 6 === 0 && u === cls.units[1];
+      put("content/" + u + "/README.md", stale ? unitReadme(cls, u).replace("Course material", "Course material (earlier revision)") : unitReadme(cls, u));
+    }
+    if (st.seed % 9 === 0) put("content/orientation-week/README.md", "# orientation week\n\nRetired unit, still sitting in this workspace.\n");
     const delivered = cls.plan.filter(a => a.engine.publish).map(a => a.id);
     if (delivered.length) put("grades/GRADES.md", "# Grades\n\n" + delivered.map(id => "- " + id + ": delivered\n").join(""));
     if (st.seed % 3 === 0) put("grades/FEEDBACK.md", "# Feedback\n\nInstructor notes for your submitted work.\n");
     if (cls.sessions.length && st.number) put("attendance/MY-ATTENDANCE.md", "# My attendance\n\nYour verified sessions for " + cls.section + ".\n");
     return f;
   });
+}
+
+// ---- activity template + solution repos ---------------------------------
+// The repos students copy, and the worked answers. They have no file tree here
+// (nothing in the console reads inside one) - only the metadata the Templates
+// board shows: visibility and the template flag.
+//
+// The invented state carries the two real patterns worth demonstrating: the last
+// activity of each class is not released yet (its template is still private), and
+// the m1a1 solution is deliberately public as the authoring example while every
+// other solution is private. One class also has a solution that got left public
+// by accident, because a board that never shows a finding teaches nobody to read
+// it.
+const INFRA = new Map();   // org -> [{ name, private, isTemplate, pushedAt }]
+export function infraRepos(org) {
+  const cls = classByOrg(org);
+  if (!cls) return [];
+  if (!INFRA.has(org)) {
+    const acts = cls.plan.filter(a => a.engine.namePrefix).map(a => a.id);
+    const last = acts[acts.length - 1];
+    const rows = [];
+    acts.forEach((id, i) => {
+      rows.push({ name: id + "-classcode-yourname", private: id === last, isTemplate: true, pushedAt: new Date(Date.parse("2026-07-01T00:00:00Z") + i * 864e5).toISOString() });
+      const leaked = cls.section === "2202" && id === "m3a6";
+      rows.push({ name: id + "-solution", private: !(id === "m1a1" || leaked), isTemplate: false, pushedAt: new Date(Date.parse("2026-07-02T00:00:00Z") + i * 864e5).toISOString() });
+    });
+    INFRA.set(org, rows);
+  }
+  return INFRA.get(org);
+}
+export function setInfraVisibility(org, name, isPrivate) {
+  const rec = infraRepos(org).find(r => r.name.toLowerCase() === String(name).toLowerCase());
+  if (rec) rec.private = !!isPrivate;
+  return !!rec;
 }
 
 // ---- repo resolution ---------------------------------------------------
@@ -562,6 +609,7 @@ const RUN_HISTORY = {
   "generate-attendance-qrs.yml": [["success", 320]],
   "resolve-identities.yml": [],
   "prune-phantom-activities.yml": [],
+  "template-visibility.yml": [["success", 46]],
   "canvas-export.yml": [["success", 200]],
 };
 // Fixed "now" for run timestamps so the demo does not drift into the future.

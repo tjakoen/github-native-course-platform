@@ -48,7 +48,7 @@ import { isDemo, demoAPI, demoPut } from "./demo.mjs";
 const CACHE = new Map(); // url|accept -> { etag, body }
 export const rate = { remaining: null, limit: null };
 
-async function req(url, accept, parse, wantsBuffer) {
+async function req(url, accept, parse, wantsBuffer, tokenOverride) {
   // Demo mode swaps the transport for the in-memory virtual GitHub and nothing
   // else: no fetch, no ETag cache (so no synthetic body is persisted), and no
   // rate counter (there is no budget to spend, and inventing one would be a
@@ -64,7 +64,7 @@ async function req(url, accept, parse, wantsBuffer) {
   // immutable sha-addressed blob: serve straight from cache, no request
   if (hit && isMedia(key)) return hit.body;
   const headers = {
-    Authorization: "Bearer " + tokenForURL(url),
+    Authorization: "Bearer " + (tokenOverride || tokenForURL(url)),
     Accept: accept,
     "X-GitHub-Api-Version": "2022-11-28",
   };
@@ -84,6 +84,11 @@ async function req(url, accept, parse, wantsBuffer) {
 }
 
 export const ghJSON = url => req(url, "application/vnd.github+json", r => r.json());
+// Same, for a URL that is NOT under /repos/<org>/<repo> (the search API), where
+// tokenForURL has nothing to parse an org out of and would silently fall back to
+// DEFAULT_TOKEN - empty, in the normal per-repo-token setup. The caller knows the
+// org, so it says so.
+export const ghJSONForOrg = (org, url) => req(url, "application/vnd.github+json", r => r.json(), false, tokenForRepo(org, ""));
 export const ghText = url => req(url, "application/vnd.github.raw", r => r.text());
 export const ghBuf  = url => req(url, "application/vnd.github.raw", r => r.arrayBuffer(), true);
 

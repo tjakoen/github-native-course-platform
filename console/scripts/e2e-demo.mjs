@@ -62,6 +62,67 @@ await view("ops", "#/c/CS401-1101/ops", ".opcard .oprunbtn");
 await view("report", "#/reports/CS401-1101/" + encodeURIComponent("reports/canvas-crosscheck.md"), ".rbody h1, .rbody h2, .rbody p");
 await view("attendance-empty", "#/c/WEB101-3303/attendance", ".card");
 await view("review-flutter", "#/c/MOB210-2202/review", "table.table tr[data-s]");
+await view("templates", "#/templates", "table.matrix tr[data-row]");
+
+// The Templates board has to separate two policies: a private TEMPLATE is just an
+// unreleased activity, while a public SOLUTION is the worked answer leaking - with
+// m1a1 the documented exception. The fixture plants exactly one accidental leak,
+// so a board that reports none is not reading, and one that reports m1a1 is not
+// thinking.
+try {
+  await page.goto(U("#/templates"), { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("table.matrix tr[data-row]", { timeout: 25000 });
+  await page.keyboard.press("Escape");
+  const t = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll("tr[data-row]")];
+    const tone = (r, cell) => { const b = r.querySelector("[data-cell='" + cell + "'] .badge"); return b ? b.dataset.tone + ":" + b.textContent : "none"; };
+    return {
+      rows: rows.length,
+      exposedBanner: [...document.querySelectorAll("p")].filter(p => /worked solution\(s\) are public/.test(p.textContent)).length,
+      badSolutions: rows.filter(r => tone(r, "solution").startsWith("bad")).map(r => r.dataset.row),
+      m1a1Solution: tone(rows.find(r => r.dataset.row === "m1a1") || document.createElement("tr"), "solution"),
+      unreleased: rows.filter(r => tone(r, "template").startsWith("held")).length,
+    };
+  });
+  if (!t.rows) fail.push("templates: no rows");
+  if (t.exposedBanner < 1) fail.push("templates: the planted public solution was not reported");
+  if (t.badSolutions.includes("m1a1")) fail.push("templates: m1a1-solution flagged, but it is the documented public example");
+  if (!t.unreleased) fail.push("templates: no unreleased template detected");
+  await page.screenshot({ path: `${OUT}/templates-verdicts.png` });
+  console.log(`ok  templates-verdicts (${t.rows} rows, exposed ${JSON.stringify(t.badSolutions)}, m1a1 solution ${t.m1a1Solution}, ${t.unreleased} unreleased)`);
+} catch (e) { fail.push("templates-verdicts: " + e.message); }
+
+// Content coverage: compares each workspace's content/<unit> tree sha against the
+// teacher repo's. The fixture drifts some workspaces on purpose, so a run that
+// finds everything current is a broken comparison, not a tidy class - which is
+// exactly what a path-derived demo sha used to produce (nothing could ever match).
+try {
+  await page.goto(U("#/c/CS401-1101/activities"), { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("#pmCheck", { timeout: 25000 });
+  await page.keyboard.press("Escape");
+  await page.click("#pmCheck");
+  await page.waitForSelector(".unitpick .unitstat .badge", { timeout: 40000 });
+  await page.waitForFunction(() => /workspace\(s\) checked/.test(document.querySelector(".cov")?.textContent || ""), { timeout: 40000 });
+  const cov = await page.evaluate(() => {
+    const badges = [...document.querySelectorAll(".unitpick .unitstat .badge")];
+    return {
+      units: badges.length,
+      current: badges.filter(b => b.dataset.tone === "good").length,
+      behind: badges.filter(b => b.dataset.tone !== "good").length,
+      orphans: /Orphan units/.test(document.querySelector(".cov").textContent),
+      summary: document.querySelector(".cov p").textContent.trim(),
+    };
+  });
+  if (!cov.units) fail.push("coverage: no unit badges");
+  if (!cov.current) fail.push("coverage: nothing read as current (sha comparison is broken)");
+  if (!cov.behind) fail.push("coverage: the planted stale/missing units were not detected");
+  if (!cov.orphans) fail.push("coverage: the planted orphan unit was not reported");
+  await page.click("#pmStale");
+  const picked = await page.evaluate(() => [...document.querySelectorAll(".unitpick input:checked")].length);
+  if (picked !== cov.behind) fail.push(`coverage: "Select stale + missing" picked ${picked}, expected ${cov.behind}`);
+  await page.screenshot({ path: `${OUT}/content-coverage.png` });
+  console.log(`ok  content-coverage (${cov.units} units, ${cov.current} current, ${cov.behind} behind, orphans reported, select picked ${picked})`);
+} catch (e) { fail.push("content-coverage: " + e.message); }
 
 // A DELIVERED activity must be recognized from the repo alone. MOB210's m3a6 is
 // publish:true with every aiScore written, and this profile has no saved

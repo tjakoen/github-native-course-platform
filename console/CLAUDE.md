@@ -75,6 +75,17 @@ behind the "built with Claude" claim is the README badge + footer and the flagsh
   in `.mjs` with invented data only - the Pages tripwire fails the build on a
   shipped `.json`/`.csv` carrying gradebook identity columns, and a real name in
   there would be a PII leak in a public artifact. `npm run test:demo` is the gate.
+- **Demo shas are content-derived, like git's. Do not "simplify" them back to a
+  path hash.** The fixture used to hash `org/repo@ref:path`, which is stable and
+  unique and looks equivalent, but means no two repos can ever agree on anything.
+  The moment a feature compares repos (the content-coverage check: is this
+  workspace's `content/<unit>` the same as the teacher repo's?) the demo answers
+  "everything is stale, everywhere" while the real API answers correctly. A blob's
+  sha now comes from its bytes and a tree's from every descendant's relative path
+  plus content, so identical folders match across repos exactly as they do on
+  GitHub. `npm run test:demo` asserts both sides of it: some units current AND the
+  planted drift detected, because a run that finds everything current is a broken
+  comparison, not a tidy class.
 - **Vendored GRAIN/CRUMB islands assume a ROOT-mounted host; the bake fixes that.**
   This app lives under a project-page subpath, so `scripts/bake-theme.mjs` rewrites
   two root-absolute assumptions in the copies it vendors: crumb-live's

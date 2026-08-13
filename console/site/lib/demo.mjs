@@ -19,7 +19,7 @@
 //    fixture only, so the write surfaces are demonstrable and still harmless.
 //  - The flag lives in sessionStorage: it survives reloads in this tab, and dies
 //    with the tab. A visitor can never get stuck in demo mode.
-import { demoRepos, resolveRepo, classByOrg, seedRuns, DEMO_TOKEN } from "./demo-fixture.mjs";
+import { demoRepos, resolveRepo, classByOrg, seedRuns, infraRepos, setInfraVisibility, DEMO_TOKEN } from "./demo-fixture.mjs";
 
 const KEY = "console-demo-v1";
 const ss = () => { try { return globalThis.sessionStorage || null; } catch { return null; } };
@@ -57,16 +57,38 @@ function b64(s) {
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(bin);
 }
-// Stable content-addressable sha per (repo, ref, path). Registered on the way out
-// so a later /git/blobs/<sha> can be resolved back to its file.
+// Content-addressable sha, the way git actually is: the hash comes from the
+// CONTENT, so the same file in two different repos carries the same sha and a
+// folder's sha changes only when something inside it changes.
+//
+// This used to hash org/repo/path instead, which looked equivalent and was not:
+// nothing could ever compare two repos. The moment the content-coverage check
+// arrived (is this workspace's content/<unit> the same as the teacher repo's?)
+// the demo would have answered "everything is stale, everywhere" while the real
+// API answered correctly. Fixture wrong, code right - the usual way round.
 const SHA = new Map();
-function shaOf(org, repo, ref, path) {
+function hash(s) {
   let h1 = 0x811c9dc5, h2 = 0x01000193;
-  const s = org + "/" + repo + "@" + ref + ":" + path;
   for (let i = 0; i < s.length; i++) { h1 = Math.imul(h1 ^ s.charCodeAt(i), 16777619) >>> 0; h2 = Math.imul(h2 + s.charCodeAt(i) * (i + 7), 2246822519) >>> 0; }
-  const sha = (h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0")).repeat(2) + h1.toString(16).padStart(8, "0").slice(0, 4);
+  return (h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0")).repeat(2) + h1.toString(16).padStart(8, "0").slice(0, 4);
+}
+// A blob: hashed on its bytes, then registered so a later /git/blobs/<sha> can
+// find a copy. Two identical files resolve to the same blob, which is correct.
+function shaOf(org, repo, ref, path) {
+  const e = filesAt(repoAt(org, repo) || { files: {} }, ref).get(path);
+  const sha = hash("blob\0" + (e ? (e.text ?? ("shot:" + e.shot.w + "x" + e.shot.h)) : ""));
   SHA.set(sha, { org, repo, ref, path });
   return sha;
+}
+// A tree: hashed on every descendant's relative path and content, so it matches
+// across repos exactly when the folder does. `prefix` ends with "/" ("" = root).
+function treeShaOf(files, prefix) {
+  const parts = [];
+  for (const [p, e] of files) {
+    if (prefix && !p.startsWith(prefix)) continue;
+    parts.push(p.slice(prefix.length) + "\0" + (e.text ?? ("shot:" + e.shot.w + "x" + e.shot.h)));
+  }
+  return hash("tree\0" + parts.sort().join("\n"));
 }
 const sizeOf = e => e.text != null ? enc.encode(e.text).length : (e.shot ? e.shot.w * e.shot.h / 12 | 0 : 0);
 
@@ -167,8 +189,17 @@ function runState(run) {
 }
 const asRun = run => ({ ...run, ...runState(run) });
 
-export function demoDispatch(org, repo, file) {
+export function demoDispatch(org, repo, file, inputs) {
   if (!classByOrg(org)) throw new Error("GitHub 404: no such repo in demo mode");
+  // The visibility flip is the one dispatch whose EFFECT the console reads back
+  // (it re-reads the repo once the run is green), so the virtual org has to
+  // actually change. Same tier as the in-memory intent and flag writes: real
+  // surface, no bytes leaving the browser. Dry runs change nothing, as in life.
+  if (file === "template-visibility.yml" && inputs && inputs.mode === "execute") {
+    for (const name of String(inputs.repo || "").split(",").map(s => s.trim()).filter(Boolean)) {
+      setInfraVisibility(org, name, inputs.visibility === "private");
+    }
+  }
   const k = org + "/" + repo + "/" + file;
   const run = {
     id: ++runSeq, name: file, event: "workflow_dispatch", _at: Date.now(),
@@ -188,6 +219,22 @@ export async function demoAPI(url, accept, wantsBuffer) {
   const [pathPart, queryPart] = String(url).split("?");
   const qs = new URLSearchParams(queryPart || "");
   const raw = accept.includes("raw");
+
+  // GET /search/repositories?q=org:<org> <term> in:name
+  // The Templates board asks by name instead of listing an org (the live orgs
+  // hold thousands of repos), so the virtual API answers the same way.
+  if (pathPart === "/search/repositories") {
+    await sleep(120);
+    const q = qs.get("q") || "";
+    const org = (q.match(/org:(\S+)/) || [])[1] || "";
+    const term = q.replace(/org:\S+/, "").replace(/in:name/, "").trim().toLowerCase();
+    if (!classByOrg(org)) return { total_count: 0, items: [] };
+    const items = infraRepos(org)
+      .filter(r => r.name.toLowerCase().includes(term))
+      .map(r => ({ name: r.name, private: r.private, is_template: r.isTemplate, pushed_at: r.pushedAt, html_url: "https://github.com/" + org + "/" + r.name }));
+    return { total_count: items.length, items };
+  }
+
   const m = pathPart.match(/^\/repos\/([^/]+)\/([^/]+)(\/.*)?$/);
   if (!m) return null;
   const [, org, repo, rest = ""] = m;
@@ -211,6 +258,17 @@ export async function demoAPI(url, accept, wantsBuffer) {
     return null;
   }
 
+  // A template/solution repo has no file tree in the fixture, but the Templates
+  // board reads its metadata back after a flip - so answer that before the
+  // tree-backed lookup turns it into a 404.
+  if (rest === "") {
+    const infra = infraRepos(org).find(x => x.name.toLowerCase() === repo.toLowerCase());
+    if (infra) {
+      await sleep(60);
+      return { name: infra.name, full_name: org + "/" + infra.name, default_branch: "main", private: infra.private, is_template: infra.isTemplate, pushed_at: infra.pushedAt, html_url: "https://github.com/" + org + "/" + infra.name };
+    }
+  }
+
   const r = repoAt(org, repo);
   if (!r) return null;
 
@@ -229,7 +287,7 @@ export async function demoAPI(url, accept, wantsBuffer) {
       for (let i = 1; i < parts.length; i++) dirs.add(parts.slice(0, i).join("/"));
       tree.push({ path: p, type: "blob", sha: shaOf(org, repo, ref, p), size: sizeOf(e), mode: "100644" });
     }
-    for (const d of dirs) tree.push({ path: d, type: "tree", sha: shaOf(org, repo, ref, d + "/"), mode: "040000" });
+    for (const d of dirs) tree.push({ path: d, type: "tree", sha: treeShaOf(files, d + "/"), mode: "040000" });
     return { tree, truncated: false };
   }
 
@@ -275,7 +333,7 @@ export async function demoAPI(url, accept, wantsBuffer) {
       if (kids.has(name)) continue;
       kids.set(name, cut < 0
         ? { name, path: pfx + name, type: "file", size: sizeOf(v), sha: shaOf(org, repo, ref, pfx + name), html_url: "https://github.com/" + org + "/" + repo + "/blob/main/" + pfx + name }
-        : { name, path: pfx + name, type: "dir", size: 0, sha: shaOf(org, repo, ref, pfx + name + "/"), html_url: "https://github.com/" + org + "/" + repo + "/tree/main/" + pfx + name });
+        : { name, path: pfx + name, type: "dir", size: 0, sha: treeShaOf(files, pfx + name + "/"), html_url: "https://github.com/" + org + "/" + repo + "/tree/main/" + pfx + name });
     }
     if (!kids.size) return null;
     await sleep(80);
