@@ -164,6 +164,7 @@ only with an explicit `execute`/`publish=true`.
 | **Audit repo names** | `audit-names.yml` | Flags student/teacher repos whose names break the `<role>-<subject>-<class>-<handle>` convention (wrong section, swapped/typo'd codes, bad casing), and warns on blank `student.json`. Weekly + manual. |
 | **Provision workspaces** | `provision-workspaces.yml` | Reconciles the roster (from the gradebook) against live workspaces: creates a workspace for any student who has activities but none (adding the student as an admin collaborator on it), and fills a blank/missing `student.json` from the student's own submissions. Reports studentNumber collisions; never deletes or renames. Dry-run unless `execute=true`. |
 | **Prune gradebook** | `prune-gradebook.yml` | Removes gradebook rows whose submission repo no longer exists (deleted/renamed duplicates), which the grade sweep would otherwise keep forever. Only prunes on a definitive 404. Dry-run unless `execute=true`. |
+| **Template visibility** | `template-visibility.yml` | Flips an activity template or solution repo between public (released) and private. **The one org-wide workflow here:** template and solution repos are shared by every section in the org, so there is no section lock and a flip is visible to all of them. Refuses any name that is not a template, solution or demo repo, and refuses to make a `*-solution` repo public without a second explicit flag. Dry-run unless `mode=execute`. Its `ORG_PAT` needs `Administration: write`, which is why this is a workflow and not a console write. |
 
 Repo **deletes/renames stay manual** - the tools flag them
 but never perform them (they need `delete_repo` scope and a human decision).
@@ -303,7 +304,13 @@ quizzes/q1/
   every `grader/<id>/` in `gradebook/grader-hashes.json`. When an activity's tests
   change, an unlocked activity re-grades automatically and a locked one is
   reported but stays frozen (a delivered grade must not move on its own; use
-  `force` with `only=<id>`).
+  `force` with `only=<id>`). `RUBRIC.md` is deliberately not part of that
+  fingerprint. It is guidance for the reviewed half, not a canonical test, and a
+  re-graded row is rebuilt with an empty `aiScore`, so treating a rubric edit as
+  test drift would silently discard every reviewed score for the activity.
+  Rubric drift is fingerprinted separately under the `_rubrics` key and only
+  reported, so editing a rubric prompts a re-review without ever costing a
+  grade.
 - **Trusting a student's own autograde run is not an option.** The student owns
   their submission repo, including its workflow file, so a result reported from
   there is not evidence. Only the teacher-side run against canonical tests counts.
