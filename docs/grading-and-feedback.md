@@ -114,6 +114,32 @@ Selected by the `feedback` flag:
   comment wall) is unchanged. For the original GitHub Models design, see [Design
   notes: AI feedback plan](design/ai-grading-feedback-plan.md).
 
+## Finals: deliverables outside the org sweep
+
+The finals module (m8 for the Node/Express and Flutter courses, m12 for the web
+course) is a single project sampled across several Canvas items so the grade is
+not one artifact. None of its graded pieces is an org submission repo, so
+`grade-sweep.mjs` cannot reach them: the increment report, documentation, and
+reflection journal live in the student's own WORKSPACE, and the project code
+lives in the student's OWN public repository. Two dedicated tools feed the same
+held-for-review AI pipeline (they only write `notes-input`, never a score, never
+a push to a student repo):
+
+- `tools/grade-workspace-docs.mjs <section>` clones each org workspace and scopes
+  the AI to the activity's `sourceSubpath` (`project` for the report and
+  documentation, `journal` for the journal). It grades activities that are
+  `ai-grading` with a `sourceSubpath`.
+- `tools/grade-external-repos.mjs <section>` reads each student's public project
+  repository URL from their workspace `project/README.md` and clones it (public,
+  so no token is needed). It grades activities that are `ai-grading` with no
+  `sourceSubpath` and no `namePrefix`, which keeps the submission-repo capstones
+  out.
+
+Both take `GRADE_OWNER` and `WORKSPACE_PREFIX` from the environment and support
+`--dry-run`, `--only`, and `--force`. The presentation (a video, slides, and a
+square image) is graded by hand, because the AI cannot watch a video or open a
+slide deck.
+
 ## Related
 
 - [Authoring activities](authoring-activities.md) - how to set the flags and write

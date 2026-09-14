@@ -65,6 +65,7 @@ Each activity is one object in `grader/assignments.json`. Only `id`, `type`, and
 | `ai-grading` | `true` turns on AI feedback (requires a `RUBRIC.md`). |
 | `feedback` | `"project"` (design, screenshots) or `"code"` (code quality, no screenshots). |
 | `previews` | `"branch"` reuses the project CI's published screenshots. |
+| `sourceSubpath` | Finals only: the workspace zone (`"project"` or `"journal"`) a deliverable lives in, scoping AI feedback. Read by the finals tools, not `loadPolicy`. |
 | `publish` | `true` delivers grades/feedback to students (default false). |
 | `locked` | Prevents overwriting an already-synced Canvas grade. |
 | `manual` | Never auto-pushed/exported; you enter it by hand (AI rubric projects use this). |
@@ -117,6 +118,8 @@ The shared tools are **byte-identical across all teacher repos**; only
 | Tool | What it does |
 | --- | --- |
 | `grade-sweep.mjs` | The grader (per-repo; renders previews where a class needs them). Grades several submissions at once; `--jobs=<n>` overrides the default of `min(4, cores)`. |
+| `grade-workspace-docs.mjs` | Finals: AI-drafts held-for-review notes for workspace deliverables (report, docs, journal), scoping to `sourceSubpath`. Never scores or pushes. |
+| `grade-external-repos.mjs` | Finals: AI-drafts held-for-review notes for the student's own public project repo, cloned from the URL in their workspace `project/README.md`. Never scores or pushes. |
 | `publish-grades.mjs` | Delivers grades/feedback to student repos. |
 | `provision-workspaces.mjs`, `prune-gradebook.mjs`, `audit-repo-names.mjs` | Roster/repo hygiene. `audit-repo-names.mjs` scopes itself to its own section (the workflow pipes the whole org listing in) and exits non-zero only for mismatches that can actually lose a delivery; pure casing drift is reported as a note. |
 | `org-audit.mjs` | Read-only cross-org hygiene, a **visibility** pass, and an access audit. Reports a drifted repo name as already graded when the sweep's own matching recovers it, so the action list holds only names that actually cost a grade. **Do not rename a recovered repo:** the gradebook row is keyed on the repo name and a rename never 404s, so `prune-gradebook.mjs` can never clear the stranded row. Reads `student.json` in batched GraphQL (40 repos per request), because one REST call per repo exhausted the hourly quota mid-run and left the access pass unable to complete. |

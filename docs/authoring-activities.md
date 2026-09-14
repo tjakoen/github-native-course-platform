@@ -88,6 +88,7 @@ required.
 | `ai-grading` | no | `true` turns on AI feedback for this activity (requires a `RUBRIC.md`). |
 | `feedback` | no | `"project"` (design/front-end, uses screenshots) or `"code"` (code quality, no screenshots). |
 | `previews` | no | `"branch"` reuses the project CI's published screenshots instead of rendering fresh. |
+| `sourceSubpath` | no | Finals only. The workspace zone a deliverable lives in (`"project"` or `"journal"`), scoping AI feedback to it. Read by the finals tools, not `loadPolicy`. See below. |
 | `publish` | no | `true` delivers `GRADES.md` / `FEEDBACK.md` to students (default false). |
 | `locked` | no | Prevents overwriting an already-synced Canvas grade. |
 | `autoPoints` / `manual` | no | Legacy grade-split flags; avoid in new activities. |
