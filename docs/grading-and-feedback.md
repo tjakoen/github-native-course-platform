@@ -133,7 +133,24 @@ a push to a student repo):
   repository URL from their workspace `project/README.md` and clones it (public,
   so no token is needed). It grades activities that are `ai-grading` with no
   `sourceSubpath` and no `namePrefix`, which keeps the submission-repo capstones
-  out.
+  out. When any selected activity declares a `deliverable` it clones with
+  `--filter=blob:none` rather than `--depth=1`, so the commit graph survives and
+  the file's authoring history reaches the marker. A server that refuses the
+  partial clone falls back to shallow, and the run says how many fell back.
+
+An activity graded on one file rather than on a whole repository declares that
+file as its `deliverable`. The finals badge is the case this was built for: it is
+graded from `AI-USAGE.md`, sitting beside project code that another activity
+grades. Naming the file does two things. It is pinned to the front of the AI's
+source list, because the character budget is finite and a large `src/` tree would
+otherwise push the graded file out of the input entirely, leaving the activity
+marked from a file the marker never saw. And the input gains an **Authoring
+history** section with that file's real commit dates, which matters wherever the
+question is whether a log was kept as the work happened or assembled in one
+sitting. The working tree at HEAD cannot answer that, and a shallow clone looks
+exactly like a student who committed once, so when the history is unavailable the
+section says so and the rubric tells the marker to stay silent rather than
+guess.
 
 Both take `GRADE_OWNER` and `WORKSPACE_PREFIX` from the environment and support
 `--dry-run`, `--only`, and `--force`. The presentation (a video, slides, and a

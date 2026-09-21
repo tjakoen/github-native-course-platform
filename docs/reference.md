@@ -66,6 +66,7 @@ Each activity is one object in `grader/assignments.json`. Only `id`, `type`, and
 | `feedback` | `"project"` (design, screenshots) or `"code"` (code quality, no screenshots). |
 | `previews` | `"branch"` reuses the project CI's published screenshots. |
 | `sourceSubpath` | Finals only: the workspace zone (`"project"` or `"journal"`) a deliverable lives in, scoping AI feedback. Read by the finals tools, not `loadPolicy`. |
+| `deliverable` | The one file the activity is graded from, when that is narrower than the repository. Pins the file to the front of the AI's source list and adds its commit history to the input. |
 | `publish` | `true` delivers grades/feedback to students (default false). |
 | `locked` | Prevents overwriting an already-synced Canvas grade. |
 | `manual` | Never auto-pushed/exported; you enter it by hand (AI rubric projects use this). |

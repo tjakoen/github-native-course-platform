@@ -89,6 +89,7 @@ required.
 | `feedback` | no | `"project"` (design/front-end, uses screenshots) or `"code"` (code quality, no screenshots). |
 | `previews` | no | `"branch"` reuses the project CI's published screenshots instead of rendering fresh. |
 | `sourceSubpath` | no | Finals only. The workspace zone a deliverable lives in (`"project"` or `"journal"`), scoping AI feedback to it. Read by the finals tools, not `loadPolicy`. See below. |
+| `deliverable` | no | The one file the activity is graded from, when that is narrower than "the repository". Pins the file ahead of everything else in the AI's source list so a large codebase cannot crowd it out, and adds an **Authoring history** section carrying that file's commit dates. See below. |
 | `publish` | no | `true` delivers `GRADES.md` / `FEEDBACK.md` to students (default false). |
 | `locked` | no | Prevents overwriting an already-synced Canvas grade. |
 | `autoPoints` / `manual` | no | Legacy grade-split flags; avoid in new activities. |
