@@ -93,9 +93,18 @@ for (const [act, list] of Object.entries(byActivity)) {
     findings.push({ kind: "DRIFT", sec: "-", act, detail: list.map((x) => `${x.sec} ${x.mean.toFixed(1)} (n=${x.n})`).join("  vs  ") });
 }
 
+// Only UNDEDUCTED fails the gate. These rubrics are specific: 85 of 145 name each
+// criterion and describe its Excellent, Satisfactory and Needs-work bands. A
+// mechanical activity graded literally against such a rubric CAN produce a flat
+// distribution honestly, so FLAT, CEILING and DRIFT are reported for a human to
+// look at rather than treated as faults. UNDEDUCTED is different: a note that
+// describes a problem while awarding the criterion full marks contradicts itself
+// on its own terms, whatever the rubric says.
 const order = { UNDEDUCTED: 0, FLAT: 1, CEILING: 2, DRIFT: 3 };
 findings.sort((a, b) => order[a.kind] - order[b.kind] || a.act.localeCompare(b.act));
 if (!findings.length) { console.log("AI grading balance: nothing flagged."); process.exit(0); }
-console.log(`AI grading balance: ${findings.length} finding(s)\n`);
-for (const f of findings) console.log(`${f.kind.padEnd(11)} ${f.sec.padEnd(15)} ${f.act.padEnd(7)} ${f.detail}`);
-process.exit(1);
+const fails = findings.filter((f) => f.kind === "UNDEDUCTED");
+console.log(`AI grading balance: ${fails.length} contradiction(s), ${findings.length - fails.length} for review\n`);
+for (const f of findings) console.log(`${(f.kind === "UNDEDUCTED" ? f.kind : f.kind + " (review)").padEnd(20)} ${f.sec.padEnd(15)} ${f.act.padEnd(7)} ${f.detail}`);
+if (fails.length) console.log(`\nA note that names a problem and still awards that criterion full marks contradicts itself. Check those against the activity spec first: if the stub asked for what the student did, the criticism is the error, not the score.`);
+process.exit(fails.length ? 1 : 0);
