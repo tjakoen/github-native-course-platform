@@ -96,7 +96,11 @@ export async function loadSection(sc) {
     // from the note (the notes-input flow leaves aiScore blank until you clear it).
     let proposed = aiScore;
     if (proposed == null && note) {
-      const pm = note.match(/Proposed total:\s*([0-9]{1,3})\s*\/\s*[0-9]{1,3}/i);
+      // Half points are legal in a split rubric (a 15-test proportional half at
+      // 2.333 each lands on .5 often), so the proposal may be "49.5/50". Matching
+      // integers only made those notes read as having no proposal at all: the row
+      // showed "held" with no number and "Approve all unreviewed" skipped it.
+      const pm = note.match(/Proposed total:\s*([0-9]{1,3}(?:\.[0-9]+)?)\s*\/\s*[0-9]{1,3}/i);
       if (pm) { const pmax = a.totalPoints ?? a.autoPoints ?? +pm[1]; proposed = Math.min(pmax, +pm[1]); }
     }
     st.activities[id] = {
