@@ -125,18 +125,51 @@ lives in the student's OWN public repository. Two dedicated tools feed the same
 held-for-review AI pipeline (they only write `notes-input`, never a score, never
 a push to a student repo):
 
-- `tools/grade-workspace-docs.mjs <section>` clones each org workspace and scopes
-  the AI to the activity's `sourceSubpath` (`project` for the report and
-  documentation, `journal` for the journal). It grades activities that are
-  `ai-grading` with a `sourceSubpath`.
-- `tools/grade-external-repos.mjs <section>` reads each student's public project
-  repository URL from their workspace `project/README.md` and clones it (public,
-  so no token is needed). It grades activities that are `ai-grading` with no
-  `sourceSubpath` and no `namePrefix`, which keeps the submission-repo capstones
-  out. When any selected activity declares a `deliverable` it clones with
-  `--filter=blob:none` rather than `--depth=1`, so the commit graph survives and
-  the file's authoring history reaches the marker. A server that refuses the
-  partial clone falls back to shallow, and the run says how many fell back.
+- `tools/grade-workspace-docs.mjs <section>` grades activities that are
+  `ai-grading` with a `sourceSubpath` (`project` for the report and
+  documentation, `journal` for the journal).
+- `tools/grade-external-repos.mjs <section>` grades activities that are
+  `ai-grading` with no `sourceSubpath` and no `namePrefix`, which keeps the
+  submission-repo capstones out.
+
+Both read each student's submission from **the link they pasted into Canvas**,
+not from a guessed location. Every finals activity is a link submission, and the
+link names the exact file or folder the student wants graded. Measured on one
+section in October 2026, the old guess (the whole workspace zone, or the repo
+named in `project/README.md`) was wrong for about four submissions in ten: the
+work sat in the student's own repository, in a PDF, in the other zone, or in a
+file the student had created inside the instructor's `content/` folder. The
+shared logic lives in `tools/lib/finals-source.mjs`:
+
+- The student is joined to their Canvas submission by the same identity match
+  `canvas-push` uses at delivery, so the link that is read and the Canvas cell
+  the grade later lands in belong to the same person.
+- Each row is read as it stood at the deadline, or at the moment of a late
+  submission. Commits after that cutoff are counted and reported to the marker,
+  never graded.
+- A link into `content/` counts as course material only when the file is
+  byte-identical to a version the instructor published; anything the student
+  wrote there is graded as their work.
+- A link into another student's workspace is held back for a human, unless the
+  activity is `groupWork`, where a groupmate's workspace is the right place.
+- With no usable link, the tool falls back to the old location and says so in
+  the input.
+- Every run writes `gradebook/finals-sources-<tool>.md`, one line per row naming
+  what was read and why. Read it before generating any drafts.
+
+PDF and Office files in a finals submission have their text extracted
+(`pdftotext`, then python's `pypdf`, and `unzip` for `.docx`, `.pptx` and
+`.odt`). Anything that still cannot be read is listed by name, so the marker can
+never mistake an unreadable file for missing work. The input also tells the
+marker to write `Proposed total: HOLD` instead of a number when the deliverable
+is not in the source, which the Console reads as no proposal, so the row waits
+for a human. The ordinary sweep is unaffected: an activity template can ship
+lesson PDFs, so documents are only read in these scoped finals walks.
+
+Repositories are cloned with `--filter=blob:none`, so the commit graph survives
+for the cutoff and for a `deliverable`'s authoring history. `--zone-only` skips
+Canvas and grades every row from the fallback, for a section with no Canvas
+course.
 
 An activity graded on one file rather than on a whole repository declares that
 file as its `deliverable`. The finals badge is the case this was built for: it is
