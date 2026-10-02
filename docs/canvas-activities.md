@@ -65,6 +65,7 @@ read them.
 | `title` | Human title. The Canvas name becomes `<ID>: <title>` (id-only if absent). |
 | `manual` | `true` marks a hand-graded activity: never swept, never pushed, graded in Canvas. |
 | `canvasName` | Adopt an existing Canvas assignment whose name carries no id token. See "Adopting an assignment that already exists" below. |
+| `canvasSync` | Set to `false` to keep this tool from ever creating or rewriting the Canvas assignment. Use it for an assignment another instructor authored and graded that the platform only reads, such as badge evidence. |
 | `totalPoints` | Canvas Points Possible. For manual/AI activities this equals the rubric total. |
 
 A manual/badge activity therefore looks like:
