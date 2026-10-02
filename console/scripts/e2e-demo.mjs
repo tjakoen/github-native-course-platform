@@ -148,7 +148,7 @@ try {
       rows: document.querySelectorAll("table.table tr[data-s]").length,
     };
   });
-  if (!st.delivered) fail.push("delivered activity: no delivered mark in the activity tabs");
+  if (st.delivered) fail.push("partial delivery: a missing workspace was marked fully delivered");
   // The counts must drain from the GRADEBOOK, not from saved decisions - this
   // profile has none. A delivered activity that still reads "0/22" and keeps its
   // rows in the AI Review badge is the stale-badge bug this guards.
@@ -156,10 +156,10 @@ try {
   if (!(pillDone > 0 && pillDone === pillAll)) fail.push(`delivered activity: tab pill is '${st.pill}', expected every row settled`);
   const navN = Number((st.navReview.match(/\((\d+)\)/) || [])[1] || 0);
   if (navN >= st.rows) fail.push(`delivered activity: AI Review badge is ${navN}, still counting the ${st.rows} delivered row(s)`);
-  if (st.steps[3] !== "done") fail.push(`delivered activity: Deliver step is '${st.steps[3]}', expected 'done'`);
+  if (st.steps[3] === "done") fail.push("partial delivery: Deliver was marked done despite missing receipts");
   if (!st.truth) fail.push("delivered activity: no gradebook truth line rendered");
-  if (/finalize/i.test(st.primary)) fail.push("delivered activity: Finalize is still the armed primary action");
-  console.log("ok  review-delivered (steps " + st.steps.join(",") + ", primary " + JSON.stringify(st.primary) + ")");
+  if (!/finalize/i.test(st.primary)) fail.push("partial delivery: recovery action is missing");
+  console.log("ok  review-partial-delivery (steps " + st.steps.join(",") + ", primary " + JSON.stringify(st.primary) + ")");
 } catch (e) {
   fail.push("review-delivered: " + e.message.split("\n")[0]);
 }
@@ -171,13 +171,14 @@ await page.screenshot({ path: `${OUT}/review-delivered.png` });
 // goto, so the step does not depend on how the previous view left the SPA.
 await page.goto(U("#/c/CS401-1101/review"), { waitUntil: "domcontentloaded" });
 await page.waitForSelector("table.table tr[data-s]", { timeout: 25000 });
-const href = await page.locator("table.table tr[data-s] a").first().getAttribute("href");
+const href = await page.locator("table.table tr[data-s]").filter({hasText:"Ready to review"}).locator("a").first().getAttribute("href");
 await page.goto("about:blank");
 await page.goto(U(href), { waitUntil: "domcontentloaded" });
-await page.keyboard.press("Escape");
+await page.evaluate(() => window.crumb?.end());
 let shots = 0, decs = 0;
 try {
   await page.waitForSelector("#dApprove", { timeout: 30000 });
+  await page.evaluate(() => window.crumb?.end());
   await page.waitForTimeout(2500);
   shots = await page.locator(".shot img").count();
   if (!shots) fail.push("review detail: no screenshots rendered");

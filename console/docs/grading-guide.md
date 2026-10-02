@@ -52,11 +52,23 @@ relative, sibling-aware grading with an honest spread.
    marks no matter how clean the code reads. If a preview is blank, find out
    whether the app crashed or the render failed before trusting a low score.
 6. **Automated vs design are separate.** The objective test score column is the
-   tests; never move it by hand. The reviewed 0 to 100 lives in `aiScore`. A
+   tests; never move it by hand. The reviewed score in the activity's declared points lives in `aiScore`. A
    single failed automated check should not collapse the design judgement.
 7. **Keep the review wall.** Student-facing prose and the Canvas comment carry no
    scores-as-AI language, no mention of AI, and never the instructor-only
    likelihood or vibecode line. That half stays in `gradebook/notes/` only.
+
+## Finals review and delivery evidence
+
+Finals inputs and draft notes can exist before a row is recorded in `grades.csv`. The Console includes those files in the review queue, resolves the workspace identity from `student.json`, and keeps the proposed score separate from a reviewed score. A missing or conflicting identity remains held. A missing source is a hold for investigation, not an automatic zero.
+
+Compare the same activity against its rubric and the source captured at the submission cutoff. Use peer comparisons to find inconsistent criterion decisions, not to impose a distribution. Shared deliverables with the same evidence should receive consistent criterion scores. Individual journals still require each student's own reflection. INTROWEB's configured group activities allow a groupmate's workspace as the source; exceptions in other courses need an explicit record before the source hold is cleared.
+
+The snapshot shown beside a finals draft is the input used to write it. It is not the workspace's current contents. Check the source ledger for fallback links, unreadable files and edits after the cutoff before approving the proposal. A proposal with the wrong denominator or a total above the activity maximum must be corrected, rather than silently rescaled.
+
+Apply writes the listed score for both approvals and overrides and refreshes the encoded feedback. It preserves previously reviewed rows outside the new decision block. Finals rows are created only after the source metadata and explicit identity are checked; unavailable tests do not become invented passes.
+
+Delivery enabled is a policy setting. Delivered to workspaces means the current grade and denominator were compared with the student's `GRADES.md`. An unreadable receipt is unverified, and this comparison does not verify Canvas. A real workspace publish rebuilds the whole grade table, so it must not use an activity or submission filter. Canvas pushes use the activity filter to avoid resending unrelated grades and comments.
 
 ## Calibration ledger (append every round)
 

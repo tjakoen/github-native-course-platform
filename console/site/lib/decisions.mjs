@@ -37,7 +37,7 @@ export let DEC=adoptLegacy(SKEY,isDemo()?null:LEGACY_DKEY);
 export const dkey=(sec,act,skey)=>sec+"|"+act+"|"+skey;
 export const getDec=(sec,act,skey)=>DEC[dkey(sec,act,skey)]||null;
 export const setDec=(sec,act,skey,v)=>{const k=dkey(sec,act,skey);if(v)DEC[k]=v;else delete DEC[k];localStorage.setItem(SKEY,JSON.stringify(DEC));};
-export const skeyOf=st=>st.number||st.name;
+export const skeyOf=st=>st.reviewKey||st.number||st.name;
 export const isDecided=d=>!!(d&&d.status);
 // The final score a review row resolves to: override wins, approve = the AI's
 // proposed score, flagged/unreviewed resolve to null (held out of delivery).

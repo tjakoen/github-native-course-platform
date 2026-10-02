@@ -65,9 +65,9 @@ export async function fileGenFeedback(s,aid){
 
 export function buildApplyAI(s,aid,rows){
  const max=s.assignments.find(a=>a.id===aid).totalPoints;
- const decided=rows.filter(x=>isDecided(x.dec)&&x.dec.status!=="flag");
+ const decided=rows.filter(x=>!x.r.identityUnresolved&&isDecided(x.dec)&&x.dec.status!=="flag"&&Number.isFinite(finalScore(x))&&finalScore(x)>=0&&finalScore(x)<=max);
  const flagged=rows.filter(x=>x.dec&&x.dec.status==="flag");
- const undone=rows.filter(x=>!isDecided(x.dec));
+ const undone=rows.filter(x=>x.r.identityUnresolved||(!isDecided(x.dec)&&x.r.aiScore==null));
  const edited=decided.filter(x=>x.dec.studentText!=null||x.dec.instructorText!=null);
  const lines=decided.map(x=>{const fin=finalScore(x);const tags=[x.dec.status==="override"?"OVERRIDE - was "+(x.r.proposed==null?"none":x.r.proposed):"approved"];if(x.dec.studentText!=null)tags.push("edited student feedback");if(x.dec.instructorText!=null)tags.push("edited instructor note");return "  - "+(x.st.name||x.r.repo)+" ("+(x.st.number||"?")+") · "+x.r.repo+": "+fin+"/"+max+"  ["+tags.join("; ")+"]"+(x.dec.comment?" - note: "+x.dec.comment:"");}).join("\n");
  const editBlocks=edited.map(x=>{
@@ -90,19 +90,19 @@ export function buildApplyAI(s,aid,rows){
 flagged.map(x=>"  - "+(x.st.name||x.r.repo)+" ("+(x.st.number||"?")+") · "+x.r.repo+" @"+(x.r.sha||"?")+" · current proposed "+(x.r.proposed!=null?x.r.proposed+"/"+max:"none")+(x.r.aiFlag?" · AI-likelihood "+x.r.aiFlag.split(" - ")[0]:"")+(x.dec.comment?" - my note: "+x.dec.comment:"")).join("\n")+"\n\n":"")+
 (undone.length?"## Not yet reviewed ("+undone.length+") - do NOT apply\n\n":"")+
 "## Steps\n"+
-"1. For each OVERRIDE student, set gradebook/grades.csv aiScore to the final score I gave (do not touch the objective test score column). Approved students keep the AI's proposed aiScore.\n"+
-"2. For every FLAGGED or NOT-YET-REVIEWED student on "+aid+", BLANK their aiScore cell in gradebook/grades.csv. A blank aiScore holds a student out of the Canvas push (canvas-push skips it) and marks them not-cleared for delivery.\n"+
+"1. For EVERY listed approved or override decision, write the listed final score into gradebook/grades.csv aiScore. Preserve objective test columns. For a finals draft without a CSV row, create the row only after matching its workspace student.json and the finals source ledger to the correct Canvas identity; use the recorded source snapshot metadata, and leave unavailable test evidence blank. Never infer identity from a repository suffix. Hold any ambiguous identity instead of applying it.\n"+
+"2. Keep never-reviewed rows blank and hold every explicitly FLAGGED row. Preserve previously reviewed scores on rows not listed in this decision block; do not erase an earlier review merely because this browser has no decision. Report any flag that conflicts with an already delivered grade before changing it.\n"+
 "3. For every student under \"Edited feedback to write\", overwrite gradebook/notes/"+aid+"/<repo>.md with my exact text: replace the student-facing prose half and/or the instructor half as labelled, keeping the title line and the italic disclaimer line intact. For OVERRIDE students with no edited instructor text, still update the instructor note's proposed total to match my score, adjust the per-criterion bullets to sum to it, and record the human-review note on the proposed-total line (so it stays out of the Canvas comment).\n"+
-"4. Verify the gradebook: overrides show my score, flagged/unreviewed aiScore are blank, approved are unchanged. Commit and push - the hosted dashboard reads the repo live; I'll refresh to review the applied grades before delivery.\n\n"+
+"4. Refresh the base64 notes column for each applied row from its final note file, then verify: approved and overridden rows contain the listed scores and current feedback, held rows stay blank, and previously reviewed rows outside this block are unchanged. Commit and push - the hosted dashboard reads the repo live; I'll refresh to review the applied grades before delivery.\n\n"+
 "Do NOT publish or push Canvas from this prompt, and do NOT flip \"publish\": true. This prompt writes grades only. Delivery (flip publish:true, publish to students, push Canvas, verify) is the separate Finalize step (the Finalize button emits that prompt), gated on my go. The student-facing FEEDBACK.md and the Canvas comment must stay free of any \"AI\" mention and of the instructor-only likelihood/vibecode line. The <<< >>> markers are delimiters only - do not include them in the files.\n";
  return {txt,decided,flagged,undone};
 }
 
 export function buildFinalize(s,aid,rows){
  const max=s.assignments.find(a=>a.id===aid).totalPoints;
- const delivered=rows.filter(x=>isDecided(x.dec)&&x.dec.status!=="flag");
- const heldOut=rows.filter(x=>!(isDecided(x.dec)&&x.dec.status!=="flag"));
- const delList=delivered.map(x=>"  - "+x.r.repo+": "+finalScore(x)+"/"+max).join("\n")||"  (none cleared yet)";
+ const delivered=rows.filter(x=>!x.r.identityUnresolved&&x.r.aiScore!=null&&(!isDecided(x.dec)||(x.dec.status!=="flag"&&finalScore(x)===x.r.aiScore)));
+ const heldOut=rows.filter(x=>!delivered.includes(x));
+ const delList=delivered.map(x=>"  - "+x.r.repo+": "+x.r.aiScore+"/"+max).join("\n")||"  (none cleared yet)";
  const heldList=heldOut.map(x=>"  - "+x.r.repo+(x.dec&&x.dec.status==="flag"?" (flagged)":" (not reviewed)")).join("\n")||"  (none)";
  const txt=
 "# Finalize and deliver - "+s.subject+" (section "+s.section+") - "+aid+"\n\n"+
@@ -112,13 +112,13 @@ export function buildFinalize(s,aid,rows){
 "## Rules (do not violate)\n"+
 "- Dry-run first for BOTH publish and Canvas; execute only on my explicit \"go\".\n"+
 "- Student FEEDBACK.md and the Canvas comment carry NO scores-as-AI, no \"AI\" mention, and never the instructor-only likelihood/vibecode line.\n"+
-"- publish-grades.mjs gates on aiScore: a blank aiScore holds a student out of BOTH the student publish and the Canvas push, so a single publish only="+aid+" delivers exactly the cleared students above (held/flagged students, with blank aiScore, are skipped automatically).\n\n"+
+"- publish-grades.mjs gates on aiScore: a blank aiScore holds a student out of BOTH the student publish and the Canvas push, so never scope a real student publish with --only or --repo: it rebuilds each whole GRADES.md. Dry-run the full section, compare every already-delivered row to current gradebook values, and stop if unrelated grades would change.\n\n"+
 "## Steps\n"+
 "1. Flip \"publish\": true on "+aid+" in grader/assignments.json (the readiness gate; nothing delivers yet).\n"+
-"2. Student publish (publish.yml), DRY RUN (publish=false), restricted to the cleared repos. Show me the plan; confirm it lists exactly the cleared repos above and no held student.\n"+
-"3. On my \"go\": run publish for real (publish=true) for the cleared repos only.\n"+
-"4. Canvas push in CHECK mode for "+aid+" (tools/canvas-push.mjs --section="+s.section+" --check). Show the report; confirm every cleared student maps and no held student appears (held students have blank aiScore and are skipped).\n"+
-"5. On my \"go\": canvas-push --execute. Each cleared student gets their final score PLUS a rubric-breakdown comment (per-criterion points + feedback prose).\n"+
+"2. Student publish (publish.yml), DRY RUN (publish=false), for the full section. Show the complete plan and verify this activity reaches only cleared students while existing published activities remain intact.\n"+
+"3. On my \"go\": run the full-section publish for real (publish=true), with no --only or --repo filter.\n"+
+"4. Canvas push in CHECK mode for "+aid+" (tools/canvas-push.mjs --section="+s.section+" --only="+aid+" --check). Show the report; confirm every cleared student maps and no held student appears (held students have blank aiScore and are skipped).\n"+
+"5. On my \"go\": canvas-push --only="+aid+" --execute. Each cleared student gets their final score PLUS a rubric-breakdown comment (per-criterion points + feedback prose).\n"+
 "6. VERIFY: each cleared student received FEEDBACK.md/GRADES.md and the correct Canvas grade + comment (spot-check 2-3), and NO held/flagged student got anything.\n";
  return {txt,delivered,heldOut};
 }

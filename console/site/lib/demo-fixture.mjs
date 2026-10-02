@@ -536,7 +536,14 @@ function workspaceFiles(cls, handle) {
     }
     if (st.seed % 9 === 0) put("content/orientation-week/README.md", "# orientation week\n\nRetired unit, still sitting in this workspace.\n");
     const delivered = cls.plan.filter(a => a.engine.publish).map(a => a.id);
-    if (delivered.length) put("grades/GRADES.md", "# Grades\n\n" + delivered.map(id => "- " + id + ": delivered\n").join(""));
+    if (delivered.length) {
+      const cleared = rowsOf(cls).filter(row => row.st === st && delivered.includes(row.aid) && (!row.act.engine["ai-grading"] || row.aiScore != null));
+      put("GRADES.md", "# Grades\n\n| Assignment | Grade |\n| --- | --- |\n" + cleared.map(row => {
+        const max = row.act.engine.totalPoints ?? row.total;
+        const score = row.act.engine["ai-grading"] ? row.aiScore : Math.round(row.passed / row.total * max);
+        return `| ${row.aid} | ${score}/${max} |`;
+      }).join("\n"));
+    }
     if (st.seed % 3 === 0) put("grades/FEEDBACK.md", "# Feedback\n\nInstructor notes for your submitted work.\n");
     if (cls.sessions.length && st.number) put("attendance/MY-ATTENDANCE.md", "# My attendance\n\nYour verified sessions for " + cls.section + ".\n");
     return f;
