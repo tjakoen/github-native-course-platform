@@ -71,16 +71,40 @@ export async function loadSection(sc) {
     const m = x.path.match(/^gradebook\/(notes|notes-input)\/([^/]+)\/(student-[^/]+)\.md$/);
     if (x.type !== "blob" || !m || !policy.get(m[2])?.["ai-grading"]) continue;
     pending.set(m[2] + "/" + m[3], { id: m[2], repo: m[3] });
-    identities.set(m[3], null);
+    identities.set(m[3].toLowerCase(), null);
   }
   // A candidate name locates a file; only its explicit matching identity joins it.
   const family = sc.repo.match(/^teacher-([^-]+)-([^-]+)-/i);
   const candidateNumbers = new Map();
+  const locatorNumbers = new Map();
+  // Teacher-attested locators find aliases; current workspace identity remains
+  // mandatory and duplicate-number workspaces still remain held below.
+  const locatorBlob = tree?.tree?.find(x => x.type === "blob" && x.path === "gradebook/workspaces.json");
+  if (locatorBlob) {
+    const text = await ghText(`${base}/git/blobs/${locatorBlob.sha}`);
+    if (text == null) throw new Error("Workspace locator evidence is unreadable");
+    let locator;
+    try { locator = JSON.parse(text); } catch { throw new Error("Workspace locator evidence is invalid JSON"); }
+    const prefix = family ? `student-${family[1]}-${family[2]}-`.toLowerCase() : "";
+    if (!prefix || locator.schemaVersion !== 1 || String(locator.section) !== String(sc.section) || !Array.isArray(locator.workspaces)) throw new Error("Workspace locator schema or section is invalid");
+    for (const entry of locator.workspaces) {
+      if (!entry || typeof entry.repo !== "string" || !/^[a-z0-9_.-]+$/i.test(entry.repo) || !entry.repo.toLowerCase().startsWith(prefix) || typeof entry.studentNumber !== "string" || !/^(?:\d{4}-)?\d{6,12}$/.test(entry.studentNumber)) throw new Error("Workspace locator identity or repository is invalid");
+      const number = normNum(entry.studentNumber);
+      const key = entry.repo.toLowerCase();
+      const existing = candidateNumbers.get(key);
+      if (existing && !existing.has(number)) throw new Error("Workspace locator has conflicting identities");
+      candidateNumbers.set(key, new Set([number]));
+      locatorNumbers.set(key, number);
+      identities.set(key, null);
+    }
+  }
+
   if (family) for (const line of csv.slice(1)) {
     const f = parse(line), handle = (f[gi("githubAccount")] || "").trim();
     const number = joinNum(f[gi("studentNumber")]);
     if (!number || !/^[a-z0-9-]+$/i.test(handle)) continue;
-    const repo = `student-${family[1]}-${family[2]}-${handle}`;
+    const repo = `student-${family[1]}-${family[2]}-${handle}`.toLowerCase();
+    if (locatorNumbers.has(repo) && locatorNumbers.get(repo) !== number) throw new Error("CSV workspace identity conflicts with teacher locator evidence");
     const numbers = candidateNumbers.get(repo) || new Set(); numbers.add(number);
     candidateNumbers.set(repo, numbers);
     if (!identities.has(repo)) identities.set(repo, null);
@@ -90,7 +114,7 @@ export async function loadSection(sc) {
     try {
       const text = await ghText(`/repos/${sc.org}/${repo}/contents/student.json`);
       const identity = text ? JSON.parse(text) : null;
-      if (!joinNum(identity?.studentNumber)) { if ([...pending.values()].some(x => x.repo === repo)) reviewWarnings.push(repo + ": identity needs checking"); return; }
+      if (!joinNum(identity?.studentNumber)) { if ([...pending.values()].some(x => x.repo.toLowerCase() === repo)) reviewWarnings.push(repo + ": identity needs checking"); return; }
       const expected = candidateNumbers.get(repo);
       if (expected && !expected.has(normNum(identity.studentNumber))) { reviewWarnings.push(repo + ": workspace identity differs from gradebook; delivery is unverified"); return; }
       identities.set(repo, identity);
@@ -117,7 +141,7 @@ export async function loadSection(sc) {
   const workspaceByNumber = new Map([...identities].filter(([, identity]) => identity).map(([repo, identity]) => [normNum(identity.studentNumber), repo]));
   for (const x of pending.values()) {
     if (rowKeys.has(x.id + "/" + x.repo)) continue;
-    const identity = identities.get(x.repo);
+    const identity = identities.get(x.repo.toLowerCase());
     const f = h.map(() => "");
     const put = (key, value) => { if (gi(key) >= 0) f[gi(key)] = String(value ?? ""); };
     put("repo", x.repo); put("assignment", x.id);
@@ -134,7 +158,7 @@ export async function loadSection(sc) {
     if (!f[gi("repo")]) continue;
     const id = f[gi("assignment")]; const a = policy.get(id); if (!a) continue;
     const raw = (f[gi("studentNumber")]||"").trim();
-    if (!raw || !joinNum(raw) || identities.has(f[gi("repo")]) && !identities.get(f[gi("repo")])) f.identityUnresolved = true;
+    if (!raw || !joinNum(raw) || identities.has(f[gi("repo")].toLowerCase()) && !identities.get(f[gi("repo")].toLowerCase())) f.identityUnresolved = true;
     const key = (f.identityUnresolved ? "" : joinNum(raw)) || `norepo:${f[gi("repo")]}`;
     if (!byStudent.has(key)) byStudent.set(key, {
       reviewKey: f.identityUnresolved ? key : null, number: raw, name: f[gi("fullName")]||"", github: f[gi("githubAccount")]||"", activities: {},
