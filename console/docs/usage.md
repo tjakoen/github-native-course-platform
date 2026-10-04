@@ -331,3 +331,9 @@ They're occasional data-hygiene helpers, separate from the hosted review flow:
 
 `classes/`, `out/`, and `grader.config.json` are gitignored: they hold
 student PII and must never be committed.
+
+## Verified workspace aliases
+
+A private teacher repository can provide gradebook/workspaces.json when a submission account does not identify the student's actual workspace name. The optional file has schemaVersion 1, the section code, and a workspaces array of repo and studentNumber bindings. These bindings must be corroborated by enrollment and repository ownership before publication. They are private identity data and must never be included in the public Console site.
+
+The Console treats each binding as a locator. It still reads the workspace's current student.json and grade receipt before reporting delivery. Conflicting CSV identities, invalid sections and malformed repository names stop loading explicitly. Duplicate workspace identities remain held. Missing locator files preserve the existing lookup path. A locator does not approve an AI score, change a grade or establish Canvas delivery.
