@@ -134,7 +134,7 @@ export async function loadSection(sc) {
     if (!f[gi("repo")]) continue;
     const id = f[gi("assignment")]; const a = policy.get(id); if (!a) continue;
     const raw = (f[gi("studentNumber")]||"").trim();
-    if (raw && !joinNum(raw)) f.identityUnresolved = true;
+    if (!raw || !joinNum(raw) || identities.has(f[gi("repo")]) && !identities.get(f[gi("repo")])) f.identityUnresolved = true;
     const key = (f.identityUnresolved ? "" : joinNum(raw)) || `norepo:${f[gi("repo")]}`;
     if (!byStudent.has(key)) byStudent.set(key, {
       reviewKey: f.identityUnresolved ? key : null, number: raw, name: f[gi("fullName")]||"", github: f[gi("githubAccount")]||"", activities: {},
@@ -169,6 +169,8 @@ export async function loadSection(sc) {
     // The CSV aiScore is the reviewed FINAL score, present only once a student is
     // cleared. Before that it is blank, so surface the AI's PROPOSED total parsed
     // from the note (the notes-input flow leaves aiScore blank until you clear it).
+    const sourceOwnerRaw = gi("sourceOwner") >= 0 ? (f[gi("sourceOwner")] || "").trim() : "";
+    const sourceIssue = sourceOwnerRaw && !/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(sourceOwnerRaw) ? "Source owner metadata is invalid; resolve provenance before approval." : null;
     let proposed = aiScore, proposalIssue = invalidRecorded ? "Recorded score is invalid or outside the activity points; needs correction." : null;
     if (proposed == null && note && !invalidRecorded) {
       // Half points are legal in a split rubric (a 15-test proportional half at
@@ -182,8 +184,9 @@ export async function loadSection(sc) {
         else proposed = +pm[1];
       }
     }
+    if (sourceIssue) { proposalIssue = sourceIssue; proposed = null; }
     st.activities[id] = {
-      repo: f[gi("repo")], passed, total, raw: `${passed}/${total}`,
+      sourceOwner: sourceIssue ? "" : sourceOwnerRaw, sourceIssue, sourceSha: f[gi("sha")] || "", repo: f[gi("repo")], passed, total, raw: `${passed}/${total}`,
       // `proposed` collapses the written aiScore and the note's proposal into one
       // display number, so keep the raw CSV aiScore too: it is the only signal that
       // says "this reviewed score is IN the gradebook", which is what the review
@@ -205,10 +208,38 @@ export async function loadSection(sc) {
       const lines = receipt.split("\n").filter(line => line.startsWith(`| ${id} |`));
       const expected = held ? aiScore : total > 0 ? (pp != null ? canvasPts : passed) : null;
       const grades = lines.map(line => line.split("|")[2]?.trim().match(/(?:\[)?([\d.]+)\/([\d.]+)/));
-      st.activities[id].workspaceDelivered = grades.some(grade => !!grade && expected != null && +grade[1] === expected && +grade[2] === (pp ?? total));
+      st.activities[id].workspaceDelivered = grades.length > 0 && grades.every(grade => !!grade && expected != null && +grade[1] === expected && +grade[2] === (pp ?? total));
       st.activities[id].duplicateReceipt = lines.length > 1;
       if (lines.length > 1) deliveryWarnings.push(id + ": duplicate activity rows in a workspace receipt");
     };
+  }
+
+  // Preserve alternate repository evidence instead of silently hiding it when
+  // the display consolidates multiple sources for one student and activity.
+  for (const [key, st] of byStudent) for (const [id, current] of Object.entries(st.activities)) {
+    if (current.sourceIssue) current.workspaceDelivered = null;
+    const alternatives = csvRows.filter(f => !f.reviewOnly && joinNum(f[gi("studentNumber")]) === key && f[gi("assignment")] === id && ((gi("sourceOwner") >= 0 ? f[gi("sourceOwner")] : "") || sc.org).toLowerCase() + "/" + f[gi("repo")].toLowerCase() !== (current.sourceOwner || sc.org).toLowerCase() + "/" + current.repo.toLowerCase());
+    const unique = new Map();
+    for (const f of alternatives) {
+      const repo = f[gi("repo")], owner = gi("sourceOwner") >= 0 ? (f[gi("sourceOwner")] || "").trim() : "";
+      const source = { repo, sourceOwner: owner, sourceSha: f[gi("sha")] || "", gradedAt: f[gi("gradedAt")] || "", note: repo.toLowerCase() === current.repo.toLowerCase() ? dec(f[gi("notes")]) || null : noteContents.get(notePath(id, repo)) || dec(f[gi("notes")]) || null };
+      const token = owner.toLowerCase() + "/" + repo.toLowerCase();
+      if (!unique.has(token) || unique.get(token).gradedAt < source.gradedAt) unique.set(token, source);
+    }
+    if ([...unique.values()].some(source => source.repo.toLowerCase() === current.repo.toLowerCase())) {
+      const selected = csvRows.find(f => f[gi("assignment")] === id && f[gi("repo")] === current.repo && ((gi("sourceOwner") >= 0 ? f[gi("sourceOwner")] : "") || sc.org).toLowerCase() === (current.sourceOwner || sc.org).toLowerCase() && (f[gi("gradedAt")] || "") === current.gradedAt);
+      // A shared path cannot establish which owner authored the note.
+      current.note = selected ? dec(selected[gi("notes")]) || null : null;
+      current.aiFlag = null; current.triage = null;
+    }
+    current.alternateSources = [...unique.values()];
+    if (current.alternateSources.length) {
+      current.sourceSelectionIssue = "Multiple repository sources are recorded for this student and activity. Resolve the submitted source before approval or delivery.";
+      current.proposalIssue = current.sourceSelectionIssue;
+      current.proposed = null;
+      current.workspaceDelivered = null;
+      reviewWarnings.push(id + ": alternate repository drafts need source reconciliation");
+    }
   }
 
   // tallies

@@ -65,9 +65,9 @@ export async function fileGenFeedback(s,aid){
 
 export function buildApplyAI(s,aid,rows){
  const max=s.assignments.find(a=>a.id===aid).totalPoints;
- const decided=rows.filter(x=>!x.r.identityUnresolved&&isDecided(x.dec)&&x.dec.status!=="flag"&&Number.isFinite(finalScore(x))&&finalScore(x)>=0&&finalScore(x)<=max);
+ const decided=rows.filter(x=>!x.r.identityUnresolved&&!x.r.sourceSelectionIssue&&!x.r.sourceIssue&&isDecided(x.dec)&&x.dec.status!=="flag"&&Number.isFinite(finalScore(x))&&finalScore(x)>=0&&finalScore(x)<=max);
  const flagged=rows.filter(x=>x.dec&&x.dec.status==="flag");
- const undone=rows.filter(x=>x.r.identityUnresolved||(!isDecided(x.dec)&&x.r.aiScore==null));
+ const undone=rows.filter(x=>x.r.identityUnresolved||x.r.sourceSelectionIssue||x.r.sourceIssue||(!isDecided(x.dec)&&x.r.aiScore==null));
  const edited=decided.filter(x=>x.dec.studentText!=null||x.dec.instructorText!=null);
  const lines=decided.map(x=>{const fin=finalScore(x);const tags=[x.dec.status==="override"?"OVERRIDE - was "+(x.r.proposed==null?"none":x.r.proposed):"approved"];if(x.dec.studentText!=null)tags.push("edited student feedback");if(x.dec.instructorText!=null)tags.push("edited instructor note");return "  - "+(x.st.name||x.r.repo)+" ("+(x.st.number||"?")+") · "+x.r.repo+": "+fin+"/"+max+"  ["+tags.join("; ")+"]"+(x.dec.comment?" - note: "+x.dec.comment:"");}).join("\n");
  const editBlocks=edited.map(x=>{
@@ -100,10 +100,10 @@ flagged.map(x=>"  - "+(x.st.name||x.r.repo)+" ("+(x.st.number||"?")+") · "+x.r.
 
 export function buildFinalize(s,aid,rows){
  const max=s.assignments.find(a=>a.id===aid).totalPoints;
- const delivered=rows.filter(x=>!x.r.identityUnresolved&&x.r.aiScore!=null&&(!isDecided(x.dec)||(x.dec.status!=="flag"&&finalScore(x)===x.r.aiScore)));
+ const delivered=rows.filter(x=>!x.r.identityUnresolved&&!x.r.sourceSelectionIssue&&!x.r.sourceIssue&&x.r.aiScore!=null&&(!isDecided(x.dec)||(x.dec.status!=="flag"&&finalScore(x)===x.r.aiScore)));
  const heldOut=rows.filter(x=>!delivered.includes(x));
  const delList=delivered.map(x=>"  - "+x.r.repo+": "+x.r.aiScore+"/"+max).join("\n")||"  (none cleared yet)";
- const heldList=heldOut.map(x=>"  - "+x.r.repo+(x.dec&&x.dec.status==="flag"?" (flagged)":" (not reviewed)")).join("\n")||"  (none)";
+ const heldList=heldOut.map(x=>"  - "+x.r.repo+(x.r.identityUnresolved||x.r.sourceIssue||x.r.sourceSelectionIssue?" (provenance hold)":x.dec&&x.dec.status==="flag"?" (flagged)":" (not applied)")).join("\n")||"  (none)";
  const txt=
 "# Finalize and deliver - "+s.subject+" (section "+s.section+") - "+aid+"\n\n"+
 "The reviewed grades for "+aid+" are already written to the gradebook (approved + overrides applied; held/flagged aiScore blanked). Now deliver ONLY the cleared students to their workspaces and to Canvas. Work from: "+workFrom(s)+" - pull it first.\n\n"+
@@ -119,7 +119,7 @@ export function buildFinalize(s,aid,rows){
 "3. On my \"go\": run the full-section publish for real (publish=true), with no --only or --repo filter.\n"+
 "4. Canvas push in CHECK mode for "+aid+" (tools/canvas-push.mjs --section="+s.section+" --only="+aid+" --check). Show the report; confirm every cleared student maps and no held student appears (held students have blank aiScore and are skipped).\n"+
 "5. On my \"go\": canvas-push --only="+aid+" --execute. Each cleared student gets their final score PLUS a rubric-breakdown comment (per-criterion points + feedback prose).\n"+
-"6. VERIFY: each cleared student received FEEDBACK.md/GRADES.md and the correct Canvas grade + comment (spot-check 2-3), and NO held/flagged student got anything.\n";
+"6. VERIFY every cleared row through fresh live reads: FEEDBACK.md/GRADES.md and the correct Canvas grade and comment. Confirm no held or flagged row received a new mark or feedback for this activity, and preserve prior reviewed records. A run log or dry-run recheck alone is not delivery proof.\n";
  return {txt,delivered,heldOut};
 }
 
