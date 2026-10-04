@@ -12,6 +12,7 @@ export function missingWork(s, st) {
 }
 
 export function workspaceRepo(s, st) {
+  if (st.workspaceRepo) return st.workspaceRepo;
   if (!st.github) return null;
   const subj = (s.key.split("-")[0] || "").toLowerCase();
   return `student-${subj}-${s.section}-${st.github}`;

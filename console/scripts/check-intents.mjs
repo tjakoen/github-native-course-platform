@@ -64,6 +64,8 @@ const ROWS = [
     dec: { status: "flag", comment: "code does not match the commit history" } },
   { st: S.students[3], r: S.students[3].activities.m3a1, dec: null },
 ];
+// Finalize exercises scores already applied after review, not pending decisions.
+const FINALIZED_ROWS = ROWS.map(x => ({ ...x, r: { ...x.r, aiScore: x.dec?.status === "approve" ? x.r.proposed : x.dec?.status === "override" ? x.dec.score : null } }));
 const GENERATED_AT = "2026-01-15T02:00:00.000Z";
 const PICKED = [{ num: "20260003", name: "Reyes, Pedro" }, { num: "20260002", name: "Santos, Maria" }];
 const DATE = "2026-01-14";   // 20260002 is already present that day -> exercises the NOTE line
@@ -71,7 +73,7 @@ const DATE = "2026-01-14";   // 20260002 is already present that day -> exercise
 const CASES = {
   "gen-feedback.md": () => buildGenFeedback(S, "m3a1"),
   "apply-ai.md": () => buildApplyAI(S, "m3a1", ROWS).txt,
-  "finalize.md": () => buildFinalize(S, "m3a1", ROWS).txt,
+  "finalize.md": () => buildFinalize(S, "m3a1", FINALIZED_ROWS).txt,
   "apply-grades.md": () => buildApplyGrades(S, GENERATED_AT),
   "deliver.md": () => buildDeliver(S, GENERATED_AT).txt,
   "manual-attendance.md": () => buildManualAttendance(S, PICKED, DATE),

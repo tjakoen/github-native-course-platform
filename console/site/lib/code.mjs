@@ -12,26 +12,26 @@ const MAX_FILES = 45;          // per submission
 const NUL = String.fromCharCode(0);
 const langOf = (p) => (p.match(/\.([a-z0-9]+)$/i)?.[1] || "txt").toLowerCase();
 
-const cache = new Map(); // "section|repo" -> Promise<[{path,lang,content}]|null>
+const cache = new Map(); // "section|owner|repo|revision" -> Promise<[{path,lang,content}]|null>
 
-export function codeFor(section, org, repo) {
-  const key = `${section}|${repo}`;
+export function codeFor(section, org, repo, revision = "") {
+  const key = `${section}|${org.toLowerCase()}|${repo.toLowerCase()}|${revision}`;
   if (!cache.has(key)) {
-    const p = fetchCode(org, repo).catch(() => null);
+    const p = fetchCode(org, repo, revision).catch(() => null);
     p.then(v => { p.resolved = v; });
     cache.set(key, p);
   }
   return cache.get(key);
 }
-export function codeCached(section, repo) {
+export function codeCached(section, org, repo, revision = "") {
   // sync peek: undefined while loading, null when nothing found, [...] otherwise
-  const p = cache.get(`${section}|${repo}`);
+  const p = cache.get(`${section}|${org.toLowerCase()}|${repo.toLowerCase()}|${revision}`);
   return p ? p.resolved : undefined;
 }
 
-async function fetchCode(org, repo) {
-  const repoInfo = await ghJSON(`/repos/${org}/${repo}`);
-  const branch = repoInfo?.default_branch || "main";
+async function fetchCode(org, repo, revision) {
+  if (!revision) return null;
+  const branch = revision;
   const tree = await ghJSON(`/repos/${org}/${repo}/git/trees/${branch}?recursive=1`);
   if (!tree || !tree.tree) return null;
   let blobs = tree.tree.filter(x => x.type === "blob" && SRC.test(x.path) && !SKIP_DIR.test(x.path) && !SKIP_FILE.test(x.path) && (x.size ?? 0) <= MAX_BYTES);

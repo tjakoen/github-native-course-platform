@@ -1,0 +1,16 @@
+{
+  "id": "review-evidence",
+  "title": "Review grading evidence",
+  "route": null,
+  "mode": "dev",
+  "intro": "Review the grading state and the evidence before applying or delivering grades.",
+  "steps": [
+    {
+      "surface": "review:evidence",
+      "status": "needs-verification",
+      "review": "Finals show the snapshot used to draft the assessment. Source holds need investigation before a score is applied.",
+      "verify": "Read the snapshot beside the feedback, then check the proposal and denominator. At phone width, scroll the source without obscuring the decision controls.",
+      "say": "Finals show the snapshot used to draft the assessment. Source holds need investigation before a score is applied."
+    }
+  ]
+}

@@ -23,12 +23,28 @@ from.
 
 | Family | Declared by | Student submits | Score source | Canvas submission type |
 | --- | --- | --- | --- | --- |
-| **Activity** (repo) | `type: vitest`/`dart`/`flutter` (+ optional `ai-grading`) | push to their GitHub repo | automated tests, or the rubric if `ai-grading` | `none` (the grade is pushed by `canvas-push`, not uploaded) |
+| **Activity** (repo) | `type: vitest`/`dart`/`flutter` (+ optional `ai-grading`) | push to their GitHub repo, then upload a screenshot as proof | automated tests, or the rubric if `ai-grading` | `online_upload`, capped to `png,jpg,jpeg,webp,pdf` |
 | **Quiz** | `type: quiz` | takes it in Canvas | automated (Canvas grades) | left to the QTI import (the sync tool skips quizzes) |
 | **Manual** (badge/link) | `manual: true`, `submit: "url"` | pastes a live link | the rubric (graded by hand in SpeedGrader) | `online_url` |
 
 The one hard rule across all three: **the score comes from the automated tests,
 or from the rubric if the activity has one.** Nothing is graded on vibes.
+
+The proof upload on a repo activity is the exception that proves that rule. It
+is a receipt, not a submission: the grade is computed from the repo and pushed
+by `canvas-push` whether or not a student uploads anything. It exists because a
+push can go wrong in ways a student cannot see. They copy the template into a
+personal account, or name the repo without the section, or push to a branch the
+sweep never reads, and the first they hear of it is a zero. A screenshot with a
+timestamp gives them something to point at, and gives you something to check
+against before you believe a zero.
+
+The upload is capped to image types plus PDF for a reason. An uncapped box on a
+repo activity turns into a second submission channel: students upload their
+`.html` and `.zip` files there, those files are never graded because the score
+comes from the repo, and the assignment accumulates a needs-grading count in
+SpeedGrader that means nothing. Capping it to things you can only look at keeps
+the box honest about what it is for.
 
 A manual activity has no submission repo, so it declares no `namePrefix`. The
 grade sweep clones nothing for it (zero repos to match) and produces no gradebook
