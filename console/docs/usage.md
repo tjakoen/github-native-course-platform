@@ -337,3 +337,7 @@ student PII and must never be committed.
 A private teacher repository can provide gradebook/workspaces.json when a submission account does not identify the student's actual workspace name. The optional file has schemaVersion 1, the section code, and a workspaces array of repo and studentNumber bindings. These bindings must be corroborated by enrollment and repository ownership before publication. They are private identity data and must never be included in the public Console site.
 
 The Console treats each binding as a locator. It still reads the workspace's current student.json and grade receipt before reporting delivery. Conflicting CSV identities, invalid sections and malformed repository names stop loading explicitly. Duplicate workspace identities remain held. Missing locator files preserve the existing lookup path. A locator does not approve an AI score, change a grade or establish Canvas delivery.
+
+### Renamed workspace repositories
+
+An old GitHub repository URL can redirect to a renamed workspace. When several names share a student number, the Console accepts them as aliases only after current repository metadata confirms the same repository ID and canonical class workspace, and readable receipt text matches across every name. Separate repositories, unreadable metadata and missing or differing receipts remain held for review.

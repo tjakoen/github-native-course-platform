@@ -126,7 +126,24 @@ export async function loadSection(sc) {
     const key = normNum(identity.studentNumber);
     identityGroups.set(key, [...(identityGroups.get(key) || []), repo]);
   }
+  const canonicalWorkspaces = new Map();
   for (const repos of identityGroups.values()) if (repos.length > 1) {
+    // Renamed repository URLs redirect. Confirm physical identity before treating
+    // multiple names as separate workspaces; failed reads remain a hold.
+    let physical = [];
+    try { physical = await Promise.all(repos.map(repo => ghJSON(`/repos/${sc.org}/${repo}`))); } catch {}
+    const prefix = family ? `student-${family[1]}-${family[2]}-`.toLowerCase() : "";
+    const first = physical[0];
+    const canonical = first?.name?.toLowerCase();
+    const sameRepository = physical.length === repos.length && Number.isSafeInteger(first?.id) && first.id > 0 &&
+      canonical?.startsWith(prefix) && prefix && physical.every(info => info?.id === first.id &&
+        info?.full_name?.toLowerCase() === `${sc.org}/${canonical}`.toLowerCase()) &&
+      repos.every(repo => typeof receipts.get(repo) === "string" && receipts.get(repo) === receipts.get(repos[0]));
+    if (sameRepository) {
+      receipts.set(canonical, receipts.get(repos[0]));
+      for (const repo of repos) canonicalWorkspaces.set(repo, canonical);
+      continue;
+    }
     reviewWarnings.push("Multiple workspaces share one student number; their finals rows remain held.");
     for (const repo of repos) identities.set(repo, null);
   }
@@ -138,7 +155,7 @@ export async function loadSection(sc) {
   });
   const csvRows = csv.slice(1).map(parse);
   const rowKeys = new Set(csvRows.map(f => f[gi("assignment")] + "/" + f[gi("repo")]));
-  const workspaceByNumber = new Map([...identities].filter(([, identity]) => identity).map(([repo, identity]) => [normNum(identity.studentNumber), repo]));
+  const workspaceByNumber = new Map([...identities].filter(([, identity]) => identity).map(([repo, identity]) => [normNum(identity.studentNumber), canonicalWorkspaces.get(repo) || repo]));
   for (const x of pending.values()) {
     if (rowKeys.has(x.id + "/" + x.repo)) continue;
     const identity = identities.get(x.repo.toLowerCase());
