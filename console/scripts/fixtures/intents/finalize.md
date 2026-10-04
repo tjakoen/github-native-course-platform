@@ -2,14 +2,13 @@
 
 The reviewed grades for m3a1 are already written to the gradebook (approved + overrides applied; held/flagged aiScore blanked). Now deliver ONLY the cleared students to their workspaces and to Canvas. Work from: classes/teacher-6xxx-0000-tjakoen (the local clone of github.com/COURSE-ORG-DEMO/teacher-6xxx-0000-tjakoen) - pull it first.
 
-## Cleared to deliver (0)
-  (none cleared yet)
+## Cleared to deliver (2)
+  - m3a1-0000-juandc: 92/100
+  - m3a1-0000-msantos: 65/100
 
-## Held OUT - do NOT deliver (4)
-  - m3a1-0000-juandc (not reviewed)
-  - m3a1-0000-msantos (not reviewed)
+## Held OUT - do NOT deliver (2)
   - m3a1-0000-preyes (flagged)
-  - m3a1-0000-agarcia (not reviewed)
+  - m3a1-0000-agarcia (not applied)
 
 ## Rules (do not violate)
 - Dry-run first for BOTH publish and Canvas; execute only on my explicit "go".
@@ -22,4 +21,4 @@ The reviewed grades for m3a1 are already written to the gradebook (approved + ov
 3. On my "go": run the full-section publish for real (publish=true), with no --only or --repo filter.
 4. Canvas push in CHECK mode for m3a1 (tools/canvas-push.mjs --section=0000 --only=m3a1 --check). Show the report; confirm every cleared student maps and no held student appears (held students have blank aiScore and are skipped).
 5. On my "go": canvas-push --only=m3a1 --execute. Each cleared student gets their final score PLUS a rubric-breakdown comment (per-criterion points + feedback prose).
-6. VERIFY: each cleared student received FEEDBACK.md/GRADES.md and the correct Canvas grade + comment (spot-check 2-3), and NO held/flagged student got anything.
+6. VERIFY every cleared row through fresh live reads: FEEDBACK.md/GRADES.md and the correct Canvas grade and comment. Confirm no held or flagged row received a new mark or feedback for this activity, and preserve prior reviewed records. A run log or dry-run recheck alone is not delivery proof.

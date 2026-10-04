@@ -239,7 +239,7 @@ function railHeld(key,held){
 // a cleared store, or straight from a Claude Code session leaves no local decision
 // at all, so a localStorage-only count kept a fully delivered section badged
 // forever. Same rule the stage header uses (isApplied / isDelivered below).
-const isSettled=x=>!x.r.identityUnresolved&&(isDecided(x.dec)||x.r.aiScore!=null);
+const isSettled=x=>!x.r.identityUnresolved&&!x.r.sourceSelectionIssue&&!x.r.sourceIssue&&(isDecided(x.dec)||x.r.aiScore!=null);
 // The held badge counts UNSETTLED submissions awaiting a decision (Canvas
 // "needs grading" convention), not the number of AI activities. It drains to
 // zero as each one is decided or written.
@@ -421,7 +421,7 @@ function renderStudentProfile(s,w,sk){
    return "<tr><td>"+esc(a.id)+"</td><td><span class='badge' data-tone='"+KTONE[r.kind]+"'>"+r.kind+"</span></td>"+
     "<td class='center'>"+esc(String(score))+"</td><td class='center'>"+(r.late?"LATE":"·")+"</td>"+
     "<td>"+review+"</td>"+
-    "<td class='mut'><a href='https://github.com/"+esc(s.org)+"/"+esc(r.repo)+"' target='_blank' rel='noopener'>"+esc(r.repo)+"</a></td></tr>";
+    "<td class='mut'><a href='https://github.com/"+esc(r.sourceOwner||s.org)+"/"+esc(r.repo)+"' target='_blank' rel='noopener'>"+esc(r.repo)+"</a></td></tr>";
   }).join("");
  asc.append(t); ac.append(asc); w.append(ac);
  // missing summary + attendance
@@ -1519,7 +1519,7 @@ function reviewRows(s,aid){return s.students.filter(st=>st.activities[aid]).map(
 const writtenRows=rows=>rows.filter(x=>x.r.aiScore!=null);
 function isApplied(rows){
  const eligible=rows.filter(x=>x.dec?.status!=="flag");
- return eligible.length>0 && eligible.every(x=>!x.r.identityUnresolved&&!x.r.proposalIssue&&x.r.aiScore!=null);
+ return eligible.length>0 && eligible.every(x=>!x.r.identityUnresolved&&!x.r.sourceSelectionIssue&&!x.r.sourceIssue&&!x.r.proposalIssue&&x.r.aiScore!=null);
 }
 const isDelivered=(a,rows)=>!!a.publish&&rows.length>0&&rows.every(x=>x.r.workspaceDelivered===true);
 const conflictRows=rows=>rows.filter(x=>x.r.aiScore!=null&&finalScore(x)!=null&&finalScore(x)!==x.r.aiScore);
@@ -1529,7 +1529,7 @@ const conflictRows=rows=>rows.filter(x=>x.r.aiScore!=null&&finalScore(x)!=null&&
 const TONE={todo:"muted",ok:"good",ov:"ov",fl:"warn"};
 // activity kind -> product badge tone
 const KTONE={push:"good",held:"held",quiz:"quiz",manual:"muted"};
-function decStatus(row){ const d=row.dec; if(!isDecided(d))return row.r?.aiScore!=null?{k:"ok",l:"reviewed"}:{k:"todo",l:d&&(d.studentText||d.instructorText||d.comment)?"edited":"unreviewed"}; if(d.status==="approve")return{k:"ok",l:"approved"}; if(d.status==="override")return{k:"ov",l:"override "+d.score}; return{k:"fl",l:"flagged"}; }
+function decStatus(row){ if(row.r?.identityUnresolved)return{k:"fl",l:"identity hold"}; if(row.r?.sourceSelectionIssue||row.r?.sourceIssue)return{k:"fl",l:"source hold"}; const d=row.dec; if(!isDecided(d))return row.r?.aiScore!=null?{k:"ok",l:"reviewed"}:{k:"todo",l:d&&(d.studentText||d.instructorText||d.comment)?"edited":"unreviewed"}; if(d.status==="approve")return{k:"ok",l:"approved"}; if(d.status==="override")return{k:"ov",l:"override "+d.score}; return{k:"fl",l:"flagged"}; }
 // split an AI note into the student-facing prose and the instructor-only block
 function parseNote(note){
  if(!note) return {student:"",instructor:""};
@@ -1590,7 +1590,7 @@ function renderAI(s,w){
  // a stale local decision. Finalize stays reachable in the overflow menu.
  else if(delivered&&!conflicts.length)primary=null;
  else if(delivered)primary={label:"Resolve "+conflicts.length+" gradebook conflict"+(conflicts.length===1?"":"s"),act:()=>go(detailHref(s.key,revAct,skeyOf(conflicts[0].st))),soft:true};
- else if(rows.some(x=>x.r.note&&!isSettled(x))){const un=rows.find(x=>x.r.note&&!isSettled(x));primary={label:"Review ready drafts → "+rows.filter(x=>x.r.note&&!isSettled(x)).length+" left",act:()=>go(detailHref(s.key,revAct,skeyOf(un.st)))};}
+ else if(rows.some(x=>x.r.note&&!isSettled(x))){const un=rows.find(x=>x.r.note&&!isSettled(x));primary={label:(un.r.identityUnresolved||un.r.sourceIssue||un.r.sourceSelectionIssue?"Resolve review hold → ":"Review ready drafts → ")+rows.filter(x=>x.r.note&&!isSettled(x)).length+" left",act:()=>go(detailHref(s.key,revAct,skeyOf(un.st)))};}
  else if(pending>0)primary={label:"Generate feedback → prompt",act:()=>showGenFeedback(s,revAct)};
  else if(notReviewed>0){const un=rows.find(x=>!isSettled(x));primary={label:"Review next → "+notReviewed+" left",act:()=>go(detailHref(s.key,revAct,skeyOf(un.st)))};}
  else if(!applySent&&!applied)primary={label:"Apply reviewed → prompt",act:()=>showApplyAI(s,revAct)};
@@ -1600,11 +1600,14 @@ function renderAI(s,w){
  const badges='<span class="badge" data-tone="good">'+appr+' approved</span> <span class="badge" data-tone="held">'+ov+' override</span> <span class="badge" data-tone="warn">'+fl+' flagged</span>';
  const sentHint=applySent&&!finSent?" <span class='mut' data-size='sm'>· apply intent filed, run it then finalize</span>":"";
  // Ground-truth line: what the REPO says, next to what this browser thinks.
+ const deliveryMatched=rows.filter(x=>x.r.workspaceDelivered===true).length;
+ const deliveryDifferent=rows.filter(x=>x.r.workspaceDelivered===false).length;
+ const deliveryUnverified=rows.length-deliveryMatched-deliveryDifferent;
  const truthLine=(delivered||written.length)
   ? "<p class='mut' data-size='sm'>Gradebook: <b>"+written.length+"/"+rows.length+"</b> reviewed score"+(written.length===1?"":"s")+" written to <span class='mono'>grades.csv</span>"+
     (delivered
       ? " · <span class='badge' data-tone='good'>delivered</span> current grades verified in student workspaces; Canvas delivery is checked separately"
-      : (actMeta.publish?" · <span class='mono'>publish: true</span>":" · not published yet"))+"</p>"
+      : (actMeta.publish?" · Workspace delivery: <b>"+deliveryMatched+"/"+rows.length+"</b> verified"+(deliveryDifferent?" · "+deliveryDifferent+" differ":"")+(deliveryUnverified?" · "+deliveryUnverified+" unverified":"")+". Canvas delivery is checked separately":" · not published yet"))+"</p>"
   : "";
  const conflictLine=conflicts.length
   ? "<p class='warnline'><b>"+conflicts.length+" row"+(conflicts.length===1?"":"s")+" disagree with the gradebook.</b> This browser's decision is not what is written in <span class='mono'>grades.csv</span>"+
@@ -1654,7 +1657,7 @@ function renderAI(s,w){
      ? "<span class='mut'>-</span>"
      : (clash?"<span class='badge' data-tone='warn' title='local decision "+fin+", written "+wr+"'>"+wr+"/"+max+"</span>":wr+"/"+max);
    return "<tr data-review-state='"+(row.r.identityUnresolved||row.r.proposalIssue||row.r.note&&row.r.proposed==null?"hold":row.r.aiScore!=null?"reviewed":row.r.note?"ready":"draft")+"' data-s='"+skey+"'><td><a href='"+detailHref(s.key,revAct,skeyOf(row.st))+"'>"+esc(row.st.name||"(blank)")+"</a>"+(row.r.triage?" <span class='badge' data-tone='warn' title='"+esc(row.r.triage)+"'>triage</span>":"")+"</td><td class='mut'>"+esc(row.st.number||"-")+"</td>"+
-     "<td class='center'>"+esc(row.r.identityUnresolved?"Identity hold":row.r.proposalIssue?"Proposal needs correction":row.r.aiScore!=null?"Reviewed":!row.r.note?"Needs draft":row.r.proposed==null?"Source hold":"Ready to review")+"</td>"+
+     "<td class='center'>"+esc(row.r.identityUnresolved?"Identity hold":row.r.sourceIssue||row.r.sourceSelectionIssue?"Source hold":row.r.proposalIssue?"Proposal needs correction":row.r.aiScore!=null?"Reviewed":!row.r.note?"Needs draft":row.r.proposed==null?"Source hold":"Ready to review")+"</td>"+
      "<td class='center'>"+(row.r.proposed!=null?row.r.proposed+"/"+max:"<span class='badge' data-tone='warn'>no score</span>")+"</td>"+
      "<td class='center'><span class='badge' data-tone='"+fl+"'>"+esc(flag.split(" - ")[0])+"</span></td>"+
      "<td class='center'><span class='badge' data-tone='"+TONE[stt.k]+"'>"+stt.l+"</span></td>"+
@@ -1668,7 +1671,7 @@ function renderAI(s,w){
    $("#rvState").onchange=e=>{for(const row of t.querySelectorAll("tr[data-review-state]"))row.hidden=e.target.value!=="all"&&row.dataset.reviewState!==e.target.value;};
    // never sweep a row the gradebook already settled into an approve: that would
    // manufacture a local decision to disagree with a written score later
-   $("#apprAll").onclick=()=>{const t=rows.filter(row=>!isSettled(row)&&row.r.proposed!=null);if(!t.length){alert("No unreviewed submissions with a proposed score to approve.");return;}if(!confirm("Approve "+t.length+" unreviewed submission(s) at the AI's proposed score for "+revAct+"? This records an approve decision for each - review them individually to catch a bad proposal."))return;t.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),Object.assign({},row.dec,{status:"approve"})));render()};
+   $("#apprAll").onclick=()=>{const t=rows.filter(row=>!row.r.identityUnresolved&&!row.r.sourceIssue&&!row.r.sourceSelectionIssue&&!isSettled(row)&&row.r.proposed!=null);if(!t.length){alert("No unreviewed submissions with a proposed score to approve.");return;}if(!confirm("Approve "+t.length+" unreviewed submission(s) at the AI's proposed score for "+revAct+"? This records an approve decision for each - review them individually to catch a bad proposal."))return;t.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),Object.assign({},row.dec,{status:"approve"})));render()};
    $("#reset").onclick=()=>{if(confirm("Clear all decisions for "+revAct+"? This also clears the filed-step memory so the stage header restarts at Generate.")){rows.forEach(row=>setDec(s.section,revAct,skeyOf(row.st),null));clearSent(s.section,revAct);render()}};
    $("#genFb").onclick=()=>showGenFeedback(s,revAct);
    $("#applyAI").onclick=()=>showApplyAI(s,revAct);
@@ -1711,7 +1714,7 @@ function renderReviewDetail(s,w,aid,skey){
  // SELECT/BUTTON) so an arrow press never navigates away and discards unsaved
  // textarea edits, and Enter on a focused button does its own thing. On the page
  // body: arrows page prev/next, Enter approves + advances, Esc goes back.
- detailKey=e=>{ if(e.target&&/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName))return;
+ detailKey=e=>{ if(e.target?.closest?.("input,textarea,select,button,summary,a,[contenteditable='true']"))return;
   if(e.key==="Escape")go(back);
   else if(e.key==="ArrowRight"&&i<order.length-1)go(detailHref(s.key,aid,order[i+1]));
   else if(e.key==="ArrowLeft"&&i>0)go(detailHref(s.key,aid,order[i-1]));
@@ -1721,12 +1724,12 @@ function renderReviewDetail(s,w,aid,skey){
   // lazy media, per pane: screenshots fetch on first sight (they are the default
   // pane); CODE fetches only when its tab is opened, so shots never wait on it.
   const shots=r.inputAvailable ? [] : shotsCached(s.section,r.repo);   // null = loading, [] = none
-  const files=r.inputAvailable ? [] : codeCached(s.section,r.repo);    // undefined = not fetched, null = none
+  const files=r.inputAvailable || r.sourceIssue || !r.sourceSha ? [] : codeCached(s.section,r.sourceOwner||s.org,r.repo,r.sourceSha);    // undefined = not fetched, null = none
   const repaint=()=>{ if(location.hash===here&&document.body.contains(box)) paint(); };
   if(r.inputAvailable && snapshotText===undefined && !snapshotLoading){ snapshotLoading=true; ghText(r.inputBlobURL).then(text=>{snapshotText=text;repaint();},()=>{snapshotText=null;repaint();}); }
   if(shots===null) shotsFor(s.section,s.org,r.repo).then(repaint);
-  else if(shots&&!shots.length&&files===undefined) codeFor(s.section,s.org,r.repo).then(repaint); // no shots -> code becomes the default pane
-  if(leftViewPref==="code"&&files===undefined) codeFor(s.section,s.org,r.repo).then(repaint);
+  else if(shots&&!shots.length&&files===undefined) codeFor(s.section,r.sourceOwner||s.org,r.repo,r.sourceSha).then(repaint); // no shots -> code becomes the default pane
+  if(leftViewPref==="code"&&files===undefined) codeFor(s.section,r.sourceOwner||s.org,r.repo,r.sourceSha).then(repaint);
   const hasShots=!!(shots&&shots.length);
   const hasCode=!!(files&&files.length);
   const codeUnknown=files===undefined;
@@ -1757,14 +1760,16 @@ function renderReviewDetail(s,w,aid,skey){
    "<div class='muted'>"+esc(aid)+" · "+esc(sk)+" · @"+esc(st.github||"")+" · repo "+esc(r.repo)+"</div>"+
    "<div class='legend'><span>Automated: <b>"+(r.reviewOnly?"Document review, no test score":r.raw)+"</b></span><span>AI proposed: <b data-grade='grain'>"+(r.proposed!=null?r.proposed+"/"+max:"-")+"</b></span>"+(flag?"<span>AI-authored: <b data-grade='grain'>"+esc(flag)+"</b></span>":"")+"</div>"+
    (r.identityUnresolved||r.proposalIssue?"<p class='warnline'>"+esc(r.identityUnresolved?"Identity needs checking. This row cannot be approved or applied.":r.proposalIssue)+"</p>":"")+
+   (!r.sourceSha&&!r.inputAvailable?"<p class='warnline'>The recorded source revision is unavailable. Current repository code is not shown as grading evidence.</p>":"")+
+   (r.alternateSources?.length ? "<section class='card' data-surface='review:alternate-sources'><h3>Alternate repository drafts</h3><p class='mut'>These drafts remain evidence. Reconcile the Canvas submission and repository identity before choosing a source.</p>"+r.alternateSources.map(source=>"<details><summary>"+esc((source.sourceOwner||s.org)+"/"+source.repo)+" · "+esc(source.sourceSha.slice(0,7))+"</summary><pre class='code-block' style='white-space:pre-wrap;max-height:40vh;overflow:auto'>"+esc(source.note||"No feedback draft is available for this source.")+"</pre></details>").join("")+"</section>" : "")+
    "<div class='kbdlegend mut' data-size='sm'><kbd>←</kbd> <kbd>→</kbd> prev / next · <kbd>Enter</kbd> approve + advance · <kbd>Esc</kbd> back</div>"+
    "<div class='rev2'"+(mediaEmpty?" data-solo='true'":"")+">"+
     mediaCol+
     "<div class='rvcol'>"+
      "<div class='card' data-pad='sm' style='margin:0 0 var(--space-3)'>"+
       "<div class='decision'>"+
-      "<button class='btn' data-size='sm' id='dApprove'"+(r.identityUnresolved||r.proposed==null||!r.note?" disabled":"")+">✓ Approve "+(r.proposed!=null?r.proposed+"/"+max:"")+"</button>"+
-      "<span>Override <input id='dOv' class='field__input num' type='number' min='0' max='"+max+"' value='"+(curDec&&curDec.status==='override'?curDec.score:(r.proposed!=null?r.proposed:''))+"'> /"+max+" <button class='btn' data-size='sm' data-variant='soft' id='dOvBtn'"+(r.identityUnresolved?" disabled":"")+">Set</button></span>"+
+      "<button class='btn' data-size='sm' id='dApprove'"+(r.identityUnresolved||r.sourceSelectionIssue||r.sourceIssue||r.proposed==null||!r.note?" disabled":"")+">✓ Approve "+(r.proposed!=null?r.proposed+"/"+max:"")+"</button>"+
+      "<span>Override <input id='dOv' class='field__input num' type='number' min='0' max='"+max+"' value='"+(curDec&&curDec.status==='override'?curDec.score:(r.proposed!=null?r.proposed:''))+"'> /"+max+" <button class='btn' data-size='sm' data-variant='soft' id='dOvBtn'"+(r.identityUnresolved||r.sourceSelectionIssue||r.sourceIssue?" disabled":"")+">Set</button></span>"+
       "<button class='btn' data-size='sm' data-variant='soft' id='dFlag'>⚑ Flag</button>"+
       "<button class='btn' data-size='sm' data-variant='soft' id='dClear'>Clear</button></div>"+
       "<input class='field__input' id='dComment' style='width:100%;margin-top:var(--space-2)' placeholder='Private note to yourself (goes to the apply prompt)…' value='"+esc(curDec&&curDec.comment||"")+"'>"+
@@ -1782,7 +1787,7 @@ function renderReviewDetail(s,w,aid,skey){
   // left-pane toggle (screenshots <-> code) - no repaint, just show/hide.
   // First open of the Code tab triggers its (deferred) fetch, then repaints.
   box.querySelectorAll(".tab[data-lv]").forEach(b=>b.onclick=()=>{ if(b.disabled)return; leftViewPref=b.dataset.lv;
-    if(leftViewPref==="code"&&codeCached(s.section,r.repo)===undefined){ $("#lvCode").innerHTML="<p class='mut'>Loading code…</p>"; codeFor(s.section,s.org,r.repo).then(repaint); }
+    if(!r.sourceIssue&&leftViewPref==="code"&&codeCached(s.section,r.sourceOwner||s.org,r.repo,r.sourceSha)===undefined){ $("#lvCode").innerHTML="<p class='mut'>Loading code…</p>"; codeFor(s.section,r.sourceOwner||s.org,r.repo,r.sourceSha).then(repaint); }
     $("#lvShots").style.display=leftViewPref==="shots"?"flex":"none"; $("#lvCode").style.display=leftViewPref==="code"?"block":"none";
     box.querySelectorAll(".tab[data-lv]").forEach(x=>{if(x.dataset.lv===leftViewPref)x.dataset.active="true";else x.removeAttribute("data-active")}); });
   const cf=$("#cfile"); if(cf){ cf.onchange=()=>{ const f=files[+cf.value]; $("#cpre").innerHTML=hl(f.content,f.lang); }; }
@@ -1796,8 +1801,8 @@ function renderReviewDetail(s,w,aid,skey){
   // record the decision, confirm it in a toast (the advance is otherwise silent),
   // then move to the next submission (or repaint the last one in place)
   const save=v=>{setDec(s.section,aid,sk,v);const lbl=v.status==="approve"?"Approved":v.status==="override"?("Override "+v.score):v.status==="flag"?"Flagged":"Saved";const rem=reviewRows(s,aid).filter(x=>!isSettled(x)).length;toast(lbl+(rem?" · "+rem+" left":" · queue clear"));if(i<order.length-1)go(detailHref(s.key,aid,order[i+1]));else paint();};
-  $("#dApprove").onclick=()=>{if(r.identityUnresolved||r.proposed==null||!r.note)return;save(collect({status:"approve"}));};
-  $("#dOvBtn").onclick=()=>{const v=$("#dOv").value, score=Number(v);if(r.identityUnresolved||!v.trim()||!Number.isFinite(score)||score<0||score>max){toast("Enter a valid score after resolving identity.");return;}save(collect({status:"override",score}));};
+  $("#dApprove").onclick=()=>{if(r.identityUnresolved||r.sourceSelectionIssue||r.sourceIssue||r.proposed==null||!r.note)return;save(collect({status:"approve"}));};
+  $("#dOvBtn").onclick=()=>{const v=$("#dOv").value, score=Number(v);if(r.identityUnresolved||r.sourceSelectionIssue||r.sourceIssue||!v.trim()||!Number.isFinite(score)||score<0||score>max){toast("Enter a valid score after resolving identity.");return;}save(collect({status:"override",score}));};
   $("#dFlag").onclick=()=>save(collect({status:"flag"}));
   $("#dClear").onclick=()=>{setDec(s.section,aid,sk,null);paint();};
   $("#dSave").onclick=()=>{const d=collect({});setDec(s.section,aid,sk,Object.keys(d).length?d:null);$("#dSaved").textContent="saved ✓";toast("Edits saved");const stt2=decStatus({dec:getDec(s.section,aid,sk)});const c=box.querySelector(".rvhead .badge");if(c){c.dataset.tone=TONE[stt2.k];c.textContent=stt2.l;}};
