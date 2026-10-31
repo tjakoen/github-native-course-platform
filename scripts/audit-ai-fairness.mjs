@@ -73,8 +73,13 @@ for (const dir of dirs) {
       const split = t.split(/For the instructor/i);
       if (split.length < 2) continue;
       const student = split[0], instructor = split[1];
-      const crit = [...instructor.matchAll(/^-\s+[^:\n]+:\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/gm)]
-        .map((m) => [Number(m[1]), Number(m[2])]);
+      // A criterion line may or may not carry a leading bullet: both shapes are in
+      // use across the drafts. Requiring the dash missed 97 self-contradicting
+      // notes out of 139, which is worse than not checking, because the clean
+      // report reads as evidence.
+      const crit = [...instructor.matchAll(/^[-*]?\s*[A-Z][^:\n]{3,60}:\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\b/gm)]
+        .map((m) => [Number(m[1]), Number(m[2])])
+        .filter(([, max]) => max > 0 && max <= 60);
       if (!crit.length) continue;
       const allFull = crit.every(([a, b]) => a >= b);
       const namesAProblem = /^-\s/m.test(student) && /\b(think|consider|what happens|try|revisit|missing|instead|should|could)\b/i.test(student);

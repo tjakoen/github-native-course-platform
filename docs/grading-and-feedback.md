@@ -197,3 +197,13 @@ slide deck.
 - [Operating with an AI assistant](operating-with-ai.md) - running grade and
   publish day to day, with guardrails.
 - [Reference](reference.md) - every flag in one table.
+
+
+## Individual review of authorship concerns
+
+Authorship estimates in instructor notes remain private. Publishing grades and
+pushing Canvas feedback do not derive a student-facing warning from a medium or
+high estimate. Any discussion of authorship must be written and explicitly
+reviewed as student-facing feedback. Reviewing a score does not itself authorize
+a separate authorship warning. The legacy notice exports remain available as
+empty no-ops for older delivery callers.
