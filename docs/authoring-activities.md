@@ -111,6 +111,12 @@ one for your stack. The example below adds a hypothetical new activity `m2a4`.
    layout so the overlay lands correctly. Every activity's tests should include the
    standard **`student.json` check** (the identity fields), which is worth 1 point
    and appears in every activity across all classes.
+   For every new repository-backed activity, include `room` and `pcNumber` in the blank starter
+   and require both as nonblank strings in the canonical and student-facing
+   checks. Test that each field fails when missing, whitespace-only, or numeric.
+   Keep station labels as text so a value such as `"07"` retains its leading
+   zero. Explain both fields in the activity brief and keep real values in
+   private student copies.
 3. **Build the student scaffold** in the activity template repo: a stub for the
    student to complete, a student-facing copy of the tests, a blank `student.json`,
    a `README.md` (the brief, how to submit, a Codespaces note), and the
