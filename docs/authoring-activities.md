@@ -98,6 +98,22 @@ required.
 
 See [Reference](reference.md) for the full flag list in one place.
 
+## Keep setup separate from the activity
+
+Use the [ADET Dart starter](https://github.com/HAU-6ADET/m1a0-classcode-yourname) or
+[WebCS HTML starter](https://github.com/HAU-6INTROWEB-6WEBCS/m1a0-classcode-yourname)
+as the setup reference for the matching stack. For every new repository-backed
+activity, keep the brief in `README.md` and link to a separate `SETUP.md`. Include
+`start-activity.sh` in the student template and explain how to download and run
+it in macOS Terminal or Windows Git Bash.
+
+Show students how to clone their private HTTPS repository in VS Code, open a
+terminal in the cloned directory, and check the branch, remote and Git author
+with `git status --short --branch && git remote -v && git var GIT_AUTHOR_IDENT`.
+Direct shared-lab students to VS Code Source Control for the authenticated push.
+Use `ACTIVITY-CLASSCODE-USERNAME` with the activity ID and the student's Canvas
+class code. Keep meeting schedules out of the naming rule.
+
 ## Step 1 - author a test-only activity
 
 Use a live m1a1 repo (see [Live examples](examples.md)) as the model and copy the
