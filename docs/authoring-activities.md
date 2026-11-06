@@ -119,8 +119,12 @@ one for your stack. The example below adds a hypothetical new activity `m2a4`.
    private student copies.
 3. **Build the student scaffold** in the activity template repo: a stub for the
    student to complete, a student-facing copy of the tests, a blank `student.json`,
-   a `README.md` (the brief, how to submit, a Codespaces note), and the
-   `.devcontainer/`.
+   a `README.md` (the brief, how to submit, a Codespaces note), an
+   `AI-USAGE.md` for every activity, and the
+   `.devcontainer/`. Ask students to name any AI tools they used, explain how
+   each tool helped and how they checked the result, and credit applicable
+   sources. Ask for an explicit statement when they used no AI or no external
+   sources.
 4. **Write the brief** (recommended) in `content/<module>/<id>-<short-name>.md`:
    the goal, what to build, the required contract (the exact markers or structure
    the tests look for), and a minimal shape example. Never the solution. Activity
@@ -263,7 +267,7 @@ AI assistant](operating-with-ai.md).
 - [ ] Entry added to `grader/assignments.json` (`id`, `type`, `namePrefix`).
 - [ ] Canonical tests under `grader/<id>/`, including the `student.json` check.
 - [ ] Student scaffold: stub, student-facing tests, blank `student.json`,
-      `README.md`, `.devcontainer/`.
+      `README.md`, `AI-USAGE.md`, `.devcontainer/`.
 - [ ] Brief in `content/<module>/` naming the concept, not the answer.
 - [ ] If AI-enhanced: `totalPoints`, `ai-grading`, and `feedback` set, and a
       `RUBRIC.md` whose total matches `totalPoints`, distributed to
