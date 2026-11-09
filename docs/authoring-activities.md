@@ -107,9 +107,10 @@ activity, keep the brief in `README.md` and link to a separate `SETUP.md`. Inclu
 `start-activity.sh` in the student template and explain how to download and run
 it in macOS Terminal or Windows Git Bash.
 
-Show students how to clone their private HTTPS repository in VS Code, open a
-terminal in the cloned directory, and check the branch, remote and Git author
-with `git status --short --branch && git remote -v && git var GIT_AUTHOR_IDENT`.
+Show students how to copy their private HTTPS URL and run `git clone <URL>` in
+the terminal opened by the launcher, then `cd` into the cloned directory and
+run `code .`. Have them check the branch, remote and Git author with
+`git status --short --branch && git remote -v && git var GIT_AUTHOR_IDENT`.
 Direct shared-lab students to VS Code Source Control for the authenticated push.
 Use `ACTIVITY-CLASSCODE-USERNAME` with the activity ID and the student's Canvas
 class code. Keep meeting schedules out of the naming rule.
