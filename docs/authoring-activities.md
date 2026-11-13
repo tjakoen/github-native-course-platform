@@ -100,9 +100,8 @@ See [Reference](reference.md) for the full flag list in one place.
 
 ## Keep setup separate from the activity
 
-Use the [ADET Dart starter](https://github.com/HAU-6ADET/m1a0-classcode-yourname) or
-[WebCS HTML starter](https://github.com/HAU-6INTROWEB-6WEBCS/m1a0-classcode-yourname)
-as the setup reference for the matching stack. For every new repository-backed
+Use your course org's `m1a0-classcode-yourname` starter (the Dart one or the HTML
+one) as the setup reference for the matching stack. For every new repository-backed
 activity, keep the brief in `README.md` and link to a separate `SETUP.md`. Include
 `start-activity.sh` in the student template and explain how to download and run
 it in macOS Terminal or Windows Git Bash.
