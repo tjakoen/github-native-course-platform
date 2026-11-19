@@ -44,12 +44,13 @@ Also here: a synthetic [demo/](demo/) of the output (fictional students, no real
 
 ## Why it is different
 
-- **GitHub is the LMS; Canvas is just the export target.** Materials, quizzes, grading, and each student's personal workspace all live in Git. Canvas receives one gradebook CSV at the end.
+- **Canvas is the official record; GitHub is where the work happens.** Students meet the course in Canvas (announcements, quizzes, the grade they see) and do the work in their own repositories. Grades are computed on GitHub and pushed to Canvas, never typed twice.
 - **Native over hosted.** No servers to run. The instructor's UI is workflow forms in the Actions tab; the student's UI is their repo's file view and the green check marks.
 - **Source-of-truth split.** The student repo owns submissions; the teacher repo owns grades. Nothing official is ever read back from a student repo, so there is nothing to tamper with.
 - **Grade off-repo.** Grades are computed in the teacher repo from canonical tests against a snapshot commit, never from code running inside the student's repo.
 - **Honest about integrity.** Take-home work cannot be proctored. The design deters the honest majority (per-student variants, deadline snapshots, viva spot-checks) rather than pretending to prevent the determined.
-- **Even attendance is native.** Each student carries a signed QR in their workspace; the instructor scans it with a phone (the Course Console Scan tab), and scans commit as CSV batches that a workflow verifies and summarizes. See [Attendance](docs/attendance.md).
+- **Even attendance is native.** The in-lab activity is the attendance: a student who submitted it was in the room. A signed QR scan is there for meetings without one. See [Attendance](docs/attendance.md).
+- **The instructor's console is a conversation.** Management runs through Claude Code over the teacher repositories, with the workflows as the safe, dry-run-first actions underneath. A second, hosted version of this platform with its own database was built and then parked in November 2026: it spent weeks rebuilding what GitHub and Canvas already did, and the students never needed a third place to look.
 
 See [Core concepts](docs/concepts.md) for how these turn into a concrete repository layout.
 

@@ -1,4 +1,29 @@
-# Attendance (QR scan)
+# Attendance
+
+## The default: the in-lab activity is the attendance
+
+The simplest record turned out to need no new tool. Each lab meeting has an in-lab activity, and a
+student who submits it was in the room. Since the second semester this is how attendance is kept:
+the submission repo for that meeting's activity is the evidence, and the gradebook row that the
+sweep already writes is the record.
+
+The rules that came out of running it:
+
+- **A submission counts, a passing grade does not have to.** Attendance and the activity's score are
+  separate questions. A student who submitted broken code was still there.
+- **A missing submission is not proof of absence.** Check the student's repos, the team membership
+  and any scan record before writing an absence. A misnamed repo is invisible to the sweep until it
+  is renamed (see [Running a course](running-a-course.md)).
+- **Say when attendance starts.** Tell the class which meeting is the first one counted. Students
+  who enrolled late start from their own first meeting, so keep a "joined on" flag in the class list
+  and do not turn the meetings before it into absences.
+- **Agree the cutoff before writing dated entries.** Which meeting an activity belongs to, and how
+  late a submission may still count, are the instructor's decisions. Write them down first.
+
+The signed QR flow below still works and stays useful for meetings with no activity, such as an
+exam or a lecture-only day. It is optional.
+
+## Optional: QR scan
 
 Track class attendance without paper, entirely on GitHub. Each student carries a
 personal QR in their workspace repo; the instructor scans QRs at the door with a
@@ -6,7 +31,7 @@ phone; scans are committed as CSV batches to the teacher repo and summarized
 automatically. Like grading, it is teacher-side and permission-gated: only the
 instructor can record attendance.
 
-## How it works
+### How it works
 
 1. **Generate QRs.** The `Generate attendance QRs` workflow signs each student's
    number and commits `attendance/attendance-qr.png` (plus a short README) into

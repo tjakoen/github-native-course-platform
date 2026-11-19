@@ -148,3 +148,32 @@ default: **Provision workspaces**, **Prune gradebook**, and **Audit repo names**
 Prefer these over doing repo surgery by hand. See [Operating with an AI
 assistant](operating-with-ai.md) for the full jobs catalogue and
 [Reference](reference.md) for the workflow list.
+
+## Lessons from the second semester
+
+The second term ran five sections across two orgs. Each lesson below cost at least one bad day.
+
+- **Copy the newest teacher repo of the same course, not the bare template.** The newest copy
+  carries the config-driven tool variants and the fixes from the last term. Leave out its git
+  history, curriculum, gradebook and activity graders, then grep for the old section code until
+  nothing is left.
+- **One teacher repo per Canvas course, never two.** The Canvas push cannot limit itself to one
+  section, so when two sections are cross-listed into one Canvas course, run both from one repo.
+- **Give the student team no repo grants.** A secret team per section is the membership list that
+  provisioning checks against. Access comes from each student's own activity and workspace repos,
+  so the team itself needs none.
+- **The class list is a sheet, and its GitHub column is dirty.** Strip profile URLs, query strings
+  and spaces, then check every handle against the GitHub API. A handle that does not exist is
+  usually a typo, so ask the student rather than guess. Never remove a team member only because the
+  sheet does not list them: they are often an email-only row added under their real handle.
+- **A lab full of Macs shares one public IP.** Anonymous GitHub API calls from the setup script hit
+  the rate limit (403) within minutes. The Mac launcher reads the GitHub CLI version from the
+  releases web redirect instead of the API. Ship a Windows launcher alongside it.
+- **Misnamed submissions are silently ungraded.** Typos like a letter O for a zero, a doubled dash
+  or a missing activity number keep a repo out of the sweep forever. Audit names early and rename
+  the copy that holds the work.
+- **Never change the tests of an activity students already pulled.** Freeze them and fix the
+  solution instead.
+- **Removing a dropped student is access, not deletion.** Remove the team membership and the
+  collaborator grants, report the gradebook rows and the Canvas enrollment, and leave enrollment to
+  the registrar.
